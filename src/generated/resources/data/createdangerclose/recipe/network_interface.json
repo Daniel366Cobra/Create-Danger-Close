@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "create:brass_casing"
+    },
+    "S": {
+      "item": "create:shaft"
+    },
+    "T": {
+      "item": "create:electron_tube"
+    }
+  },
+  "pattern": [
+    " T ",
+    " C ",
+    " S "
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:network_interface"
+  }
+}

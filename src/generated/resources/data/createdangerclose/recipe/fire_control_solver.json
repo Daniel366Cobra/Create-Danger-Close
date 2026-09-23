@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "create:cogwheel"
+    },
+    "E": {
+      "item": "create:electron_tube"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "S": {
+      "item": "create:shaft"
+    }
+  },
+  "pattern": [
+    "CEC",
+    "PPP",
+    " S "
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:fire_control_solver"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "createdangerclose:block/network_interface/block",
+      "x": 180
+    },
+    "facing=east": {
+      "model": "createdangerclose:block/network_interface/block",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/network_interface/block",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/network_interface/block",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up": {
+      "model": "createdangerclose:block/network_interface/block"
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/network_interface/block",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

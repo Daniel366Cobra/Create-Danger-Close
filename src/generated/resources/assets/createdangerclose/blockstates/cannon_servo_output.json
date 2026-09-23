@@ -1,0 +1,30 @@
+{
+  "variants": {
+    "facing=down": {
+      "model": "createdangerclose:block/cannon_servo/block_output",
+      "x": 180
+    },
+    "facing=east": {
+      "model": "createdangerclose:block/cannon_servo/block_output",
+      "x": 90,
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/cannon_servo/block_output",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/cannon_servo/block_output",
+      "x": 90,
+      "y": 180
+    },
+    "facing=up": {
+      "model": "createdangerclose:block/cannon_servo/block_output"
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/cannon_servo/block_output",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

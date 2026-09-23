@@ -1,0 +1,8 @@
+{
+  "values": [
+    "createdangerclose:network_interface",
+    "createdangerclose:fire_control_solver",
+    "createdangerclose:cannon_servo_input",
+    "createdangerclose:cannon_servo_output"
+  ]
+}

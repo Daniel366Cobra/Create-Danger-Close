@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "B": {
+      "item": "create:brass_casing"
+    },
+    "C": {
+      "item": "create:cogwheel"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "S": {
+      "item": "create:shaft"
+    }
+  },
+  "pattern": [
+    "CCC",
+    "PBP",
+    " S "
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:cannon_servo_input"
+  }
+}

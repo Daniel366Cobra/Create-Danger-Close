@@ -1,0 +1,103 @@
+{
+  "itemGroup.createdangerclose.main": "Create Danger Close",
+
+  "createdangerclose": {
+
+    "error": {
+      "network_too_slow": "This equipment's network is not rotating fast enough.",
+      "jostled_case": "This equipment has been jostled. Accuracy is reduced. \nHit with Wrench to realign.",
+      "broken_cogwheel": "This equipment has a broken cog. It is out of order. \nRMB with Cogwheel to repair.",
+      "broken_lens": "This equipment has a cracked lens. Accuracy is severely reduced. \nRMB with Glass Pane to repair.",
+      "dusty_lens": "This equipment has a dusty lens. Accuracy is reduced. \nRMB with Water Bucket to clean."
+    },
+
+    "scroll_option": {
+      "behavior": "Scroll Option Behavior"
+    },
+
+    "network_interface": {
+      "title": "Battle Network Interface",
+      "attached_sensor": "Attached Sensor Data:",
+      "no_sensor": "None",
+      "velocity": "Velocity: %s",
+      "altitude": "Altitude: %s",
+      "gimbal_x_angle": "Gimbal X angle: %s",
+      "gimbal_z_angle": "Gimbal Z angle: %s",
+      "nav_y_angle": "Nav Y angle: %s",
+      "nav_target": "Target: %s",
+      "rangefinder": "Range: %s"
+    },
+    "fire_control_solver": {
+      "title": "Fire Control Solver",
+      "ship_velocity": "Ship Velocity",
+      "ship_angle": "Ship Angle",
+      "gimbal_angle": "Gimbal Angle",
+      "heading_angle": "Ship Heading",
+      "ship_altitude": "Ship Altitude",
+      "target": "Target",
+      "missing_orientation": "Missing: Gimbal or Heading",
+      "missing_velocity": "Missing: Velocity",
+      "missing_altitude": "Missing: Altitude",
+      "missing_target": "Missing: Target"
+    },
+    "cannon_servo": {
+      "not_enough_space": "Not enough space to place Servo Output"
+    },
+    "cannon_servo_output": {
+      "title": "Cannon Servo Output",
+      "no_mount": "No cannon mount on network",
+      "no_slaves": "No slaved mounts found",
+      "axis": "Axis: %s",
+      "axis.pitch": "Pitch",
+      "axis.yaw": "Yaw",
+      "mount_header": "Mount %s @ %s",
+      "mount_angle_pitch": "Pitch: %s°",
+      "mount_angle_yaw": "Yaw: %s°",
+      "mount_shell": "Shell: %s",
+      "mount_shell_empty": "Shell: (empty)",
+      "mount_fuze_timed": "Fuze: Timed (%ss %st)",
+      "mount_fuze_other": "Fuze: %s",
+      "mount_fuze_none": "Fuze: None",
+      "mount_charge": "Charge: %s"
+    },
+
+    "gui": {},
+
+    "unit": {
+      "angle": "°",
+      "velocity": " m/s",
+      "distance": " blocks"
+    },
+
+    "tooltip": {},
+
+    "display_source": {}
+  },
+
+  "block.createdangerclose": {
+    "network_interface.tooltip": {
+      "summary": "Interfaces Simulated Sensors to kinetic Battle Networks.",
+      "condition1": "When facing a Gimbal, Altitude or Velocity Sensor, or a Navigation table:",
+      "behaviour1": "_Polls_ the sensor at a rate proportional to input RPM."
+    },
+    "fire_control_solver.tooltip": {
+      "summary": "Computes firing solutions for Cannon Mounts.",
+      "condition1": "When connected to a kinetic Battle Network:",
+      "behaviour1": "_Polls_ sensor Interfaces and _computes_ firing solutions."
+    }
+  },
+
+  "item.createdangerclose": {
+    "some_item.tooltip": {
+      "summary": "Summary",
+      "condition1": "Condition1",
+      "behaviour1": "Behavior1"
+    }
+  },
+
+  "stat.createdangerclose": {
+    "lenses_cleaned": "Lenses Cleaned",
+    "equipment_realigned": "Equipment Realigned",
+    "equipment_repaired": "Equipment Repaired"
+  }
+}
