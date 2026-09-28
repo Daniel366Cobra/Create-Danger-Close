@@ -136,17 +136,6 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return new SensorReading.Gimbal(tilt, mountAxis);
     }
 
-    private SensorReading buildVelocityReading(VelocitySensorBlockEntity velocity) {
-        // The sensor's measurement axis in sub-level frame, and the signed
-        // scalar it reports along that axis.
-        Vector3d normal = new Vector3d(velocity.getCurrentNormal());
-        double magnitude = velocity.getAdjustedVelocity();
-
-        Vector3d localVelocity = normal.mul(magnitude, new Vector3d());
-
-        return new SensorReading.Velocity(localVelocity, normal);
-    }
-
     private SensorReading buildNavReading(NavTableBlockEntity navTable) {
         ItemStack held = navTable.getHeldItem();
         if (held.isEmpty()) {
@@ -182,6 +171,17 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 .rotateY(Math.toRadians(navTable.getRelativeAngle()));
 
         return new SensorReading.NavTarget(targetPos, bearing);
+    }
+
+    private SensorReading buildVelocityReading(VelocitySensorBlockEntity velocity) {
+        // The sensor's measurement axis in sub-level frame, and the signed
+        // scalar it reports along that axis.
+        Vector3d normal = new Vector3d(velocity.getCurrentNormal());
+        double magnitude = velocity.getAdjustedVelocity();
+
+        Vector3d localVelocity = normal.mul(magnitude, new Vector3d());
+
+        return new SensorReading.Velocity(localVelocity, normal);
     }
 
     private static boolean isMagnetItem(ItemStack stack) {

@@ -8,7 +8,11 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
+import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -19,13 +23,14 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import org.jetbrains.annotations.Nullable;
-
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountInterfaceBlockEntity;
 import rbasamoyai.createbigcannons.cannon_control.contraption.MountedBigCannonContraption;
@@ -37,8 +42,9 @@ import rbasamoyai.createbigcannons.index.CBCMunitionPropertiesHandlers;
 import rbasamoyai.createbigcannons.munitions.big_cannon.BigCannonMunitionBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.FuzedProjectileBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.ProjectileBlock;
-import rbasamoyai.createbigcannons.munitions.big_cannon.config.BigCannonCommonShellProperties;
+import rbasamoyai.createbigcannons.munitions.big_cannon.config.BigCannonProjectilePropertiesComponent;
 import rbasamoyai.createbigcannons.munitions.big_cannon.propellant.BigCannonPropellantBlock;
+import rbasamoyai.createbigcannons.munitions.config.components.BallisticPropertiesComponent;
 import rbasamoyai.createbigcannons.munitions.fuzes.TimedFuzeItem;
 
 import java.lang.ref.WeakReference;
@@ -46,6 +52,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
+import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
+import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YAW;
 
 public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         implements IHaveGoggleInformation, SensorReading.Provider {
@@ -56,13 +64,24 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     private float desiredGeneratedSpeed = KEEP_ALIVE_RPM;
     private boolean initialSpeedApplied = false;
 
-    public enum Axis { PITCH, YAW, NONE }
+    // --- Direction calibration ---
+    private static final float CALIBRATION_TEST_RPM = 4.0f;
+    private static final int CALIBRATION_TEST_TICKS = 5;
+    private static final int CALIBRATION_MAX_RETRIES = 3;
+
+    private int driveSign = 0;                    // +1, -1, or 0 = uncalibrated
+    private boolean calibrating = false;
+    private int calibrationTicksRemaining = 0;
+    private float calibrationStartAngle = 0;
+    private int calibrationRetries = 0;
+    private long lastMemberHash = 0;
+    private float lastDriveError = Float.NaN;
 
     public static final class SlavedMount {
         public final BlockPos mountPos;
         public final @Nullable CannonMountBlockEntity mount;
         public final @Nullable CannonMountInterfaceBlockEntity iface;
-        public final Axis axis;
+        public final ServoAxis ServoAxis;
 
         public float currentAngle;
         public boolean hasShell;
@@ -80,16 +99,16 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         public SlavedMount(BlockPos mountPos,
                            @Nullable CannonMountBlockEntity mount,
                            @Nullable CannonMountInterfaceBlockEntity iface,
-                           Axis axis) {
+                           ServoAxis ServoAxis) {
             this.mountPos = mountPos;
             this.mount = mount;
             this.iface = iface;
-            this.axis = axis;
+            this.ServoAxis = ServoAxis;
         }
     }
 
     private final List<SlavedMount> slavedMounts = new ArrayList<>();
-    private Axis detectedAxis = Axis.NONE;
+    private ServoAxis detectedAxis = ServoAxis.NONE;
     private boolean isPowered = false;
 
     private WeakReference<SubLevel> subLevelReference;
@@ -129,7 +148,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         isPowered = inputSpeed >= MIN_OPERATING_RPM;
 
         pollCannonNetwork();
-        applyIdleControl();
+        applyControl();
 
         notifyUpdate();
     }
@@ -143,17 +162,59 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         return input.getSpeed();
     }
 
+    private void applyControl() {
+        CannonServoInputBlockEntity input = getAdjacentInput();
+        FireSolution command = (input != null) ? input.getCurrentCommand() : null;
+
+        if (command == null || !command.valid() || !isPowered || detectedAxis == ServoAxis.NONE || detectedAxis == ServoAxis.INVALID) {
+            applyIdleControl();
+            return;
+        }
+
+        applyCommandedControl(command);
+    }
+
+    private void applyCommandedControl(FireSolution command) {
+        // If any slaved mount isn't currently assembled, idle instead of
+        // trying to drive or calibrate.
+        for (SlavedMount sm : slavedMounts) {
+            if (sm.mount == null || sm.mount.getContraption() == null) {
+                applyIdleControl();
+                return;
+            }
+        }
+
+        // Detect network changes and invalidate the cached sign
+        long memberHash = computeMemberHash();
+        if (memberHash != lastMemberHash) {
+            lastMemberHash = memberHash;
+            driveSign = 0;
+        }
+
+        if (calibrating) {
+            tickCalibration();
+            return;
+        }
+
+        if (driveSign == 0) {
+            beginCalibration();
+            return;
+        }
+
+        driveToTarget(command);
+    }
+
     // ------------------------------------------------------------------
     // Idle control
     // ------------------------------------------------------------------
 
     private void applyIdleControl() {
+        lastDriveError = Float.NaN;
         for (SlavedMount sm : slavedMounts) {
             if (sm.iface != null) {
                 sm.iface.setSequencedAngleLimit(0);
             }
         }
-
         applyGeneratedSpeed(isPowered ? KEEP_ALIVE_RPM : 0f);
     }
 
@@ -165,6 +226,117 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         }
     }
 
+    private void beginCalibration() {
+        if (slavedMounts.isEmpty()) return;
+
+        SlavedMount sm = slavedMounts.get(0);
+        if (sm.iface == null) return;
+
+        calibrationStartAngle = sm.currentAngle;
+        calibrationTicksRemaining = CALIBRATION_TEST_TICKS;
+        calibrating = true;
+
+        // Permit a small amount of movement during the test.
+        for (SlavedMount mount : slavedMounts) {
+            if (mount.iface != null) {
+                mount.iface.setSequencedAngleLimit(-1);
+            }
+        }
+        applyGeneratedSpeed(CALIBRATION_TEST_RPM);
+    }
+
+    private void tickCalibration() {
+        if (slavedMounts.isEmpty() || slavedMounts.get(0).iface == null) {
+            calibrating = false;
+            return;
+        }
+
+        calibrationTicksRemaining--;
+        if (calibrationTicksRemaining > 0) {
+            applyGeneratedSpeed(CALIBRATION_TEST_RPM);
+            return;
+        }
+
+        // Stop driving and measure
+        applyGeneratedSpeed(KEEP_ALIVE_RPM);
+        for (SlavedMount mount : slavedMounts) {
+            if (mount.iface != null) {
+                mount.iface.setSequencedAngleLimit(0);
+            }
+        }
+
+        SlavedMount sm = slavedMounts.get(0);
+        float delta = sm.currentAngle - calibrationStartAngle;
+        calibrating = false;
+
+        if (Math.abs(delta) < 0.05f) {
+            calibrationRetries++;
+            if (calibrationRetries >= CALIBRATION_MAX_RETRIES) {
+                calibrationRetries = 0;
+                return;
+            }
+            // Try again next tick
+            return;
+        }
+
+        driveSign = delta > 0 ? 1 : -1;
+        calibrationRetries = 0;
+        lastDriveError = Float.NaN;
+    }
+
+    private void driveToTarget(FireSolution command) {
+        float target = (detectedAxis == ServoAxis.PITCH)
+                ? (float) command.pitchDeg()
+                : (float) command.yawDeg();
+
+        if (detectedAxis == ServoAxis.PITCH && command.fuzeTicks() > 0) {
+            for (SlavedMount sm : slavedMounts) {
+                if (sm.isTimedFuze && sm.fuzeTimer != command.fuzeTicks()) {
+                    setLoadedFuzeTime(command.fuzeTicks());
+                }
+            }
+        }
+
+        float signedError = 0;
+        float maxAbsError = 0;
+
+        for (SlavedMount sm : slavedMounts) {
+            if (sm.iface == null) continue;
+            float error = wrapAngle(target - sm.currentAngle);
+            float abs = Math.abs(error);
+            if (abs > maxAbsError) {
+                maxAbsError = abs;
+                signedError = error;
+            }
+            sm.iface.setSequencedAngleLimit(-1);
+        }
+
+        float prevError = lastDriveError;
+        lastDriveError = maxAbsError;
+
+        if (!Float.isNaN(prevError)
+                && maxAbsError > prevError + 0.5f
+                && maxAbsError > 3.0f) {
+            driveSign = 0;
+            lastDriveError = Float.NaN;
+            return;
+        }
+
+        if (maxAbsError < SNAP_THRESHOLD_DEG) {
+            for (SlavedMount sm : slavedMounts) {
+                if (sm.iface != null) {
+                    sm.iface.setSequencedAngleLimit(0);
+                }
+            }
+            applyGeneratedSpeed(KEEP_ALIVE_RPM);
+            lastDriveError = Float.NaN;
+            return;
+        }
+
+        float speed = speedForError(maxAbsError);
+        applyGeneratedSpeed(driveSign * Math.signum(signedError) * speed);
+    }
+
     // ------------------------------------------------------------------
     // Network polling (server only)
     // ------------------------------------------------------------------
@@ -173,30 +345,30 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
         if (network == null) {
             slavedMounts.clear();
-            detectedAxis = Axis.NONE;
+            detectedAxis = ServoAxis.NONE;
             return;
         }
 
         List<SlavedMount> newMounts = new ArrayList<>();
-        Axis axisThisPoll = Axis.NONE;
+        ServoAxis axisThisPoll = ServoAxis.NONE;
 
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member == this) continue;
             if (!(member instanceof CannonMountInterfaceBlockEntity iface)) continue;
 
-            Axis axis;
+            ServoAxis axis;
             if (iface instanceof CannonMountInterfaceBlockEntity.PitchInterface) {
-                axis = Axis.PITCH;
+                axis = PITCH;
             } else if (iface instanceof CannonMountInterfaceBlockEntity.YawInterface) {
-                axis = Axis.YAW;
+                axis = YAW;
             } else {
                 continue;
             }
 
-            if (axisThisPoll == Axis.NONE) {
+            if (axisThisPoll == ServoAxis.NONE) {
                 axisThisPoll = axis;
             } else if (axisThisPoll != axis) {
-                detectedAxis = Axis.NONE;
+                detectedAxis = ServoAxis.INVALID;
                 slavedMounts.clear();
                 return;
             }
@@ -210,6 +382,12 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             newMounts.add(sm);
         }
 
+        if (newMounts.size() > 1) {
+            detectedAxis = ServoAxis.INVALID;
+            slavedMounts.clear();
+            return;
+        }
+
         this.detectedAxis = axisThisPoll;
         this.slavedMounts.clear();
         this.slavedMounts.addAll(newMounts);
@@ -221,9 +399,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             sm.currentAngle = 0;
             return;
         }
-        sm.currentAngle = (sm.axis == Axis.PITCH) ? entity.pitch : entity.yaw;
+        sm.currentAngle = (sm.ServoAxis == PITCH) ? entity.pitch : entity.yaw;
 
-        if (sm.axis == Axis.PITCH) {
+        if (sm.ServoAxis == PITCH) {
             readShellData(sm);
         }
     }
@@ -274,17 +452,92 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                         : 0;
 
                 EntityType<?> projectileType = projBlock.getAssociatedEntityType();
-                BigCannonCommonShellProperties props =
-                        CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
-                                .getPropertiesOf(projectileType);
+                BallisticPropertiesComponent ballistics = resolveBallistics(projectileType);
+                BigCannonProjectilePropertiesComponent bigCannon = resolveBigCannonProperties(projectileType);
 
-                sm.gravity = props.ballistics().gravity();
-                sm.drag = props.ballistics().drag();
-                sm.isQuadraticDrag = props.ballistics().isQuadraticDrag();
-                sm.addedChargePower = props.bigCannonProperties().addedChargePower();
-                sm.minimumChargePower = props.bigCannonProperties().minimumChargePower();
+                sm.gravity = ballistics.gravity();
+                sm.drag = ballistics.drag();
+                sm.isQuadraticDrag = ballistics.isQuadraticDrag();
+                sm.addedChargePower = bigCannon.addedChargePower();
+                sm.minimumChargePower = bigCannon.minimumChargePower();
             }
         }
+    }
+
+    private static BallisticPropertiesComponent resolveBallistics(EntityType<?> projectileType) {
+        // Common shells: HE, fluid, smoke.
+        // Sentinel: gravity() != 0 because every shipped shell has a negative
+        // gravity value in its JSON. The default is 0.0, which means "no entry
+        // for this entity type in this handler."
+        BallisticPropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
+                .getPropertiesOf(projectileType).ballistics();
+        if (common.gravity() != 0) return common;
+
+        BallisticPropertiesComponent inert = CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE
+                .getPropertiesOf(projectileType).ballistics();
+        if (inert.gravity() != 0) return inert;
+
+        BallisticPropertiesComponent shrapnel = CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL
+                .getPropertiesOf(projectileType).ballistics();
+        if (shrapnel.gravity() != 0) return shrapnel;
+
+        BallisticPropertiesComponent fluid = CBCMunitionPropertiesHandlers.FLUID_SHELL
+                .getPropertiesOf(projectileType).ballistics();
+        if (fluid.gravity() != 0) return fluid;
+
+        BallisticPropertiesComponent smoke = CBCMunitionPropertiesHandlers.SMOKE_SHELL
+                .getPropertiesOf(projectileType).ballistics();
+        if (smoke.gravity() != 0) return smoke;
+
+        BallisticPropertiesComponent mortar = CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL
+                .getPropertiesOf(projectileType).ballistics();
+        if (mortar.gravity() != 0) return mortar;
+
+        BallisticPropertiesComponent stone = CBCMunitionPropertiesHandlers.MORTAR_STONE
+                .getPropertiesOf(projectileType).ballistics();
+        if (stone.gravity() != 0) return stone;
+
+        // Nothing matched. Return the common default so callers get a consistent
+        // zeroed value and the ballistic solver can fall back.
+        return common;
+    }
+
+    private static BigCannonProjectilePropertiesComponent resolveBigCannonProperties(EntityType<?> projectileType) {
+        // Sentinel: minimumChargePower() != 0 because every shipped shell has a
+        // minimum charge of at least 1.0 in its JSON. The default is 0.
+        BigCannonProjectilePropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (common.minimumChargePower() != 0) return common;
+
+        BigCannonProjectilePropertiesComponent inert = CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (inert.minimumChargePower() != 0) return inert;
+
+        BigCannonProjectilePropertiesComponent shrapnel = CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (shrapnel.minimumChargePower() != 0) return shrapnel;
+
+        BigCannonProjectilePropertiesComponent grapeshot = CBCMunitionPropertiesHandlers.BAG_OF_GRAPESHOT
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (grapeshot.minimumChargePower() != 0) return grapeshot;
+
+        BigCannonProjectilePropertiesComponent fluid = CBCMunitionPropertiesHandlers.FLUID_SHELL
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (fluid.minimumChargePower() != 0) return fluid;
+
+        BigCannonProjectilePropertiesComponent smoke = CBCMunitionPropertiesHandlers.SMOKE_SHELL
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (smoke.minimumChargePower() != 0) return smoke;
+
+        BigCannonProjectilePropertiesComponent mortar = CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (mortar.minimumChargePower() != 0) return mortar;
+
+        BigCannonProjectilePropertiesComponent stone = CBCMunitionPropertiesHandlers.MORTAR_STONE
+                .getPropertiesOf(projectileType).bigCannonProperties();
+        if (stone.minimumChargePower() != 0) return stone;
+
+        return common;
     }
 
     // ------------------------------------------------------------------
@@ -319,13 +572,13 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         super.write(compound, registries, clientPacket);
 
         compound.putBoolean("IsPowered", isPowered);
-        compound.putInt("DetectedAxis", detectedAxis.ordinal());
+        compound.putInt("detectedAxis", detectedAxis.ordinal());
 
         ListTag slaves = new ListTag();
         for (SlavedMount sm : slavedMounts) {
             CompoundTag tag = new CompoundTag();
             tag.putLong("MountPos", sm.mountPos.asLong());
-            tag.putInt("Axis", sm.axis.ordinal());
+            tag.putInt("ServoAxis", sm.ServoAxis.ordinal());
             tag.putFloat("CurrentAngle", sm.currentAngle);
             tag.putBoolean("HasShell", sm.hasShell);
             if (sm.shellType != null) {
@@ -354,9 +607,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         this.isPowered = compound.getBoolean("IsPowered");
 
-        Axis[] axes = Axis.values();
-        int axisOrd = compound.getInt("DetectedAxis");
-        this.detectedAxis = (axisOrd >= 0 && axisOrd < axes.length) ? axes[axisOrd] : Axis.NONE;
+        ServoAxis[] axes = ServoAxis.values();
+        int ServoAxisOrd = compound.getInt("detectedAxis");
+        this.detectedAxis = (ServoAxisOrd >= 0 && ServoAxisOrd < axes.length) ? axes[ServoAxisOrd] : ServoAxis.NONE;
 
         if (!clientPacket) return;
 
@@ -368,11 +621,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             CompoundTag tag = slaves.getCompound(i);
             BlockPos mountPos = BlockPos.of(tag.getLong("MountPos"));
 
-            int slaveAxisOrd = tag.getInt("Axis");
-            Axis slaveAxis = (slaveAxisOrd >= 0 && slaveAxisOrd < axes.length)
-                    ? axes[slaveAxisOrd] : Axis.NONE;
+            int slaveServoAxisOrd = tag.getInt("ServoAxis");
+            ServoAxis slaveServoAxis = (slaveServoAxisOrd >= 0 && slaveServoAxisOrd < axes.length)
+                    ? axes[slaveServoAxisOrd] : ServoAxis.NONE;
 
-            SlavedMount sm = new SlavedMount(mountPos, null, null, slaveAxis);
+            SlavedMount sm = new SlavedMount(mountPos, null, null, slaveServoAxis);
             sm.currentAngle = tag.getFloat("CurrentAngle");
             sm.hasShell = tag.getBoolean("HasShell");
             if (tag.contains("ShellType")) {
@@ -392,6 +645,67 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         }
     }
 
+    @Nullable
+    private CannonServoInputBlockEntity getAdjacentInput() {
+        if (level == null) return null;
+        BlockPos inputPos = worldPosition.relative(getBlockState().getValue(FACING).getOpposite());
+        return level.getBlockEntity(inputPos) instanceof CannonServoInputBlockEntity in ? in : null;
+    }
+
+    public ServoStatus buildServoStatus() {
+        List<ServoStatus.MountSnapshot> mounts = new ArrayList<>();
+        for (SlavedMount sm : slavedMounts) {
+            float facingYaw = 0f;
+            float maxElevation = 90f;
+            float maxDepression = -90f;
+
+            if (sm.mount != null) {
+                PitchOrientedContraptionEntity contraption = sm.mount.getContraption();
+                if (contraption != null) {
+                    facingYaw = contraption.getInitialOrientation().toYRot();
+                    maxElevation = contraption.maximumElevation();
+                    maxDepression = -contraption.maximumDepression();
+                }
+            }
+
+            mounts.add(new ServoStatus.MountSnapshot(
+                    sm.mountPos, facingYaw, sm.currentAngle,
+                    maxElevation, maxDepression,
+                    sm.hasShell, sm.shellType,
+                    sm.fuzeStack, sm.fuzeTimer, sm.isTimedFuze,
+                    sm.gravity, sm.drag, sm.isQuadraticDrag,
+                    sm.addedChargePower, sm.minimumChargePower, sm.totalChargePower));
+        }
+        return new ServoStatus(worldPosition, detectedAxis, isPowered, mounts);
+    }
+
+    private static final float SNAP_THRESHOLD_DEG = 0.2f;
+
+    private static float wrapAngle(float deg) {
+        deg = deg % 360f;
+        if (deg > 180f) deg -= 360f;
+        if (deg < -180f) deg += 360f;
+        return deg;
+    }
+
+    private static float speedForError(float errorDeg) {
+        if (errorDeg <= SNAP_THRESHOLD_DEG) return 0f;
+
+        // 32 RPM at 20°+, ramping linearly to 2 RPM at the snap threshold.
+        float t = Mth.clamp((errorDeg - SNAP_THRESHOLD_DEG) / (20f - SNAP_THRESHOLD_DEG), 0f, 1f);
+        return Mth.lerp(t, 2f, 32f);
+    }
+
+    private long computeMemberHash() {
+        KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
+        if (network == null) return 0;
+        long h = 0;
+        for (KineticBlockEntity member : network.members.keySet()) {
+            h ^= member.getBlockPos().asLong();
+        }
+        return h;
+    }
+
     /**
      * Test helper: sets the loaded shell's timed fuze to the given number of ticks.
      * Returns true if a timed fuze was found and updated.
@@ -401,7 +715,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         if (slavedMounts.isEmpty()) return false;
 
         SlavedMount sm = slavedMounts.get(0);
-        if (sm.axis != Axis.PITCH) return false;
+        if (sm.ServoAxis != PITCH) return false;
         if (sm.mount == null) return false;
 
         PitchOrientedContraptionEntity entity = sm.mount.getContraption();
@@ -463,7 +777,15 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                     .forGoggles(tooltip);
         }
 
-        if (detectedAxis == Axis.NONE) {
+        if (detectedAxis == ServoAxis.INVALID) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.cannon_servo_output.too_many_mounts"))
+                    .style(ChatFormatting.RED)
+                    .forGoggles(tooltip);
+            return true;
+        }
+
+        if (detectedAxis == ServoAxis.NONE) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.cannon_servo_output.no_mount"))
                     .style(ChatFormatting.RED)
@@ -501,7 +823,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 .style(ChatFormatting.YELLOW)
                 .forGoggles(tooltip);
 
-        String angleKey = (sm.axis == Axis.PITCH)
+        String angleKey = (sm.ServoAxis == PITCH)
                 ? "createdangerclose.cannon_servo_output.mount_angle_pitch"
                 : "createdangerclose.cannon_servo_output.mount_angle_yaw";
         CDCLang.builder()
@@ -509,7 +831,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 .style(ChatFormatting.AQUA)
                 .forGoggles(tooltip);
 
-        if (sm.axis != Axis.PITCH) return;
+        if (sm.ServoAxis != PITCH) return;
 
         if (sm.hasShell && sm.shellType != null) {
             Component shellName = Component.translatable(
@@ -557,6 +879,74 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                             "createdangerclose.cannon_servo_output.mount_shell_empty"))
                     .style(ChatFormatting.DARK_GRAY)
                     .forGoggles(tooltip);
+        }
+    }
+
+    public void logOrientationDebug() {
+        if (level == null || level.isClientSide()) return;
+
+        if (slavedMounts.isEmpty()) {
+            CreateDangerClose.LOGGER.info("Orientation debug: no slaved mounts");
+            return;
+        }
+
+        for (SlavedMount sm : slavedMounts) {
+            if (sm.mount == null) continue;
+
+            var mountState = sm.mount.getBlockState();
+            Direction mountFacing = mountState.hasProperty(BlockStateProperties.HORIZONTAL_FACING)
+                    ? mountState.getValue(BlockStateProperties.HORIZONTAL_FACING) : null;
+
+            PitchOrientedContraptionEntity entity = sm.mount.getContraption();
+            if (entity == null) {
+                CreateDangerClose.LOGGER.info(
+                        "Orientation debug: mount at {} facing={} has no contraption",
+                        sm.mountPos, mountFacing);
+                continue;
+            }
+
+            Direction initialOrientation = entity.getInitialOrientation();
+            float entityYaw = entity.yaw;
+            float entityPitch = entity.pitch;
+
+            CreateDangerClose.LOGGER.info(
+                    "===== Servo orientation debug =====");
+            CreateDangerClose.LOGGER.info(
+                    "Mount pos (local)={}", sm.mountPos);
+            CreateDangerClose.LOGGER.info(
+                    "Mount HORIZONTAL_FACING={}", mountFacing);
+            CreateDangerClose.LOGGER.info(
+                    "Cannon initialOrientation={} (toYRot={})",
+                    initialOrientation, initialOrientation.toYRot());
+            CreateDangerClose.LOGGER.info(
+                    "Contraption entity yaw={} pitch={}", entityYaw, entityPitch);
+            CreateDangerClose.LOGGER.info(
+                    "Servo detected axis={}", sm.ServoAxis);
+
+            // Iterate the contraption's block entities
+            if (entity.getContraption() instanceof MountedBigCannonContraption mounted) {
+                CreateDangerClose.LOGGER.info(
+                        "Contraption blocks (local pos -> blockstate):");
+                for (var entry : mounted.getBlocks().entrySet()) {
+                    var pos = entry.getKey();
+                    var info = entry.getValue();
+                    var state = info.state();
+                    var block = state.getBlock();
+
+                    String facingStr = "n/a";
+                    if (state.hasProperty(BlockStateProperties.FACING)) {
+                        facingStr = state.getValue(BlockStateProperties.FACING).toString();
+                    } else if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+                        facingStr = state.getValue(BlockStateProperties.HORIZONTAL_FACING).toString();
+                    } else if (state.hasProperty(BlockStateProperties.AXIS)) {
+                        facingStr = "axis=" + state.getValue(BlockStateProperties.AXIS);
+                    }
+
+                    CreateDangerClose.LOGGER.info(
+                            "  {} -> {} facing={}",
+                            pos, block.getClass().getSimpleName(), facingStr);
+                }
+            }
         }
     }
 }

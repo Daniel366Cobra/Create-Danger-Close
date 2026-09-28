@@ -38,66 +38,81 @@
       "missing_orientation": "Missing: Gimbal or Heading",
       "missing_velocity": "Missing: Velocity",
       "missing_altitude": "Missing: Altitude",
-      "missing_target": "Missing: Target"
+      "missing_target": "Missing: Target",
+      "solutions": "Fire Solutions:",
+      "solution_ok": "Solution found (%s)",
+      "solution_failed": "No solution: %s",
+      "reason": {
+        "ok": "OK",
+        "out_of_range": "Target out of range",
+        "out_of_arc": "Target out of arc",
+        "no_convergence": "Solver did not converge",
+        "no_target": "No target designated",
+        "no_shell": "No shell loaded",
+        "no_orientation": "No ship orientation data",
+        "insufficient_charge": "Insufficient propellant",
+        "degenerate": "Invalid geometry"
+      }
     },
-    "cannon_servo": {
-      "not_enough_space": "Not enough space to place Servo Output"
-    },
-    "cannon_servo_output": {
-      "title": "Cannon Servo Output",
-      "no_mount": "No cannon mount on network",
-      "no_slaves": "No slaved mounts found",
-      "axis": "Axis: %s",
-      "axis.pitch": "Pitch",
-      "axis.yaw": "Yaw",
-      "mount_header": "Mount %s @ %s",
-      "mount_angle_pitch": "Pitch: %s°",
-      "mount_angle_yaw": "Yaw: %s°",
-      "mount_shell": "Shell: %s",
-      "mount_shell_empty": "Shell: (empty)",
-      "mount_fuze_timed": "Fuze: Timed (%ss %st)",
-      "mount_fuze_other": "Fuze: %s",
-      "mount_fuze_none": "Fuze: None",
-      "mount_charge": "Charge: %s"
+      "cannon_servo": {
+        "not_enough_space": "Not enough space to place Servo Output"
+      },
+      "cannon_servo_output": {
+        "title": "Cannon Servo Output",
+        "no_mount": "No cannon mount on network",
+        "too_many_mounts": "Too many cannon mounts on network",
+        "no_slaves": "No slaved mounts found",
+        "axis": "Axis: %s",
+        "axis.pitch": "Pitch",
+        "axis.yaw": "Yaw",
+        "mount_header": "Mount %s @ %s",
+        "mount_angle_pitch": "Pitch: %s°",
+        "mount_angle_yaw": "Yaw: %s°",
+        "mount_shell": "Shell: %s",
+        "mount_shell_empty": "Shell: (empty)",
+        "mount_fuze_timed": "Fuze: Timed (%ss %st)",
+        "mount_fuze_other": "Fuze: %s",
+        "mount_fuze_none": "Fuze: None",
+        "mount_charge": "Charge: %s"
+      },
+
+      "gui": {},
+
+      "unit": {
+        "angle": "°",
+        "velocity": " m/s",
+        "distance": " blocks"
+      },
+
+      "tooltip": {},
+
+      "display_source": {}
     },
 
-    "gui": {},
-
-    "unit": {
-      "angle": "°",
-      "velocity": " m/s",
-      "distance": " blocks"
+    "block.createdangerclose": {
+      "network_interface.tooltip": {
+        "summary": "Interfaces Simulated Sensors to kinetic Battle Networks.",
+        "condition1": "When facing a Gimbal, Altitude or Velocity Sensor, or a Navigation table:",
+        "behaviour1": "_Polls_ the sensor at a rate proportional to input RPM."
+      },
+      "fire_control_solver.tooltip": {
+        "summary": "Computes firing solutions for Cannon Mounts.",
+        "condition1": "When connected to a kinetic Battle Network:",
+        "behaviour1": "_Polls_ sensor Interfaces and _computes_ firing solutions."
+      }
     },
 
-    "tooltip": {},
-
-    "display_source": {}
-  },
-
-  "block.createdangerclose": {
-    "network_interface.tooltip": {
-      "summary": "Interfaces Simulated Sensors to kinetic Battle Networks.",
-      "condition1": "When facing a Gimbal, Altitude or Velocity Sensor, or a Navigation table:",
-      "behaviour1": "_Polls_ the sensor at a rate proportional to input RPM."
+    "item.createdangerclose": {
+      "some_item.tooltip": {
+        "summary": "Summary",
+        "condition1": "Condition1",
+        "behaviour1": "Behavior1"
+      }
     },
-    "fire_control_solver.tooltip": {
-      "summary": "Computes firing solutions for Cannon Mounts.",
-      "condition1": "When connected to a kinetic Battle Network:",
-      "behaviour1": "_Polls_ sensor Interfaces and _computes_ firing solutions."
+
+    "stat.createdangerclose": {
+      "lenses_cleaned": "Lenses Cleaned",
+      "equipment_realigned": "Equipment Realigned",
+      "equipment_repaired": "Equipment Repaired"
     }
-  },
-
-  "item.createdangerclose": {
-    "some_item.tooltip": {
-      "summary": "Summary",
-      "condition1": "Condition1",
-      "behaviour1": "Behavior1"
-    }
-  },
-
-  "stat.createdangerclose": {
-    "lenses_cleaned": "Lenses Cleaned",
-    "equipment_realigned": "Equipment Realigned",
-    "equipment_repaired": "Equipment Repaired"
   }
-}

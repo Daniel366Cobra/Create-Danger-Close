@@ -91,20 +91,13 @@ public class CannonServoOutputBlock extends DirectionalKineticBlock implements I
     @Override
     public InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                             Player player, BlockHitResult hitResult) {
-        if (level.isClientSide()) return InteractionResult.SUCCESS;
-
         if (level.getBlockEntity(pos) instanceof CannonServoOutputBlockEntity be) {
-            boolean success = be.setLoadedFuzeTime(100);  // 5 seconds
-
-            if (success) {
-                player.displayClientMessage(
-                        Component.literal("Fuze set to 5.00s"), true);
-            } else {
-                player.displayClientMessage(
-                        Component.literal("No timed fuze found in loaded shell"), true);
+            if (!level.isClientSide()) {
+                be.logOrientationDebug();
             }
+            return InteractionResult.SUCCESS;
         }
-        return InteractionResult.SUCCESS;
+        return super.useWithoutItem(state, level, pos, player, hitResult);
     }
 
     @Override

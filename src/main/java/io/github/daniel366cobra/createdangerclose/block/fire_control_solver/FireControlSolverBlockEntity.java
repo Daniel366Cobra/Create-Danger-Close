@@ -1,30 +1,48 @@
 package io.github.daniel366cobra.createdangerclose.block.fire_control_solver;
 
+import com.simibubi.create.Create;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
+import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
+import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
+import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaterniond;
+import org.joml.Quaterniondc;
 import org.joml.Vector3d;
+import rbasamoyai.createbigcannons.munitions.AbstractCannonProjectile;
+import rbasamoyai.createbigcannons.munitions.big_cannon.AbstractBigCannonProjectile;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
+import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
+import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YAW;
 
 public class FireControlSolverBlockEntity extends KineticBlockEntity
         implements IHaveGoggleInformation {
 
     public static final float MIN_OPERATING_RPM = 32.0f;
+
+    private static final double MUZZLE_VELOCITY_PER_CHARGE = 40.0;
 
     // --- Fused own-ship state (persisted scalars) ---
     private boolean hasOrientation = false;
@@ -57,6 +75,11 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     private int navTargetCount = 0;
     private int velocityCount = 0;
     private int altitudeCount = 0;
+
+    private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new java.util.HashMap<>();
+
+    // Ship-frame solution per mount position, shared by its pitch and yaw servos.
+    private final Map<BlockPos, FireSolution> aimCache = new java.util.HashMap<>();
 
     private boolean isPowered = false;
 
@@ -95,6 +118,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         int pollInterval = (int) Math.max(1, 640f / speed);
         if (level.getGameTime() % pollInterval == 0) {
             pollNetwork();
+            pollAndPushServos();
             notifyUpdate();
         }
     }
@@ -197,6 +221,176 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         }
     }
 
+    private void pollAndPushServos() {
+        KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
+        if (network == null) return;
+
+        lastPitchResults.clear();
+        aimCache.clear();
+
+        SubLevel subLevel = subLevelReference.get();
+
+        // Pitch servos run the ballistic solve (they know the shell and charge)
+        // and cache the result per mount. Yaw servos run afterwards so both axes
+        // of a mount aim along the same 3D direction.
+        List<SolverServo> yawServos = new ArrayList<>();
+
+        for (KineticBlockEntity member : network.members.keySet()) {
+            if (member == this) continue;
+            if (!(member instanceof SolverServo servo)) continue;
+
+            var status = servo.getServoStatus();
+            if (status == null || status.mounts().isEmpty() || !status.powered()) {
+                servo.receiveFiringSolution(null);
+                continue;
+            }
+
+            if (status.axis() == PITCH) {
+                servo.receiveFiringSolution(solvePitch(status, subLevel));
+            } else if (status.axis() == YAW) {
+                yawServos.add(servo);
+            } else {
+                servo.receiveFiringSolution(null);
+            }
+        }
+
+        for (SolverServo servo : yawServos) {
+            servo.receiveFiringSolution(solveYaw(servo.getServoStatus(), subLevel));
+        }
+    }
+
+    private FireSolution solveYaw(ServoStatus status, @Nullable SubLevel subLevel) {
+        ServoStatus.MountSnapshot mount = status.mounts().get(0);
+
+        FireSolution cached = aimCache.get(mount.mountPos());
+        if (cached != null) {
+            return new FireSolution(cached.pitchDeg(), cached.yawDeg(), 0, true);
+        }
+
+        // No ballistic solution for this mount (no pitch servo, no shell, ...).
+        // Keep tracking the target along the line of sight.
+        if (!hasTarget || subLevel == null) return null;
+
+        Quaterniondc shipToWorld = shipToWorld(subLevel);
+        if (shipToWorld == null) return null;
+
+        Vector3d mountWorld = subLevel.logicalPose()
+                .transformPosition(mountCenter(mount), new Vector3d());
+        Vector3d toTargetWorld = new Vector3d(targetX, targetY, targetZ).sub(mountWorld);
+        if (toTargetWorld.lengthSquared() < 1e-8) return null;
+
+        Vector3d shipDir = shipToWorld.transformInverse(toTargetWorld.normalize(), new Vector3d());
+        return new FireSolution(pitchOf(shipDir), yawOf(shipDir), 0, true);
+    }
+
+    private FireSolution solvePitch(ServoStatus status, @Nullable SubLevel subLevel) {
+        BlockPos servoPos = status.servoPos();
+
+        if (!hasTarget || subLevel == null) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_TARGET));
+            return null;
+        }
+
+        Quaterniondc shipToWorld = shipToWorld(subLevel);
+        if (shipToWorld == null) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_ORIENTATION));
+            return null;
+        }
+
+        ServoStatus.MountSnapshot mount = status.mounts().get(0);
+
+        if (!mount.hasShell()) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_SHELL));
+            return null;
+        }
+
+        double charge = mount.totalChargePower() + mount.addedChargePower();
+        if (mount.minimumChargePower() > charge) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.INSUFFICIENT_CHARGE));
+            return null;
+        }
+
+        Vector3d muzzleWorld = subLevel.logicalPose()
+                .transformPosition(mountCenter(mount), new Vector3d());
+
+        Vector3d targetWorld = new Vector3d(targetX, targetY, targetZ);
+        Vector3d targetVel = new Vector3d();
+
+        double muzzleVelocity = charge;
+        double gravity = mount.gravity();
+        double drag = mount.drag();
+        boolean isQuadraticDrag = mount.isQuadraticDrag();
+
+        // The mount's elevation limits apply in ship frame, so let the solver
+        // search the whole world-frame arc and check the limits afterwards.
+        BallisticSolver.Result result = BallisticSolver.solve(
+                muzzleWorld, targetWorld, targetVel,
+                muzzleVelocity, gravity, drag, isQuadraticDrag,
+                90.0, -90.0);
+
+        if (!result.valid()) {
+            lastPitchResults.put(servoPos, result);
+            return null;
+        }
+
+        // Build the world-frame aim direction from the solve's pitch and yaw.
+        double wp = Math.toRadians(result.pitchDeg());
+        double wy = Math.toRadians(result.yawDeg());
+        Vector3d worldDir = new Vector3d(
+                -Math.sin(wy) * Math.cos(wp),
+                Math.sin(wp),
+                Math.cos(wy) * Math.cos(wp));
+
+        // Rotate into ship frame. This is the inverse of the rotation Sable
+        // applies to the shell's velocity when it kicks it out of the plot.
+        Vector3d shipDir = shipToWorld.transformInverse(worldDir, new Vector3d());
+        double shipPitchDeg = pitchOf(shipDir);
+        double shipYawDeg = yawOf(shipDir);
+
+        if (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.OUT_OF_ARC));
+            return null;
+        }
+
+        lastPitchResults.put(servoPos, result);
+
+        FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg, result.fuzeTicks(), true);
+        aimCache.put(mount.mountPos(), solution);
+        return solution;
+    }
+
+    /**
+     * Ship-to-world rotation, or null when the network lacks the orientation
+     * sensors. The sensors gate the solve; the rotation itself comes from the
+     * sublevel pose, which is what the gimbal derives its reading from anyway.
+     */
+    @Nullable
+    private Quaterniondc shipToWorld(SubLevel subLevel) {
+        if (gimbalCount == 0 || navHeadingCount == 0) return null;
+        return subLevel.logicalPose().orientation();
+    }
+
+    private static Vector3d mountCenter(ServoStatus.MountSnapshot mount) {
+        return new Vector3d(
+                mount.mountPos().getX() + 0.5,
+                mount.mountPos().getY() + 0.5,
+                mount.mountPos().getZ() + 0.5);
+    }
+
+    private static double pitchOf(Vector3d dir) {
+        return Math.toDegrees(Math.asin(Math.clamp(dir.y, -1.0, 1.0)));
+    }
+
+    private static double yawOf(Vector3d dir) {
+        double yaw = Math.toDegrees(Math.atan2(-dir.x, dir.z));
+        return yaw < 0 ? yaw + 360 : yaw;
+    }
+
     // --- Accessors for other blocks (fire control panel, map table, etc.) ---
 
     public boolean hasOrientation() { return hasOrientation; }
@@ -254,6 +448,22 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         this.velocityCount = compound.getInt("VelocityCount");
         this.altitudeCount = compound.getInt("AltitudeCount");
 
+        if (clientPacket) {
+            this.lastPitchResults.clear();
+            ListTag results = compound.getList("PitchResults", Tag.TAG_COMPOUND);
+            for (int i = 0; i < results.size(); i++) {
+                CompoundTag t = results.getCompound(i);
+                BlockPos pos = BlockPos.of(t.getLong("Pos"));
+                BallisticSolver.Result.Reason reason =
+                        BallisticSolver.Result.Reason.values()[t.getInt("Reason")];
+                BallisticSolver.Result r = t.getBoolean("Valid")
+                        ? new BallisticSolver.Result(true, reason, t.getDouble("Pitch"), 0,
+                        t.getInt("Fuze"), 0, t.getInt("Fuze"))
+                        : BallisticSolver.Result.invalid(reason);
+                this.lastPitchResults.put(pos, r);
+            }
+        }
+
         // Transient quaternions/vectors are not persisted. On the server they'll
         // be recomputed on the next poll; on the client they stay null.
     }
@@ -286,6 +496,19 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         compound.putInt("NavTargetCount", navTargetCount);
         compound.putInt("VelocityCount", velocityCount);
         compound.putInt("AltitudeCount", altitudeCount);
+
+        ListTag results = new ListTag();
+        for (Map.Entry<BlockPos, BallisticSolver.Result> e : lastPitchResults.entrySet()) {
+            CompoundTag t = new CompoundTag();
+            t.putLong("Pos", e.getKey().asLong());
+            BallisticSolver.Result r = e.getValue();
+            t.putBoolean("Valid", r.valid());
+            t.putInt("Reason", r.reason().ordinal());
+            t.putDouble("Pitch", r.pitchDeg());
+            t.putInt("Fuze", r.fuzeTicks());
+            results.add(t);
+        }
+        compound.put("PitchResults", results);
     }
 
     // --- TOOLTIP ---
@@ -386,6 +609,45 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                     .add(Component.translatable("createdangerclose.fire_control_solver.missing_target"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
+        }
+
+        if (!lastPitchResults.isEmpty()) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.fire_control_solver.solutions"))
+                    .style(ChatFormatting.GRAY)
+                    .forGoggles(tooltip);
+
+            for (Map.Entry<BlockPos, BallisticSolver.Result> entry : lastPitchResults.entrySet()) {
+                BallisticSolver.Result r = entry.getValue();
+                String reasonKey = "createdangerclose.fire_control_solver.reason."
+                        + r.reason().name().toLowerCase();
+
+                if (r.valid()) {
+                    CDCLang.builder()
+                            .add(Component.literal("  "))
+                            .add(Component.translatable(
+                                    "createdangerclose.fire_control_solver.solution_ok",
+                                    Component.translatable(reasonKey)))
+                            .style(ChatFormatting.GREEN)
+                            .forGoggles(tooltip);
+
+                    CDCLang.builder()
+                            .add(Component.literal("    pitch="))
+                            .add(CDCLang.numberWithUnit(r.pitchDeg(), "createdangerclose.unit.angle"))
+                            .add(Component.literal("  tof="))
+                            .add(Component.literal(r.fuzeTicks() + " t"))
+                            .style(ChatFormatting.DARK_GREEN)
+                            .forGoggles(tooltip);
+                } else {
+                    CDCLang.builder()
+                            .add(Component.literal("  "))
+                            .add(Component.translatable(
+                                    "createdangerclose.fire_control_solver.solution_failed",
+                                    Component.translatable(reasonKey)))
+                            .style(ChatFormatting.RED)
+                            .forGoggles(tooltip);
+                }
+            }
         }
 
         // Debug counts
