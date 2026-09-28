@@ -1,18 +1,15 @@
 package io.github.daniel366cobra.createdangerclose.block.network_interface;
 
-import com.simibubi.create.Create;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
-import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
-import dev.ryanhcode.sable.Sable;
-import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.simulated_team.simulated.content.blocks.altitude_sensor.AltitudeSensorBlockEntity;
-import dev.simulated_team.simulated.content.blocks.gimbal_sensor.GimbalSensorBlock;
 import dev.simulated_team.simulated.content.blocks.gimbal_sensor.GimbalSensorBlockEntity;
 import dev.simulated_team.simulated.content.blocks.nav_table.NavTableBlock;
 import dev.simulated_team.simulated.content.blocks.nav_table.NavTableBlockEntity;
 import dev.simulated_team.simulated.content.blocks.velocity_sensor.VelocitySensorBlockEntity;
+import dev.simulated_team.simulated.content.navigation_targets.lodestone_compass_compatability.LodestoneTrackingMap;
 import dev.simulated_team.simulated.index.SimBlocks;
+import dev.simulated_team.simulated.index.SimDataComponents;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import net.minecraft.ChatFormatting;
@@ -21,13 +18,13 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import org.joml.Quaterniond;
 import org.joml.Vector3d;
 
-import java.lang.ref.WeakReference;
 import java.util.List;
+import java.util.UUID;
 
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 
@@ -39,20 +36,8 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     private SensorReading reading = new SensorReading.None();
     private boolean isPowered = false;
 
-    private WeakReference<SubLevel> subLevelReference;
-    private WeakReference<KineticNetwork> battleNetworkReference;
-
     public NetworkInterfaceBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
-        subLevelReference = new WeakReference<>(null);
-        battleNetworkReference = new WeakReference<>(null);
-    }
-
-    @Override
-    public void initialize() {
-        super.initialize();
-        subLevelReference = new WeakReference<>(Sable.HELPER.getContaining(getLevel(), worldPosition));
-        battleNetworkReference = new WeakReference<>(Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this));
     }
 
     @Override
@@ -108,32 +93,11 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     }
 
     private SensorReading buildGimbalReading(GimbalSensorBlockEntity gimbal) {
-        var mountAxis = gimbal.getBlockState().getValue(GimbalSensorBlock.HORIZONTAL_AXIS);
-
-        // Raw angles in gimbal-local frame. Apply the per-mount correction
-        // to produce a consistent sub-level-frame tilt.
-        double rawX = gimbal.getXAngle();
-        double rawZ = gimbal.getZAngle();
-
-        double tiltX;
-        double tiltZ;
-        if (mountAxis == net.minecraft.core.Direction.Axis.Z) {
-            tiltX = rawX;
-            tiltZ = rawZ;
-        } else {
-            // HORIZONTAL_AXIS == X: base quaternion is a 90-degree Y rotation,
-            // so the gimbal's local X measures sub-level Z tilt and vice versa.
-            tiltX = rawZ;
-            tiltZ = -rawX;
-        }
-
-        // Build the tilt quaternion: a rotation about sub-level X by tiltX,
-        // then about sub-level Z by tiltZ (order TBD by your convention).
-        Quaterniond tilt = new Quaterniond()
-                .rotateX(tiltX)
-                .rotateZ(tiltZ);
-
-        return new SensorReading.Gimbal(tilt, mountAxis);
+        // The gimbal computes its angles in sub-level frame from the pose,
+        // independent of the block's placement, and reports them in radians.
+        return new SensorReading.Gimbal(
+                Math.toDegrees(gimbal.getXAngle()),
+                Math.toDegrees(gimbal.getZAngle()));
     }
 
     private SensorReading buildNavReading(NavTableBlockEntity navTable) {
@@ -150,15 +114,19 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             var facing = navTable.getBlockState().getValue(NavTableBlock.FACING);
             double headingDeg;
             if (facing == net.minecraft.core.Direction.UP) {
-                headingDeg = (270.0 - rawAngle) % 360.0;
+                headingDeg = 270.0 - rawAngle;
             } else if (facing == net.minecraft.core.Direction.DOWN) {
-                headingDeg = (rawAngle - 90.0) % 360.0;
+                headingDeg = rawAngle - 90.0;
             } else {
                 return new SensorReading.None(); // misaligned mount
             }
-            Quaterniond yaw = new Quaterniond()
-                    .rotateY(Math.toRadians(headingDeg));
-            return new SensorReading.NavHeading(yaw);
+            return new SensorReading.NavHeading(((headingDeg % 360.0) + 360.0) % 360.0);
+        }
+
+        // Simulated points a compass without a live lodestone at world spawn.
+        // That is not a fire mission, so report no target instead.
+        if (held.is(Items.COMPASS) && !hasLiveLodestone(held)) {
+            return new SensorReading.None();
         }
 
         // Lodestone compass or banner map -> target reference
@@ -167,10 +135,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return new SensorReading.None();
         }
 
-        Quaterniond bearing = new Quaterniond()
-                .rotateY(Math.toRadians(navTable.getRelativeAngle()));
-
-        return new SensorReading.NavTarget(targetPos, bearing);
+        return new SensorReading.NavTarget(targetPos, navTable.getRelativeAngle());
     }
 
     private SensorReading buildVelocityReading(VelocitySensorBlockEntity velocity) {
@@ -186,6 +151,14 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
     private static boolean isMagnetItem(ItemStack stack) {
         return (stack.is(SimBlocks.REDSTONE_MAGNET.asItem()));
+    }
+
+    /** Whether the compass is bound to a lodestone that still exists. */
+    private boolean hasLiveLodestone(ItemStack compass) {
+        UUID trackerId = compass.get(SimDataComponents.LODESTONE_COMPASS_SUBLEVEL_TRACKER);
+        if (trackerId == null) return false;
+        LodestoneTrackingMap map = LodestoneTrackingMap.getOrLoad(level);
+        return map != null && map.getInformation(trackerId) != null;
     }
 
     private void setSensorReading(SensorReading newReading) {
@@ -279,31 +252,27 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     }
 
     private void renderGimbal(List<Component> tooltip, SensorReading.Gimbal g) {
-        // Extract Euler angles for display (or store them alongside the
-        // quaternion if you want exact values back out).
-        double[] euler = eulerFromQuat(g.tilt());
         CDCLang.builder()
                 .add(Component.literal("  • "))
                 .add(Component.translatable("createdangerclose.network_interface.gimbal_x_angle",
-                        String.format("%.1f", Math.toDegrees(euler[0]))))
+                        String.format("%.1f", g.xAngleDeg())))
                 .add(Component.translatable("createdangerclose.unit.angle"))
                 .style(ChatFormatting.RED)
                 .forGoggles(tooltip);
         CDCLang.builder()
                 .add(Component.literal("  • "))
                 .add(Component.translatable("createdangerclose.network_interface.gimbal_z_angle",
-                        String.format("%.1f", Math.toDegrees(euler[2]))))
+                        String.format("%.1f", g.zAngleDeg())))
                 .add(Component.translatable("createdangerclose.unit.angle"))
                 .style(ChatFormatting.BLUE)
                 .forGoggles(tooltip);
     }
 
     private void renderNavHeading(List<Component> tooltip, SensorReading.NavHeading n) {
-        double headingDeg = Math.toDegrees(yawFromQuat(n.yaw()));
         CDCLang.builder()
                 .add(Component.literal("  • "))
                 .add(Component.translatable("createdangerclose.network_interface.nav_y_angle",
-                        String.format("%.1f", headingDeg)))
+                        String.format("%.1f", n.headingDeg())))
                 .add(Component.translatable("createdangerclose.unit.angle"))
                 .style(ChatFormatting.GREEN)
                 .forGoggles(tooltip);
@@ -347,28 +316,5 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 .add(Component.translatable("createdangerclose.unit.distance"))
                 .style(ChatFormatting.LIGHT_PURPLE)
                 .forGoggles(tooltip);
-    }
-
-    // --- Helpers (place in a util class eventually) ---
-
-    private static double[] eulerFromQuat(Quaterniond q) {
-        // Standard XYZ Euler extraction. Adjust to match your convention.
-        double sinr_cosp = 2 * (q.w * q.x + q.y * q.z);
-        double cosr_cosp = 1 - 2 * (q.x * q.x + q.y * q.y);
-        double x = Math.atan2(sinr_cosp, cosr_cosp);
-
-        double sinp = 2 * (q.w * q.y - q.z * q.x);
-        double y = Math.abs(sinp) >= 1 ? Math.copySign(Math.PI / 2, sinp) : Math.asin(sinp);
-
-        double siny_cosp = 2 * (q.w * q.z + q.x * q.y);
-        double cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
-        double z = Math.atan2(siny_cosp, cosy_cosp);
-
-        return new double[]{x, y, z};
-    }
-
-    private static double yawFromQuat(Quaterniond q) {
-        return Math.atan2(2 * (q.w * q.y + q.x * q.z),
-                1 - 2 * (q.y * q.y + q.x * q.x));
     }
 }

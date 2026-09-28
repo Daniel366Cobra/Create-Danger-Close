@@ -27,7 +27,6 @@ import org.joml.Quaterniondc;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -83,22 +82,18 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
     private boolean isPowered = false;
 
-    private WeakReference<SubLevel> subLevelReference;
-    private WeakReference<KineticNetwork> battleNetworkReference;
-
     public FireControlSolverBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
-        this.subLevelReference = new WeakReference<>(null);
-        this.battleNetworkReference = new WeakReference<>(null);
     }
 
-    @Override
-    public void initialize() {
-        super.initialize();
-        this.subLevelReference = new WeakReference<>(
-                Sable.HELPER.getContaining(this.getLevel(), this.worldPosition));
-        this.battleNetworkReference = new WeakReference<>(
-                com.simibubi.create.Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this));
+    /**
+     * The battle network, looked up fresh on every use: Create replaces the
+     * {@link KineticNetwork} instance when a network loses and regains its
+     * source, so a cached reference goes stale.
+     */
+    @Nullable
+    private KineticNetwork battleNetwork() {
+        return Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
     }
 
     @Override
@@ -139,7 +134,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     void pollNetwork() {
         invalidateData();
 
-        KineticNetwork network = battleNetworkReference.get();
+        KineticNetwork network = battleNetwork();
         if (network == null) return;
 
         for (KineticBlockEntity member : network.members.keySet()) {
@@ -170,8 +165,9 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
     /** Samples the solver's own sublevel pose for the tooltip. */
     private void readOwnShipState() {
-        SubLevel subLevel = subLevelReference.get();
-        if (subLevel == null || level == null) return;
+        if (level == null) return;
+        SubLevel subLevel = Sable.HELPER.getContaining(level, worldPosition);
+        if (subLevel == null) return;
 
         Quaterniondc q = subLevel.logicalPose().orientation();
 
@@ -231,7 +227,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     // --- Solving ---
 
     private void pollAndPushServos() {
-        KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
+        KineticNetwork network = battleNetwork();
         if (network == null) return;
 
         lastPitchResults.clear();
@@ -269,6 +265,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     private FireSolution solveYaw(ServoStatus status) {
         ServoStatus.MountSnapshot mount = status.mounts().get(0);
 
+        if (!hasTarget) return restSolution(mount);
+
         FireSolution cached = aimCache.get(mount.mountPos());
         if (cached != null) {
             return new FireSolution(cached.pitchDeg(), cached.yawDeg(), 0, true);
@@ -276,7 +274,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         // No ballistic solution for this mount (no pitch servo, no shell, ...).
         // Keep tracking the target along the line of sight.
-        if (!hasTarget || !hasOrientationSensors()) return null;
+        if (!hasOrientationSensors()) return null;
 
         SubLevel mountSubLevel = subLevelOf(mount);
         if (mountSubLevel == null) return null;
@@ -296,9 +294,15 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         ServoStatus.MountSnapshot mount = status.mounts().get(0);
         SubLevel mountSubLevel = subLevelOf(mount);
 
-        if (!hasTarget || mountSubLevel == null) {
+        if (!hasTarget) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_TARGET));
+            return restSolution(mount);
+        }
+
+        if (mountSubLevel == null) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.DEGENERATE));
             return null;
         }
 
@@ -370,6 +374,14 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg, result.fuzeTicks(), true);
         aimCache.put(mount.mountPos(), solution);
         return solution;
+    }
+
+    /**
+     * Rest position with no target: level barrel, pointing the way the cannon
+     * faced when it was assembled. Ship-frame, so it needs no pose or sensors.
+     */
+    private static FireSolution restSolution(ServoStatus.MountSnapshot mount) {
+        return new FireSolution(0, mount.facingYaw(), 0, true);
     }
 
     /**

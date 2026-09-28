@@ -1,11 +1,9 @@
 package io.github.daniel366cobra.createdangerclose.api.sensor;
 
-import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Quaterniond;
 import org.joml.Vector3d;
 
 public sealed interface SensorReading {
@@ -20,49 +18,43 @@ public sealed interface SensorReading {
         SensorReading getSensorReading();
     }
 
-    record Gimbal(Quaterniond tilt, Direction.Axis mountAxis) implements SensorReading {
+    /**
+     * Gimbal sensor tilt, as the sensor itself reports it: the angles of world
+     * "down" in the sub-level's X and Z planes. These are sub-level-frame
+     * values regardless of how the gimbal block is placed.
+     */
+    record Gimbal(double xAngleDeg, double zAngleDeg) implements SensorReading {
         @Override public Kind kind() { return Kind.GIMBAL; }
 
         @Override
         public CompoundTag serializeNBT(HolderLookup.Provider registries) {
             CompoundTag tag = new CompoundTag();
-            tag.putDouble("qx", tilt.x);
-            tag.putDouble("qy", tilt.y);
-            tag.putDouble("qz", tilt.z);
-            tag.putDouble("qw", tilt.w);
-            tag.putString("axis", mountAxis.getName());
+            tag.putDouble("x", xAngleDeg);
+            tag.putDouble("z", zAngleDeg);
             return tag;
         }
 
         static Gimbal fromNBT(CompoundTag tag) {
-            return new Gimbal(
-                    new Quaterniond(tag.getDouble("qx"), tag.getDouble("qy"),
-                            tag.getDouble("qz"), tag.getDouble("qw")),
-                    Direction.Axis.byName(tag.getString("axis")));
+            return new Gimbal(tag.getDouble("x"), tag.getDouble("z"));
         }
     }
 
-    record NavHeading(Quaterniond yaw) implements SensorReading {
+    record NavHeading(double headingDeg) implements SensorReading {
         @Override public Kind kind() { return Kind.NAV_HEADING; }
 
         @Override
         public CompoundTag serializeNBT(HolderLookup.Provider registries) {
             CompoundTag tag = new CompoundTag();
-            tag.putDouble("qx", yaw.x);
-            tag.putDouble("qy", yaw.y);
-            tag.putDouble("qz", yaw.z);
-            tag.putDouble("qw", yaw.w);
+            tag.putDouble("heading", headingDeg);
             return tag;
         }
 
         static NavHeading fromNBT(CompoundTag tag) {
-            return new NavHeading(new Quaterniond(
-                    tag.getDouble("qx"), tag.getDouble("qy"),
-                    tag.getDouble("qz"), tag.getDouble("qw")));
+            return new NavHeading(tag.getDouble("heading"));
         }
     }
 
-    record NavTarget(Vec3 worldPos, Quaterniond bearing) implements SensorReading {
+    record NavTarget(Vec3 worldPos, double bearingDeg) implements SensorReading {
         @Override public Kind kind() { return Kind.NAV_TARGET; }
 
         @Override
@@ -71,18 +63,14 @@ public sealed interface SensorReading {
             tag.putDouble("px", worldPos.x);
             tag.putDouble("py", worldPos.y);
             tag.putDouble("pz", worldPos.z);
-            tag.putDouble("qx", bearing.x);
-            tag.putDouble("qy", bearing.y);
-            tag.putDouble("qz", bearing.z);
-            tag.putDouble("qw", bearing.w);
+            tag.putDouble("bearing", bearingDeg);
             return tag;
         }
 
         static NavTarget fromNBT(CompoundTag tag) {
             return new NavTarget(
                     new Vec3(tag.getDouble("px"), tag.getDouble("py"), tag.getDouble("pz")),
-                    new Quaterniond(tag.getDouble("qx"), tag.getDouble("qy"),
-                            tag.getDouble("qz"), tag.getDouble("qw")));
+                    tag.getDouble("bearing"));
         }
     }
 
