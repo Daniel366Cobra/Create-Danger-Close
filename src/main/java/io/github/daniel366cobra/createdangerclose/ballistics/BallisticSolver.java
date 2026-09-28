@@ -1,6 +1,8 @@
 package io.github.daniel366cobra.createdangerclose.ballistics;
 
+import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 
 /**
  * Pure-math ballistic solver for indirect fire.
@@ -38,6 +40,8 @@ public final class BallisticSolver {
     private static final double BISECTION_TOLERANCE = 1e-6;
     private static final double MOVING_TARGET_ITERATIONS = 10;
     private static final double MOVING_TARGET_TOLERANCE_TICKS = 0.5;
+    private static final int LAUNCH_OFFSET_ITERATIONS = 10;
+    private static final double LAUNCH_OFFSET_TOLERANCE = 0.25; // blocks
 
     public record Result(
             boolean valid,
@@ -125,6 +129,95 @@ public final class BallisticSolver {
                     lastResult.fuzeTicks());
         }
         return Result.invalid(Result.Reason.NO_CONVERGENCE);
+    }
+
+    /**
+     * Solves for a shell that inherits extra launch velocity, e.g. from the
+     * moving ship it is fired from: the shell starts with
+     * {@code muzzleVelocity * barrelDir + launchVelocityOffset}.
+     *
+     * <p>Drag acts on the combined velocity, so the trajectory leaves the
+     * vertical plane of the barrel and cannot be solved by pitch bisection
+     * alone. Instead the aim point is corrected iteratively: solve for the
+     * aim point, simulate the real shot, and shift the aim point against the
+     * miss until the simulated shot lands on the target.
+     *
+     * <p>The returned pitch and yaw are the barrel direction, world frame.
+     *
+     * @param launchVelocityOffset extra launch velocity, blocks/tick, world frame
+     */
+    public static Result solve(
+            Vector3d muzzleWorld,
+            Vector3d targetWorld,
+            Vector3d targetVelocity,
+            Vector3dc launchVelocityOffset,
+            double muzzleVelocity,
+            double gravity,
+            double drag,
+            boolean isQuadraticDrag,
+            double maxElevationDeg,
+            double maxDepressionDeg
+    ) {
+        if (launchVelocityOffset.lengthSquared() < 1e-12) {
+            return solve(muzzleWorld, targetWorld, targetVelocity,
+                    muzzleVelocity, gravity, drag, isQuadraticDrag,
+                    maxElevationDeg, maxDepressionDeg);
+        }
+
+        Vector3d aim = new Vector3d(targetWorld);
+        Result aimResult = null;
+
+        for (int i = 0; i < LAUNCH_OFFSET_ITERATIONS; i++) {
+            aimResult = solve(muzzleWorld, aim, targetVelocity,
+                    muzzleVelocity, gravity, drag, isQuadraticDrag,
+                    maxElevationDeg, maxDepressionDeg);
+            if (!aimResult.valid()) return aimResult;
+
+            // Where the target will be when the shell arrives.
+            Vector3d predictedTarget = new Vector3d(targetWorld)
+                    .fma(aimResult.timeOfFlightTicks(), targetVelocity);
+            Vector3d toTarget = predictedTarget.sub(muzzleWorld, new Vector3d());
+            double horizontalRange = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+            if (horizontalRange < 1e-4) {
+                return Result.invalid(Result.Reason.DEGENERATE);
+            }
+            Vector3d alongTrack = new Vector3d(toTarget.x / horizontalRange, 0, toTarget.z / horizontalRange);
+
+            // Simulate the real shot: barrel direction plus inherited velocity.
+            double p = Math.toRadians(aimResult.pitchDeg());
+            double y = Math.toRadians(aimResult.yawDeg());
+            Vector3d launchVelocity = new Vector3d(
+                    -Math.sin(y) * Math.cos(p),
+                    Math.sin(p),
+                    Math.cos(y) * Math.cos(p))
+                    .mul(muzzleVelocity)
+                    .add(launchVelocityOffset);
+
+            Impact impact = integrateToRange(launchVelocity, gravity, drag, isQuadraticDrag,
+                    alongTrack, horizontalRange, toTarget.y);
+            if (impact == null) {
+                return Result.invalid(Result.Reason.OUT_OF_RANGE);
+            }
+
+            Vector3d miss = impact.relativePos().sub(toTarget, new Vector3d());
+
+            if (DEBUG_LOG) {
+                System.out.printf("[BallisticSolver] offset iter %d: miss=(%.2f, %.2f, %.2f)%n",
+                        i, miss.x, miss.y, miss.z);
+            }
+
+            if (miss.length() < LAUNCH_OFFSET_TOLERANCE) {
+                return new Result(true, Result.Reason.OK,
+                        aimResult.pitchDeg(), aimResult.yawDeg(),
+                        impact.ticks(), horizontalRange, (int) Math.round(impact.ticks()));
+            }
+
+            aim.sub(miss);
+        }
+
+        return new Result(false, Result.Reason.NO_CONVERGENCE,
+                aimResult.pitchDeg(), aimResult.yawDeg(),
+                aimResult.timeOfFlightTicks(), aimResult.range(), aimResult.fuzeTicks());
     }
 
     /**
@@ -292,5 +385,60 @@ public final class BallisticSolver {
         // Exhausted the tick budget.
         double hRange = Math.sqrt(px * px + pz * pz);
         return new IntegrationResult(hRange, py, MAX_TICKS);
+    }
+
+    /** Shell position relative to the muzzle when it reaches the target's range. */
+    private record Impact(Vector3d relativePos, double ticks) {}
+
+    /**
+     * Full 3D CBC-compatible integration from an arbitrary launch velocity.
+     * Stops when the shell's progress along {@code alongTrack} (a horizontal
+     * unit vector towards the target) reaches {@code targetRange}, and
+     * interpolates the position within that tick.
+     *
+     * @return null if the shell never gets there
+     */
+    @Nullable
+    private static Impact integrateToRange(
+            Vector3dc launchVelocity, double gravity, double drag, boolean isQuadratic,
+            Vector3dc alongTrack, double targetRange, double targetRelativeY
+    ) {
+        Vector3d pos = new Vector3d();
+        Vector3d vel = new Vector3d(launchVelocity);
+        Vector3d accel = new Vector3d();
+        Vector3d prevPos = new Vector3d();
+
+        for (int tick = 1; tick <= MAX_TICKS; tick++) {
+            double speed = vel.length();
+
+            double dragForce = drag * DENSITY * speed;
+            if (isQuadratic) dragForce *= speed;
+            dragForce = Math.min(dragForce, speed);
+
+            accel.set(0, gravity, 0);
+            if (speed > 1e-6) {
+                accel.fma(-dragForce / speed, vel);
+            }
+
+            // CBC's kinematic step.
+            prevPos.set(pos);
+            pos.add(vel).fma(0.5, accel);
+            vel.add(accel);
+
+            double along = pos.dot(alongTrack);
+            if (along >= targetRange) {
+                double prevAlong = prevPos.dot(alongTrack);
+                double t = (targetRange - prevAlong) / (along - prevAlong);
+                Vector3d at = prevPos.lerp(pos, t, new Vector3d());
+                return new Impact(at, tick - 1 + t);
+            }
+
+            if (pos.y < targetRelativeY - 200) {
+                // Fallen well below the target — it's not going to make it.
+                return null;
+            }
+        }
+
+        return null;
     }
 }

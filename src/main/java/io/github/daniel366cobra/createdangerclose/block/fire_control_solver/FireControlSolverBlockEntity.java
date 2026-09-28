@@ -26,6 +26,7 @@ import org.jetbrains.annotations.Nullable;
 import org.joml.Quaterniondc;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import rbasamoyai.createbigcannons.config.CBCConfigs;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -337,10 +338,12 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         double drag = mount.drag();
         boolean isQuadraticDrag = mount.isQuadraticDrag();
 
+        Vector3d inheritedVelocity = inheritedLaunchVelocity(mountSubLevel, mount.mountPos());
+
         // The mount's elevation limits apply in ship frame, so let the solver
         // search the whole world-frame arc and check the limits afterwards.
         BallisticSolver.Result result = BallisticSolver.solve(
-                muzzleWorld, targetWorld, targetVel,
+                muzzleWorld, targetWorld, targetVel, inheritedVelocity,
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
                 90.0, -90.0);
 
@@ -374,6 +377,29 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg, result.fuzeTicks(), true);
         aimCache.put(mount.mountPos(), solution);
         return solution;
+    }
+
+    /**
+     * The velocity a shell fired from this mount picks up from the ship,
+     * world frame, blocks/tick.
+     *
+     * <p>When CBC's Sable compat launches a shell out of a sub-level, it adds
+     * the sub-level's velocity at the shell's position (see CBC's
+     * {@code EntitySubLevelUtilMixin}), unless the server config disables it.
+     * The solver only compensates along ship axes it has velocity sensors for.
+     */
+    private Vector3d inheritedLaunchVelocity(SubLevel mountSubLevel, BlockPos mountPos) {
+        if (level == null || velocityAxesCovered() == 0
+                || !CBCConfigs.server().compat.sableProjectilesInheritPhysicsObjectVelocity.get()) {
+            return new Vector3d();
+        }
+
+        Quaterniondc shipToWorld = mountSubLevel.logicalPose().orientation();
+        Vector3d worldVel = Sable.HELPER.getVelocity(level, mountSubLevel, blockCenter(mountPos), new Vector3d());
+
+        // Keep only the ship-frame components we have sensors for.
+        Vector3d shipVel = shipToWorld.transformInverse(worldVel, new Vector3d()).mul(velocityAxisMask());
+        return shipToWorld.transform(shipVel).div(20.0); // m/s -> blocks/tick
     }
 
     /**
