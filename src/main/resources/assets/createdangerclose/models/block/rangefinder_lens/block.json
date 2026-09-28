@@ -1,0 +1,119 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "createdangerclose:block/rangefinder_lens/body_side",
+		"1": "createdangerclose:block/rangefinder_lens/body_top",
+		"2": "createdangerclose:block/rangefinder_lens/body_front",
+		"3": "createdangerclose:block/rangefinder_lens/body_back",
+		"4": "createdangerclose:block/rangefinder_lens/shroud",
+		"5": "createdangerclose:block/rangefinder_lens/lens",
+		"particle": "createdangerclose:block/rangefinder_lens/body_side"
+	},
+	"render_type": "minecraft:cutout_mipped",
+	"elements": [
+		{
+			"name": "body",
+			"from": [0, 0, 0],
+			"to": [16, 16, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [0, 0, 16, 16], "texture": "#2"},
+				"east": {"uv": [0, 0, 16, 16], "texture": "#0"},
+				"south": {"uv": [0, 0, 16, 16], "texture": "#3"},
+				"west": {"uv": [16, 0, 0, 16], "texture": "#0"},
+				"up": {"uv": [0, 16, 16, 0], "texture": "#1"},
+				"down": {"uv": [0, 0, 16, 16], "texture": "#1"}
+			}
+		},
+		{
+			"name": "shroud_top",
+			"from": [1, 15, -3],
+			"to": [15, 15, 0],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"up": {"uv": [1, 0, 15, 3], "texture": "#4"},
+				"down": {"uv": [1, 3, 15, 0], "texture": "#4"}
+			}
+		},
+		{
+			"name": "shroud_left",
+			"from": [1, 2, -3],
+			"to": [1, 15, 0],
+			"rotation": {"angle": 0, "axis": "y", "origin": [9, 9, 8]},
+			"faces": {
+				"east": {"uv": [12, 3, 15, 16], "texture": "#4"},
+				"west": {"uv": [1, 3, 4, 16], "texture": "#4"}
+			}
+		},
+		{
+			"name": "shroud_right",
+			"from": [15, 2, -3],
+			"to": [15, 15, 0],
+			"rotation": {"angle": 0, "axis": "y", "origin": [7, 9, 8]},
+			"faces": {
+				"east": {"uv": [12, 3, 15, 16], "texture": "#4"},
+				"west": {"uv": [1, 3, 4, 16], "texture": "#4"}
+			}
+		},
+		{
+			"name": "lens",
+			"from": [2, 2, -2],
+			"to": [14, 14, 0],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [2, 2, 14, 14], "texture": "#5"},
+				"east": {"uv": [16, 2, 14, 14], "texture": "#5"},
+				"west": {"uv": [2, 2, 0, 14], "texture": "#5"},
+				"up": {"uv": [2, 2, 14, 0], "texture": "#5"},
+				"down": {"uv": [2, 16, 14, 14], "texture": "#5"}
+			}
+		}
+	],
+	"display": {
+		"thirdperson_righthand": {
+			"rotation": [75, 45, 0],
+			"translation": [0, 2.5, 0],
+			"scale": [0.38, 0.38, 0.38]
+		},
+		"thirdperson_lefthand": {
+			"rotation": [75, 45, 0],
+			"translation": [0, 2.5, 0],
+			"scale": [0.375, 0.375, 0.375]
+		},
+		"firstperson_righthand": {
+			"rotation": [0, 45, 0],
+			"scale": [0.4, 0.4, 0.4]
+		},
+		"firstperson_lefthand": {
+			"rotation": [0, 45, 0],
+			"scale": [0.4, 0.4, 0.4]
+		},
+		"ground": {
+			"translation": [0, 3, 0],
+			"scale": [0.25, 0.25, 0.25]
+		},
+		"gui": {
+			"rotation": [-153, 45, -180],
+			"translation": [0.25, 0, 0],
+			"scale": [0.63, 0.63, 0.63]
+		},
+		"fixed": {
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"on_shelf": {
+			"rotation": [0, 180, 0]
+		}
+	},
+	"groups": [
+		0,
+		{
+			"name": "shroud",
+			"origin": [7, 8, 8],
+			"scope": 0,
+			"color": 0,
+			"children": [1, 2, 3]
+		},
+		4
+	]
+}

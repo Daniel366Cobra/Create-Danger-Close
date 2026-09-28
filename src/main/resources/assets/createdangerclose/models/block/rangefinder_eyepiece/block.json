@@ -1,0 +1,10 @@
+{
+	"credit": "Placeholder: plain cube, front face marks the line of sight. Faces north; the blockstate rotates it.",
+	"parent": "minecraft:block/orientable",
+	"textures": {
+		"front": "minecraft:block/observer_front",
+		"side": "create:block/brass_casing",
+		"top": "create:block/brass_casing",
+		"particle": "create:block/brass_casing"
+	}
+}

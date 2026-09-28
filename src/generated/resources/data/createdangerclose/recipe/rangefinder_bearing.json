@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "B": {
+      "item": "create:mechanical_bearing"
+    },
+    "G": {
+      "item": "minecraft:spyglass"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    }
+  },
+  "pattern": [
+    " G ",
+    " B ",
+    " P "
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:rangefinder_bearing"
+  }
+}

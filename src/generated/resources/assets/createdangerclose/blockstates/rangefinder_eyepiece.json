@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "createdangerclose:block/rangefinder_eyepiece/block",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/rangefinder_eyepiece/block"
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/rangefinder_eyepiece/block",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/rangefinder_eyepiece/block",
+      "y": 270
+    }
+  }
+}

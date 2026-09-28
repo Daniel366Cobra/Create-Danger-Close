@@ -4,6 +4,8 @@
     "createdangerclose:fire_control_solver",
     "createdangerclose:cannon_servo_input",
     "createdangerclose:cannon_servo_output",
-    "createdangerclose:rangefinder_bearing"
+    "createdangerclose:rangefinder_bearing",
+    "createdangerclose:rangefinder_lens",
+    "createdangerclose:rangefinder_eyepiece"
   ]
 }

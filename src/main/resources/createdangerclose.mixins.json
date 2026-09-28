@@ -3,6 +3,9 @@
   "package": "io.github.daniel366cobra.createdangerclose.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
+  "client": [
+    "client.ContraptionPlayerPassengerRotationMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   },

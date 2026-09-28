@@ -17,6 +17,8 @@ import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServo
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderEyepieceBlock;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensBlock;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
 import net.minecraft.world.item.Items;
@@ -161,11 +163,53 @@ public class CDCBlocks {
             .lang("Rangefinder Bearing")
             .register();
 
+    public static final BlockEntry<RangefinderLensBlock> RANGEFINDER_LENS = REGISTRATE.block("rangefinder_lens", RangefinderLensBlock::new)
+            .initialProperties(SharedProperties::softMetal)
+            .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
+            .transform(axeOrPickaxe())
+            .blockstate((c, p) -> p.horizontalBlock(c.get(),
+                    p.models().getExistingFile(p.modLoc("block/rangefinder_lens/block"))))
+            .item()
+            .model((c, p) -> p.withExistingParent(c.getName(), p.modLoc("block/rangefinder_lens/block")))
+            .build()
+            .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
+                    .pattern(" S ")
+                    .pattern("GCG")
+                    .define('S', AllItems.BRASS_SHEET)
+                    .define('G', Items.GLASS_PANE)
+                    .define('C', AllBlocks.BRASS_CASING)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.BRASS_INGOT))
+                    .save(p))
+            .lang("Rangefinder Lens")
+            .register();
+
+    public static final BlockEntry<RangefinderEyepieceBlock> RANGEFINDER_EYEPIECE = REGISTRATE.block("rangefinder_eyepiece", RangefinderEyepieceBlock::new)
+            .initialProperties(SharedProperties::softMetal)
+            .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
+            .transform(axeOrPickaxe())
+            .blockstate((c, p) -> p.horizontalBlock(c.get(),
+                    p.models().getExistingFile(p.modLoc("block/rangefinder_eyepiece/block"))))
+            .item()
+            .model((c, p) -> p.withExistingParent(c.getName(), p.modLoc("block/rangefinder_eyepiece/block")))
+            .build()
+            .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
+                    .pattern(" G ")
+                    .pattern("SCS")
+                    .define('G', Items.SPYGLASS)
+                    .define('S', AllItems.BRASS_SHEET)
+                    .define('C', AllBlocks.BRASS_CASING)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.BRASS_INGOT))
+                    .save(p))
+            .lang("Rangefinder Eyepiece")
+            .register();
+
     public static void register() {
         BLOCKS.add(NETWORK_INTERFACE);
         BLOCKS.add(FIRE_CONTROL_SOLVER);
         BLOCKS.add(CANNON_SERVO_INPUT);
         BLOCKS.add(CANNON_SERVO_OUTPUT);
         BLOCKS.add(RANGEFINDER_BEARING);
+        BLOCKS.add(RANGEFINDER_LENS);
+        BLOCKS.add(RANGEFINDER_EYEPIECE);
     }
 }
