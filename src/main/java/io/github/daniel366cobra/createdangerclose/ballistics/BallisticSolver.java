@@ -42,6 +42,9 @@ public final class BallisticSolver {
     private static final double MOVING_TARGET_TOLERANCE_TICKS = 0.5;
     private static final int LAUNCH_OFFSET_ITERATIONS = 10;
     private static final double LAUNCH_OFFSET_TOLERANCE = 0.25; // blocks
+    // If the aim correction does not converge, the best attempt is still
+    // accepted when it lands this close.
+    private static final double LAUNCH_OFFSET_ACCEPTABLE_MISS = 1.0; // blocks
 
     public record Result(
             boolean valid,
@@ -166,6 +169,8 @@ public final class BallisticSolver {
 
         Vector3d aim = new Vector3d(targetWorld);
         Result aimResult = null;
+        Result best = null;
+        double bestMiss = Double.MAX_VALUE;
 
         for (int i = 0; i < LAUNCH_OFFSET_ITERATIONS; i++) {
             aimResult = solve(muzzleWorld, aim, targetVelocity,
@@ -206,13 +211,24 @@ public final class BallisticSolver {
                         i, miss.x, miss.y, miss.z);
             }
 
-            if (miss.length() < LAUNCH_OFFSET_TOLERANCE) {
-                return new Result(true, Result.Reason.OK,
-                        aimResult.pitchDeg(), aimResult.yawDeg(),
-                        impact.ticks(), horizontalRange, (int) Math.round(impact.ticks()));
+            Result attempt = new Result(true, Result.Reason.OK,
+                    aimResult.pitchDeg(), aimResult.yawDeg(),
+                    impact.ticks(), horizontalRange, (int) Math.round(impact.ticks()));
+
+            double missLength = miss.length();
+            if (missLength < LAUNCH_OFFSET_TOLERANCE) {
+                return attempt;
+            }
+            if (missLength < bestMiss) {
+                bestMiss = missLength;
+                best = attempt;
             }
 
             aim.sub(miss);
+        }
+
+        if (best != null && bestMiss < LAUNCH_OFFSET_ACCEPTABLE_MISS) {
+            return best;
         }
 
         return new Result(false, Result.Reason.NO_CONVERGENCE,
@@ -332,6 +348,11 @@ public final class BallisticSolver {
      * CBC-compatible per-tick trajectory integration. Stops when the
      * horizontal range crosses {@code targetHorizontalRange} or the max tick
      * budget is exhausted.
+     *
+     * <p>The height is interpolated to exactly the target range within the
+     * crossing tick. Reading it at the first whole tick past the range would
+     * make the result jump whenever that tick changes, which breaks the
+     * iterative solves built on top of this.
      */
     private static IntegrationResult integrate(
             double cosYaw, double sinYaw, double pitchRad,
@@ -362,6 +383,8 @@ public final class BallisticSolver {
             }
 
             // CBC's kinematic step.
+            double prevHRange = Math.sqrt(px * px + pz * pz);
+            double prevPy = py;
             double oldVx = vx, oldVy = vy, oldVz = vz;
             vx += ax;
             vy += ay;
@@ -373,7 +396,9 @@ public final class BallisticSolver {
             double hRange = Math.sqrt(px * px + pz * pz);
 
             if (hRange >= targetHorizontalRange) {
-                return new IntegrationResult(hRange, py, tick);
+                double t = (targetHorizontalRange - prevHRange) / (hRange - prevHRange);
+                return new IntegrationResult(targetHorizontalRange,
+                        prevPy + t * (py - prevPy), tick - 1 + t);
             }
 
             if (py < targetRelativeY - 200) {

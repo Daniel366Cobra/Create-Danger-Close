@@ -7,6 +7,7 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
+import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
@@ -80,6 +81,15 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
     // Ship-frame solution per mount position, shared by its pitch and yaw servos.
     private final Map<BlockPos, FireSolution> aimCache = new java.util.HashMap<>();
+
+    // Last commanded angles per mount, for estimating how fast they change.
+    private record AimSample(double pitchDeg, double yawDeg, long tick, double pitchRate, double yawRate) {}
+    private final Map<BlockPos, AimSample> aimHistory = new java.util.HashMap<>();
+    // Longest poll gap to still estimate a rate over (poll interval is at most 20 ticks).
+    private static final long MAX_RATE_SAMPLE_GAP = 40;
+    // Faster apparent motion than this is a jump between solutions, not tracking.
+    private static final double MAX_RATE_DEG_PER_TICK = 2.0;
+    private static final double RATE_SMOOTHING = 0.5;
 
     private boolean isPowered = false;
 
@@ -250,7 +260,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
             }
 
             if (status.axis() == PITCH) {
-                servo.receiveFiringSolution(solvePitch(status));
+                servo.receiveFiringSolution(withRates(status, solvePitch(status)));
             } else if (status.axis() == YAW) {
                 yawServos.add(servo);
             } else {
@@ -259,8 +269,55 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         }
 
         for (SolverServo servo : yawServos) {
-            servo.receiveFiringSolution(solveYaw(servo.getServoStatus()));
+            ServoStatus status = servo.getServoStatus();
+            servo.receiveFiringSolution(withRates(status, solveYaw(status)));
         }
+    }
+
+    /**
+     * Attaches the rate at which this mount's commanded angles are changing,
+     * estimated from consecutive polls, so servos can feed it forward instead
+     * of lagging behind a moving aim point.
+     */
+    @Nullable
+    private FireSolution withRates(ServoStatus status, @Nullable FireSolution solution) {
+        if (solution == null || level == null) return solution;
+
+        BlockPos mountPos = status.mounts().get(0).mountPos();
+        long now = level.getGameTime();
+        AimSample prev = aimHistory.get(mountPos);
+
+        // Pitch and yaw servos of one mount are solved in the same poll;
+        // the second one reuses the estimate.
+        if (prev != null && prev.tick() == now) {
+            return solution.withRates(prev.pitchRate(), prev.yawRate());
+        }
+
+        double pitchRate = 0;
+        double yawRate = 0;
+        if (prev != null) {
+            long dt = now - prev.tick();
+            if (dt > 0 && dt <= MAX_RATE_SAMPLE_GAP) {
+                double rawPitch = (solution.pitchDeg() - prev.pitchDeg()) / dt;
+                double rawYaw = wrapDeg(solution.yawDeg() - prev.yawDeg()) / dt;
+                // A jump (e.g. rest -> tracking, new target) is not motion.
+                if (Math.abs(rawPitch) <= MAX_RATE_DEG_PER_TICK && Math.abs(rawYaw) <= MAX_RATE_DEG_PER_TICK) {
+                    // Light smoothing against solver jitter.
+                    pitchRate = RATE_SMOOTHING * rawPitch + (1 - RATE_SMOOTHING) * prev.pitchRate();
+                    yawRate = RATE_SMOOTHING * rawYaw + (1 - RATE_SMOOTHING) * prev.yawRate();
+                }
+            }
+        }
+
+        aimHistory.put(mountPos, new AimSample(solution.pitchDeg(), solution.yawDeg(), now, pitchRate, yawRate));
+        return solution.withRates(pitchRate, yawRate);
+    }
+
+    private static double wrapDeg(double deg) {
+        deg %= 360.0;
+        if (deg > 180.0) deg -= 360.0;
+        if (deg < -180.0) deg += 360.0;
+        return deg;
     }
 
     private FireSolution solveYaw(ServoStatus status) {
@@ -270,6 +327,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         FireSolution cached = aimCache.get(mount.mountPos());
         if (cached != null) {
+            logSolve(mount, "YAW", "BALLISTIC", null, cached.pitchDeg(), cached.yawDeg(), null);
             return new FireSolution(cached.pitchDeg(), cached.yawDeg(), 0, true);
         }
 
@@ -287,7 +345,35 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         Vector3d shipDir = mountSubLevel.logicalPose().orientation()
                 .transformInverse(toTargetWorld.normalize(), new Vector3d());
+        logSolve(mount, "YAW", "LINE_OF_SIGHT", null, pitchOf(shipDir), yawOf(shipDir), null);
         return new FireSolution(pitchOf(shipDir), yawOf(shipDir), 0, true);
+    }
+
+    // --- Debug logging (one line per servo per poll) ---
+    private static final boolean DEBUG_SOLVER_LOG = false;
+
+    /**
+     * Columns: servo axis; outcome (pitch solve reason, or where the yaw
+     * command came from); world pitch/yaw and time of flight from the
+     * ballistic solver; ship-frame pitch/yaw sent; inherited launch velocity
+     * (blocks/tick, world) and the number of velocity sensor axes.
+     */
+    private void logSolve(ServoStatus.MountSnapshot mount, String axis, String outcome,
+                          @Nullable BallisticSolver.Result result, double shipPitch, double shipYaw,
+                          @Nullable Vector3d inherited) {
+        if (!DEBUG_SOLVER_LOG || level == null) return;
+        CreateDangerClose.LOGGER.info(String.format(
+                "[Solver %s] t=%d %-5s %-14s wPitch=%8.3f wYaw=%8.3f tof=%6.1f sPitch=%8.3f sYaw=%8.3f " +
+                        "u=(%7.4f %7.4f %7.4f) axes=%d",
+                mount.mountPos().toShortString(), level.getGameTime(), axis, outcome,
+                result != null ? result.pitchDeg() : Double.NaN,
+                result != null ? result.yawDeg() : Double.NaN,
+                result != null ? result.timeOfFlightTicks() : Double.NaN,
+                shipPitch, shipYaw,
+                inherited != null ? inherited.x : Double.NaN,
+                inherited != null ? inherited.y : Double.NaN,
+                inherited != null ? inherited.z : Double.NaN,
+                velocityAxesCovered()));
     }
 
     private FireSolution solvePitch(ServoStatus status) {
@@ -349,6 +435,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         if (!result.valid()) {
             lastPitchResults.put(servoPos, result);
+            logSolve(mount, "PITCH", result.reason().name(), result, Double.NaN, Double.NaN, inheritedVelocity);
             return null;
         }
 
@@ -369,10 +456,12 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         if (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.OUT_OF_ARC));
+            logSolve(mount, "PITCH", "OUT_OF_ARC", result, shipPitchDeg, shipYawDeg, inheritedVelocity);
             return null;
         }
 
         lastPitchResults.put(servoPos, result);
+        logSolve(mount, "PITCH", "OK", result, shipPitchDeg, shipYawDeg, inheritedVelocity);
 
         FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg, result.fuzeTicks(), true);
         aimCache.put(mount.mountPos(), solution);

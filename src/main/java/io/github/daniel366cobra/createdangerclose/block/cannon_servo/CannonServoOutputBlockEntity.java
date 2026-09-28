@@ -64,18 +64,32 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     private float desiredGeneratedSpeed = KEEP_ALIVE_RPM;
     private boolean initialSpeedApplied = false;
 
-    // --- Direction calibration ---
-    private static final float CALIBRATION_TEST_RPM = 4.0f;
-    private static final int CALIBRATION_TEST_TICKS = 5;
-    private static final int CALIBRATION_MAX_RETRIES = 3;
+    // --- Drive ---
+    // CBC turns a mount by 0.0375°/tick per interface RPM on the server
+    // (Create's 0.3°/tick per RPM, scaled by 0.125 in CannonMountBlockEntity).
+    private static final float MOUNT_DEG_PER_TICK_PER_RPM = 0.0375f;
+    // Direction of the contraption angle for positive interface rotation.
+    // CBC's pitch facing factor appears twice (mount step and applyRotation)
+    // and cancels, so these are fixed for every mount orientation.
+    private static final float PITCH_AXIS_SIGN = 1f;
+    private static final float YAW_AXIS_SIGN = -1f;
+    private static final float MAX_DRIVE_RPM = 32f;
+    // Fraction of the remaining error closed per tick, on top of feed-forward.
+    private static final float CORRECTION_GAIN = 0.25f;
+    // Below this commanded rate the mount is locked once on target.
+    private static final float HOLD_RATE_DEG_PER_TICK = 0.01f;
 
-    private int driveSign = 0;                    // +1, -1, or 0 = uncalibrated
-    private boolean calibrating = false;
-    private int calibrationTicksRemaining = 0;
-    private float calibrationStartAngle = 0;
-    private int calibrationRetries = 0;
-    private long lastMemberHash = 0;
-    private float lastDriveError = Float.NaN;
+    // Interface RPM per generated RPM, measured from Create's propagated
+    // speeds. Its sign covers gearboxes and gearshifts, its magnitude any
+    // gearing. NaN until first measured.
+    private float transmissionRatio = Float.NaN;
+    private float lastError = 0f;
+
+    // --- Debug logging (yaw servo, one line per server tick) ---
+    private static final boolean DEBUG_YAW_LOG = false;
+    private float debugOwnSpeed = 0f;
+    private float debugMountSpeed = 0f;
+    private float debugPrevAngle = Float.NaN;
 
     public static final class SlavedMount {
         public final BlockPos mountPos;
@@ -148,9 +162,26 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         isPowered = inputSpeed >= MIN_OPERATING_RPM;
 
         pollCannonNetwork();
+        measureTransmission();
         applyControl();
 
         notifyUpdate();
+    }
+
+    /**
+     * This block is the only source on its cannon network and never fully
+     * stops while powered (keep-alive), so Create has always propagated a
+     * signed speed to the mount interface. Their ratio is the transmission.
+     */
+    private void measureTransmission() {
+        if (slavedMounts.isEmpty() || slavedMounts.get(0).iface == null) return;
+        float own = getSpeed();
+        float atMount = slavedMounts.get(0).iface.getSpeed();
+        debugOwnSpeed = own;
+        debugMountSpeed = atMount;
+        if (Math.abs(own) > 1e-3f && Math.abs(atMount) > 1e-3f) {
+            transmissionRatio = atMount / own;
+        }
     }
 
     private float getInputSpeed() {
@@ -168,40 +199,21 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         if (command == null || !command.valid() || !isPowered || detectedAxis == ServoAxis.NONE || detectedAxis == ServoAxis.INVALID) {
             applyIdleControl();
+            logYaw("IDLE", command, 0, Float.NaN, Float.NaN);
             return;
         }
 
-        applyCommandedControl(command);
-    }
-
-    private void applyCommandedControl(FireSolution command) {
-        // If any slaved mount isn't currently assembled, idle instead of
-        // trying to drive or calibrate.
+        // If any slaved mount isn't currently assembled, idle instead of driving.
         for (SlavedMount sm : slavedMounts) {
             if (sm.mount == null || sm.mount.getContraption() == null) {
                 applyIdleControl();
+                logYaw("UNASSEMBLED", command, 0, Float.NaN, Float.NaN);
                 return;
             }
         }
 
-        // Detect network changes and invalidate the cached sign
-        long memberHash = computeMemberHash();
-        if (memberHash != lastMemberHash) {
-            lastMemberHash = memberHash;
-            driveSign = 0;
-        }
-
-        if (calibrating) {
-            tickCalibration();
-            return;
-        }
-
-        if (driveSign == 0) {
-            beginCalibration();
-            return;
-        }
-
-        driveToTarget(command);
+        long commandAge = Math.max(0, level.getGameTime() - input.getCommandTick());
+        driveToTarget(command, commandAge);
     }
 
     // ------------------------------------------------------------------
@@ -209,7 +221,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     // ------------------------------------------------------------------
 
     private void applyIdleControl() {
-        lastDriveError = Float.NaN;
+        lastError = 0f;
         for (SlavedMount sm : slavedMounts) {
             if (sm.iface != null) {
                 sm.iface.setSequencedAngleLimit(0);
@@ -226,68 +238,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         }
     }
 
-    private void beginCalibration() {
-        if (slavedMounts.isEmpty()) return;
-
-        SlavedMount sm = slavedMounts.get(0);
-        if (sm.iface == null) return;
-
-        calibrationStartAngle = sm.currentAngle;
-        calibrationTicksRemaining = CALIBRATION_TEST_TICKS;
-        calibrating = true;
-
-        // Permit a small amount of movement during the test.
-        for (SlavedMount mount : slavedMounts) {
-            if (mount.iface != null) {
-                mount.iface.setSequencedAngleLimit(-1);
-            }
-        }
-        applyGeneratedSpeed(CALIBRATION_TEST_RPM);
-    }
-
-    private void tickCalibration() {
-        if (slavedMounts.isEmpty() || slavedMounts.get(0).iface == null) {
-            calibrating = false;
-            return;
-        }
-
-        calibrationTicksRemaining--;
-        if (calibrationTicksRemaining > 0) {
-            applyGeneratedSpeed(CALIBRATION_TEST_RPM);
-            return;
-        }
-
-        // Stop driving and measure
-        applyGeneratedSpeed(KEEP_ALIVE_RPM);
-        for (SlavedMount mount : slavedMounts) {
-            if (mount.iface != null) {
-                mount.iface.setSequencedAngleLimit(0);
-            }
-        }
-
-        SlavedMount sm = slavedMounts.get(0);
-        float delta = sm.currentAngle - calibrationStartAngle;
-        calibrating = false;
-
-        if (Math.abs(delta) < 0.05f) {
-            calibrationRetries++;
-            if (calibrationRetries >= CALIBRATION_MAX_RETRIES) {
-                calibrationRetries = 0;
-                return;
-            }
-            // Try again next tick
-            return;
-        }
-
-        driveSign = delta > 0 ? 1 : -1;
-        calibrationRetries = 0;
-        lastDriveError = Float.NaN;
-    }
-
-    private void driveToTarget(FireSolution command) {
-        float target = (detectedAxis == ServoAxis.PITCH)
-                ? (float) command.pitchDeg()
-                : (float) command.yawDeg();
+    private void driveToTarget(FireSolution command, long commandAge) {
+        boolean pitch = detectedAxis == ServoAxis.PITCH;
+        float rate = (float) (pitch ? command.pitchRateDegPerTick() : command.yawRateDegPerTick());
+        // Extrapolate the command to now: the solver only updates every poll.
+        float target = (float) (pitch ? command.pitchDeg() : command.yawDeg()) + rate * commandAge;
 
         if (detectedAxis == ServoAxis.PITCH && command.fuzeTicks() > 0) {
             for (SlavedMount sm : slavedMounts) {
@@ -297,44 +252,66 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             }
         }
 
-        float signedError = 0;
-        float maxAbsError = 0;
-
-        for (SlavedMount sm : slavedMounts) {
-            if (sm.iface == null) continue;
-            float error = wrapAngle(target - sm.currentAngle);
-            float abs = Math.abs(error);
-            if (abs > maxAbsError) {
-                maxAbsError = abs;
-                signedError = error;
-            }
-            sm.iface.setSequencedAngleLimit(-1);
-        }
-
-        float prevError = lastDriveError;
-        lastDriveError = maxAbsError;
-
-        if (!Float.isNaN(prevError)
-                && maxAbsError > prevError + 0.5f
-                && maxAbsError > 3.0f) {
-            driveSign = 0;
-            lastDriveError = Float.NaN;
+        SlavedMount sm = slavedMounts.isEmpty() ? null : slavedMounts.get(0);
+        if (sm == null || sm.iface == null) {
+            applyIdleControl();
             return;
         }
 
-        if (maxAbsError < SNAP_THRESHOLD_DEG) {
-            for (SlavedMount sm : slavedMounts) {
-                if (sm.iface != null) {
-                    sm.iface.setSequencedAngleLimit(0);
-                }
-            }
+        float error = wrapAngle(target - sm.currentAngle);
+        lastError = error;
+
+        // On target and not tracking: lock the mount.
+        if (Math.abs(error) < SNAP_THRESHOLD_DEG && Math.abs(rate) < HOLD_RATE_DEG_PER_TICK) {
+            sm.iface.setSequencedAngleLimit(0);
             applyGeneratedSpeed(KEEP_ALIVE_RPM);
-            lastDriveError = Float.NaN;
+            logYaw("LOCK", command, commandAge, target, error);
             return;
         }
 
-        float speed = speedForError(maxAbsError);
-        applyGeneratedSpeed(driveSign * Math.signum(signedError) * speed);
+        // Transmission not measured yet (the keep-alive rotation provides
+        // the first measurement), or the drivetrain is disengaged.
+        if (Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f) {
+            applyIdleControl();
+            logYaw("NO_RATIO", command, commandAge, target, error);
+            return;
+        }
+
+        sm.iface.setSequencedAngleLimit(-1);
+
+        // Desired contraption angle rate: follow the command's own motion,
+        // plus a proportional pull towards it.
+        float angleRate = rate + CORRECTION_GAIN * error;
+        float axisSign = pitch ? PITCH_AXIS_SIGN : YAW_AXIS_SIGN;
+        float mountRpm = angleRate / (MOUNT_DEG_PER_TICK_PER_RPM * axisSign);
+        float generated = Mth.clamp(mountRpm / transmissionRatio, -MAX_DRIVE_RPM, MAX_DRIVE_RPM);
+        applyGeneratedSpeed(generated);
+        logYaw("DRIVE", command, commandAge, target, error);
+    }
+
+    /**
+     * One line per tick for the yaw servo. Columns:
+     * cmd/rate/age = command angle, its rate (°/tick) and age (ticks);
+     * target = extrapolated command; angle/moved = mount yaw now and its
+     * change since last tick; own/mount = speeds (RPM) at this block and at
+     * the mount interface as read this tick, before this tick's new output;
+     * ratio = transmission used; gen = speed generated for the next tick.
+     */
+    private void logYaw(String state, @Nullable FireSolution command, long commandAge, float target, float error) {
+        if (!DEBUG_YAW_LOG || detectedAxis != ServoAxis.YAW || level == null) return;
+
+        float angle = slavedMounts.isEmpty() ? Float.NaN : slavedMounts.get(0).currentAngle;
+        float moved = Float.isNaN(debugPrevAngle) || Float.isNaN(angle) ? Float.NaN : wrapAngle(angle - debugPrevAngle);
+        debugPrevAngle = angle;
+
+        CreateDangerClose.LOGGER.info(String.format(
+                "[YawServo %s] t=%d %-11s cmd=%8.3f rate=%7.4f age=%2d target=%8.3f angle=%8.3f moved=%7.4f " +
+                        "err=%7.3f own=%7.3f mount=%7.3f ratio=%6.3f gen=%7.3f",
+                worldPosition.toShortString(), level.getGameTime(), state,
+                command != null ? command.yawDeg() : Double.NaN,
+                command != null ? command.yawRateDegPerTick() : Double.NaN,
+                commandAge, target, angle, moved, error,
+                debugOwnSpeed, debugMountSpeed, transmissionRatio, desiredGeneratedSpeed));
     }
 
     // ------------------------------------------------------------------
@@ -573,6 +550,8 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         compound.putBoolean("IsPowered", isPowered);
         compound.putInt("detectedAxis", detectedAxis.ordinal());
+        compound.putFloat("TransmissionRatio", transmissionRatio);
+        compound.putFloat("LastError", lastError);
 
         ListTag slaves = new ListTag();
         for (SlavedMount sm : slavedMounts) {
@@ -612,6 +591,10 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         this.detectedAxis = (ServoAxisOrd >= 0 && ServoAxisOrd < axes.length) ? axes[ServoAxisOrd] : ServoAxis.NONE;
 
         if (!clientPacket) return;
+
+        this.transmissionRatio = compound.contains("TransmissionRatio")
+                ? compound.getFloat("TransmissionRatio") : Float.NaN;
+        this.lastError = compound.getFloat("LastError");
 
         this.slavedMounts.clear();
         if (!compound.contains("Slaves")) return;
@@ -686,24 +669,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         if (deg > 180f) deg -= 360f;
         if (deg < -180f) deg += 360f;
         return deg;
-    }
-
-    private static float speedForError(float errorDeg) {
-        if (errorDeg <= SNAP_THRESHOLD_DEG) return 0f;
-
-        // 32 RPM at 20°+, ramping linearly to 2 RPM at the snap threshold.
-        float t = Mth.clamp((errorDeg - SNAP_THRESHOLD_DEG) / (20f - SNAP_THRESHOLD_DEG), 0f, 1f);
-        return Mth.lerp(t, 2f, 32f);
-    }
-
-    private long computeMemberHash() {
-        KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
-        if (network == null) return 0;
-        long h = 0;
-        for (KineticBlockEntity member : network.members.keySet()) {
-            h ^= member.getBlockPos().asLong();
-        }
-        return h;
     }
 
     /**
@@ -812,6 +777,14 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         for (SlavedMount sm : slavedMounts) {
             renderMount(tooltip, sm, index++);
         }
+
+        // Debug: measured drivetrain ratio and current tracking error.
+        CDCLang.builder()
+                .add(Component.literal(Float.isNaN(transmissionRatio)
+                        ? "  [ratio: -- err: --]"
+                        : String.format("  [ratio: %.2f err: %.2f°]", transmissionRatio, lastError)))
+                .style(ChatFormatting.DARK_GRAY)
+                .forGoggles(tooltip);
 
         return true;
     }

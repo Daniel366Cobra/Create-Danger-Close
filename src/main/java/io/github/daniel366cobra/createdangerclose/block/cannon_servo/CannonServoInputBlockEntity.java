@@ -57,6 +57,11 @@ public class CannonServoInputBlockEntity extends KineticBlockEntity implements S
         return currentCommand;
     }
 
+    /** Game time at which the current command was received. */
+    public long getCommandTick() {
+        return lastCommandTick;
+    }
+
     @Nullable
     private CannonServoOutputBlockEntity getAdjacentOutput() {
         if (level == null) return null;
