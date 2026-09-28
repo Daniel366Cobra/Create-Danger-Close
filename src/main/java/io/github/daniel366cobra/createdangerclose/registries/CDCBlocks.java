@@ -5,6 +5,7 @@ import com.simibubi.create.AllItems;
 import com.simibubi.create.api.contraption.BlockMovementChecks;
 import com.simibubi.create.api.stress.BlockStressValues;
 import com.simibubi.create.foundation.data.BlockStateGen;
+import com.simibubi.create.foundation.data.BuilderTransformers;
 import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.simibubi.create.foundation.data.SharedProperties;
 import com.tterrag.registrate.providers.RegistrateRecipeProvider;
@@ -15,8 +16,10 @@ import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServo
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlock;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.material.MapColor;
 
 import java.util.ArrayList;
@@ -138,10 +141,31 @@ public class CDCBlocks {
                     $ -> p.models().getExistingFile(p.modLoc("block/cannon_servo/block_output"))))
             .register();
 
+    public static final BlockEntry<RangefinderBearingBlock> RANGEFINDER_BEARING = REGISTRATE.block("rangefinder_bearing", RangefinderBearingBlock::new)
+            .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
+            .transform(axeOrPickaxe())
+            // Placeholder look: Create's brass (clockwork) bearing textures.
+            .transform(BuilderTransformers.bearing("clockwork", "brass_gearbox"))
+            .onRegister(block -> {
+                BlockStressValues.IMPACTS.register(block, () -> 4.0);
+            })
+            .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
+                    .pattern(" G ")
+                    .pattern(" B ")
+                    .pattern(" P ")
+                    .define('G', Items.SPYGLASS)
+                    .define('B', AllBlocks.MECHANICAL_BEARING)
+                    .define('P', AllItems.PRECISION_MECHANISM)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.PRECISION_MECHANISM))
+                    .save(p))
+            .lang("Rangefinder Bearing")
+            .register();
+
     public static void register() {
         BLOCKS.add(NETWORK_INTERFACE);
         BLOCKS.add(FIRE_CONTROL_SOLVER);
         BLOCKS.add(CANNON_SERVO_INPUT);
         BLOCKS.add(CANNON_SERVO_OUTPUT);
+        BLOCKS.add(RANGEFINDER_BEARING);
     }
 }

@@ -77,6 +77,14 @@
         "mount_fuze_none": "Fuze: None",
         "mount_charge": "Charge: %s"
       },
+      "rangefinder_bearing": {
+        "title": "Rangefinder Bearing",
+        "angle": "Training: %s°",
+        "target": "Trained to: %s°",
+        "not_assembled": "Not assembled. Right-click to assemble.",
+        "must_face_up": "The Rangefinder Bearing must face upwards.",
+        "manual_training": "Manual Training"
+      },
 
       "gui": {},
 
@@ -101,6 +109,11 @@
         "summary": "Computes firing solutions for Cannon Mounts.",
         "condition1": "When connected to a kinetic Battle Network:",
         "behaviour1": "_Polls_ sensor Interfaces and _computes_ firing solutions."
+      },
+      "rangefinder_bearing.tooltip": {
+        "summary": "Carries a _rangefinder_ and trains it towards a bearing.",
+        "condition1": "When facing up and right-clicked:",
+        "behaviour1": "_Assembles_ the attached structure. Its turning speed scales with the _network RPM_."
       }
     },
 
