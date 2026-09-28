@@ -2,7 +2,9 @@
   "required": true,
   "package": "io.github.daniel366cobra.createdangerclose.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "AbstractContraptionEntityMixin"
+  ],
   "client": [
     "client.ContraptionPlayerPassengerRotationMixin"
   ],

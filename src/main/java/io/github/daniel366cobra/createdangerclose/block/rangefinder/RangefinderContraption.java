@@ -13,6 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
+import net.minecraft.world.phys.Vec3;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
 
@@ -149,6 +150,23 @@ public class RangefinderContraption extends BearingContraption {
     @Nullable
     public BlockPos getEyepiecePos() {
         return eyepiecePos;
+    }
+
+    // Where the operator sits relative to Create's default seat position,
+    // in model pixels: down, and back (away from the eyepiece's line of sight).
+    private static final double OPERATOR_SEAT_DOWN_PX = 3;
+    private static final double OPERATOR_SEAT_BACK_PX = 4;
+
+    /**
+     * Offset from Create's default seat position to the operator's, in local
+     * (unrotated) coordinates, so it turns with the tube.
+     */
+    public Vec3 getOperatorSeatOffset() {
+        if (lensFacing == null)
+            return Vec3.ZERO;
+        Vec3 back = Vec3.atLowerCornerOf(lensFacing.getOpposite().getNormal());
+        return back.scale(OPERATOR_SEAT_BACK_PX / 16)
+                .add(0, -OPERATOR_SEAT_DOWN_PX / 16, 0);
     }
 
     @Override
