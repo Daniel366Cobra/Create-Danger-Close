@@ -39,6 +39,8 @@ public class RangefinderContraption extends BearingContraption {
 
     private int baseline;
     @Nullable private Direction lensFacing;
+    @Nullable private BlockPos lensA;
+    @Nullable private BlockPos lensB;
     @Nullable private BlockPos eyepiecePos;
 
     public RangefinderContraption() {}
@@ -99,6 +101,8 @@ public class RangefinderContraption extends BearingContraption {
 
         baseline = Math.abs(shoulderA - shoulderB);
         lensFacing = facingA;
+        lensA = a;
+        lensB = b;
     }
 
     /** Runs after {@link #validateLenses()}, so {@link #lensFacing} is set. */
@@ -169,12 +173,34 @@ public class RangefinderContraption extends BearingContraption {
                 .add(0, -OPERATOR_SEAT_DOWN_PX / 16, 0);
     }
 
+    // How far in front of the lens centres the operator's view sits, in blocks.
+    private static final double OPERATOR_VIEW_FORWARD = 0.5;
+
+    /**
+     * Where the operator looks from: midway between the lens centres, just in
+     * front of them, in local (unrotated) coordinates. The optics relay the
+     * image to the eyepiece, so the view starts at the objectives rather than
+     * at the operator's head. Null for tubes assembled before lens positions
+     * were stored.
+     */
+    @Nullable
+    public Vec3 getOperatorViewPoint() {
+        if (lensA == null || lensB == null || lensFacing == null)
+            return null;
+        Vec3 midpoint = Vec3.atCenterOf(lensA).add(Vec3.atCenterOf(lensB)).scale(0.5);
+        return midpoint.add(Vec3.atLowerCornerOf(lensFacing.getNormal()).scale(OPERATOR_VIEW_FORWARD));
+    }
+
     @Override
     public CompoundTag writeNBT(HolderLookup.Provider registries, boolean spawnPacket) {
         CompoundTag tag = super.writeNBT(registries, spawnPacket);
         tag.putInt("Baseline", baseline);
         if (lensFacing != null)
             tag.putInt("LensFacing", lensFacing.get3DDataValue());
+        if (lensA != null && lensB != null) {
+            tag.putLong("LensA", lensA.asLong());
+            tag.putLong("LensB", lensB.asLong());
+        }
         if (eyepiecePos != null)
             tag.putLong("Eyepiece", eyepiecePos.asLong());
         return tag;
@@ -184,6 +210,8 @@ public class RangefinderContraption extends BearingContraption {
     public void readNBT(Level world, CompoundTag tag, boolean spawnData) {
         baseline = tag.getInt("Baseline");
         lensFacing = tag.contains("LensFacing") ? Direction.from3DDataValue(tag.getInt("LensFacing")) : null;
+        lensA = tag.contains("LensA") ? BlockPos.of(tag.getLong("LensA")) : null;
+        lensB = tag.contains("LensB") ? BlockPos.of(tag.getLong("LensB")) : null;
         eyepiecePos = tag.contains("Eyepiece") ? BlockPos.of(tag.getLong("Eyepiece")) : null;
         super.readNBT(world, tag, spawnData);
     }

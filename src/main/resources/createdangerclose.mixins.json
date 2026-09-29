@@ -6,7 +6,9 @@
     "AbstractContraptionEntityMixin"
   ],
   "client": [
-    "client.ContraptionPlayerPassengerRotationMixin"
+    "client.CameraMixin",
+    "client.ContraptionPlayerPassengerRotationMixin",
+    "client.EntityTurnMixin"
   ],
   "injectors": {
     "defaultRequire": 1

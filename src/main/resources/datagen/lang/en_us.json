@@ -77,6 +77,14 @@
         "mount_fuze_none": "Fuze: None",
         "mount_charge": "Charge: %s"
       },
+      "rangefinder": {
+        "readout": {
+          "bearing": "BRG %s",
+          "range": "RNG %s",
+          "range_rate": "R/R %s",
+          "bearing_rate": "B/R %s"
+        }
+      },
       "rangefinder_bearing": {
         "title": "Rangefinder Bearing",
         "angle": "Training: %s°",
@@ -93,7 +101,9 @@
         "eyepiece_facing": "The Rangefinder Eyepiece must face the same way as the lenses.",
         "eyepiece_offcenter": "The Rangefinder Eyepiece must be centred on the bearing axis, midway between the lenses.",
         "operator": "Operator: %s",
-        "no_operator": "No operator"
+        "no_operator": "No operator",
+        "illumination": "Reticle lamp: %s/15",
+        "unlit": "Reticle lamp: off"
       },
 
       "gui": {},
@@ -123,7 +133,9 @@
       "rangefinder_bearing.tooltip": {
         "summary": "Carries a _rangefinder_ and trains it towards a bearing.",
         "condition1": "When facing up or down and right-clicked:",
-        "behaviour1": "_Assembles_ the attached structure. Its turning speed scales with the _network RPM_."
+        "behaviour1": "_Assembles_ the attached structure. Its turning speed scales with the _network RPM_.",
+        "condition2": "When powered by Redstone:",
+        "behaviour2": "_Illuminates_ the eyepiece reticle. A stronger signal makes it _brighter_."
       },
       "rangefinder_lens.tooltip": {
         "summary": "An objective lens for a _rangefinder_ tube. Place _two_ at the ends of the tube, looking the same way.",

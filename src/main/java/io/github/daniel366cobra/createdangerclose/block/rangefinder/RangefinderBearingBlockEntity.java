@@ -22,8 +22,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -64,6 +69,34 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     // Last heading an operator trained to. Held after they dismount, until
     // the manual training value is changed.
     @Nullable protected Float operatorTarget;
+    // Reticle lamp brightness: the strongest redstone signal into the bearing (0 = unlit).
+    protected int illumination;
+
+    // --- Ranging ---
+    // Tube counts as caught up with the operator's look within this, degrees.
+    private static final float ON_TARGET_DEG = 0.5f;
+    private static final double MAX_RANGE = 1024;
+    // Angular resolution of the optics, radians: range error at best is
+    // R²·σθ / baseline, e.g. ~5 blocks at 300 blocks with an 8-block baseline.
+    private static final double SIGMA_THETA_RAD = 4.4e-4;
+    // Error multiplier at the ranging threshold, falling to 1 when merged.
+    private static final double UNMERGED_ERROR_FACTOR = 5;
+    private static final int MIN_VELOCITY_SAMPLES = 3;
+
+    private final RangefinderSteadiness steadiness = new RangefinderSteadiness();
+    private final RangeTracker tracker = new RangeTracker();
+    private boolean rangingActive;
+    private boolean pendingSample;
+    private int ticksToNextSample;
+    // Readouts, synced to the client.
+    private boolean hasRange;
+    private float range;          // blocks
+    private boolean hasVelocity;
+    private float rangeRate;      // blocks per second, positive = opening
+    private float bearingRate;    // degrees per second, positive = clockwise
+    // Target solution for the fire control solver (server only).
+    @Nullable private Vec3 targetPosition;
+    @Nullable private Vec3 targetVelocity;
 
     public RangefinderBearingBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -146,6 +179,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         angle = prevAngle = 0;
         angularVelocity = 0;
         operatorTarget = null;
+        clearRanging();
         sendData();
     }
 
@@ -196,10 +230,23 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return Mth.wrapDegrees(localYaw - operator.getYRot());
     }
 
+    /** Reticle lamp brightness, 0 (unlit) to 15. */
+    public int getIllumination() {
+        return illumination;
+    }
+
     @Override
     public void tick() {
         super.tick();
         prevAngle = angle;
+
+        if (!level.isClientSide) {
+            int signal = level.getBestNeighborSignal(worldPosition);
+            if (signal != illumination) {
+                illumination = signal;
+                sendData();
+            }
+        }
 
         if (!running)
             return;
@@ -215,7 +262,125 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         }
 
         applyRotation();
+
+        if (!level.isClientSide)
+            tickRanging(operator);
     }
+
+    /** Whether the tube has caught up with where it is being trained. */
+    public boolean isOnTarget() {
+        return Math.abs(AngleHelper.getShortestAngleDiff(angle, getTargetAngle())) < ON_TARGET_DEG;
+    }
+
+    // --- Ranging ---
+
+    /** From the operator's client: start (RMB pressed) or stop (released) ranging. */
+    public void setRanging(Player player, boolean active) {
+        if (player != getOperator())
+            return;
+        if (active && !rangingActive)
+            pendingSample = true; // a click takes one reading straight away
+        rangingActive = active;
+    }
+
+    private void tickRanging(@Nullable Player operator) {
+        if (operator == null) {
+            if (hasRange || rangingActive || targetPosition != null) {
+                clearRanging();
+                sendData();
+            }
+            return;
+        }
+        RangefinderOptics.Sight sight = RangefinderOptics.lineOfSight(operator);
+        if (sight == null)
+            return;
+        steadiness.update(sight.direction(), isOnTarget());
+
+        // Readouts only stand while the images stay converged; once they
+        // drift apart, a fresh reading is needed. (The tracked target is kept
+        // for fire control.)
+        if (hasRange && !steadiness.canRange()) {
+            hasRange = hasVelocity = false;
+            sendData();
+        } else if (hasVelocity && !steadiness.canTrackVelocity()) {
+            hasVelocity = false;
+            sendData();
+        }
+
+        if (pendingSample || (rangingActive && --ticksToNextSample <= 0)) {
+            pendingSample = false;
+            ticksToNextSample = sampleInterval();
+            takeSample(sight);
+        }
+    }
+
+    /** Readings come at the battle network's pace, like its other devices. */
+    private int sampleInterval() {
+        float rpm = Math.abs(getSpeed());
+        return rpm < 1 ? Integer.MAX_VALUE : Math.max(1, Math.round(640f / rpm));
+    }
+
+    private void takeSample(RangefinderOptics.Sight sight) {
+        if (!steadiness.canRange()
+                || movedContraption == null
+                || !(movedContraption.getContraption() instanceof RangefinderContraption tube)
+                || tube.getBaseline() <= 0)
+            return;
+
+        Vec3 end = sight.origin().add(sight.direction().scale(MAX_RANGE));
+        BlockHitResult hit = level.clip(new ClipContext(sight.origin(), end,
+                ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, CollisionContext.empty()));
+        if (hit.getType() == HitResult.Type.MISS)
+            return;
+
+        // Sable reports hits on ships in ship coordinates.
+        double trueRange = RangefinderOptics.toWorld(level, hit.getLocation()).distanceTo(sight.origin());
+        double convergence = 1 + (UNMERGED_ERROR_FACTOR - 1)
+                * steadiness.getSeparation() / RangefinderSteadiness.RANGING_SEPARATION;
+        double sigma = trueRange * trueRange * SIGMA_THETA_RAD / tube.getBaseline() * convergence;
+        double measuredRange = Math.max(1, trueRange + level.random.nextGaussian() * sigma);
+
+        tracker.update(sight.origin().add(sight.direction().scale(measuredRange)), level.getGameTime(), sigma);
+        targetPosition = tracker.getPosition();
+        Vec3 toTarget = targetPosition.subtract(sight.origin());
+        hasRange = true;
+        range = (float) toTarget.length();
+
+        if (steadiness.canTrackVelocity() && tracker.getSamples() >= MIN_VELOCITY_SAMPLES) {
+            targetVelocity = tracker.getVelocity();
+            Vec3 perSecond = targetVelocity.scale(20);
+            hasVelocity = true;
+            rangeRate = (float) (perSecond.dot(toTarget) / toTarget.length());
+            // Bearing θ = atan2(x, −z); dθ/dt = (x·ż − z·ẋ) / (x² + z²).
+            double horizontalSq = toTarget.x * toTarget.x + toTarget.z * toTarget.z;
+            bearingRate = horizontalSq < 1e-6 ? 0 : (float) Math.toDegrees(
+                    (toTarget.x * perSecond.z - toTarget.z * perSecond.x) / horizontalSq);
+        }
+        sendData();
+    }
+
+    private void clearRanging() {
+        steadiness.reset();
+        tracker.reset();
+        rangingActive = pendingSample = false;
+        hasRange = hasVelocity = false;
+        range = rangeRate = bearingRate = 0;
+        targetPosition = targetVelocity = null;
+    }
+
+    public boolean hasRange() { return hasRange; }
+    public float getRange() { return range; }
+    public boolean hasVelocity() { return hasVelocity; }
+    public float getRangeRate() { return rangeRate; }
+    public float getBearingRate() { return bearingRate; }
+
+    /** Tracked target position, world space (server only). */
+    @Nullable
+    public Vec3 getTargetPosition() { return targetPosition; }
+
+    /** Tracked target velocity, world space, blocks per tick (server only). */
+    @Nullable
+    public Vec3 getTargetVelocity() { return targetVelocity; }
 
     /**
      * Trapezoidal motion towards the target: accelerate at a fixed rate up to
@@ -341,6 +506,12 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         compound.putBoolean("Running", running);
         compound.putFloat("Angle", angle);
         compound.putFloat("AngularVelocity", angularVelocity);
+        compound.putInt("Illumination", illumination);
+        compound.putBoolean("HasRange", hasRange);
+        compound.putFloat("Range", range);
+        compound.putBoolean("HasVelocity", hasVelocity);
+        compound.putFloat("RangeRate", rangeRate);
+        compound.putFloat("BearingRate", bearingRate);
         if (operatorTarget != null)
             compound.putFloat("OperatorTarget", operatorTarget);
         AssemblyException.write(compound, registries, lastException);
@@ -359,6 +530,12 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         running = compound.getBoolean("Running");
         angle = compound.getFloat("Angle");
         angularVelocity = compound.getFloat("AngularVelocity");
+        illumination = compound.getInt("Illumination");
+        hasRange = compound.getBoolean("HasRange");
+        range = compound.getFloat("Range");
+        hasVelocity = compound.getBoolean("HasVelocity");
+        rangeRate = compound.getFloat("RangeRate");
+        bearingRate = compound.getFloat("BearingRate");
         operatorTarget = compound.contains("OperatorTarget") ? compound.getFloat("OperatorTarget") : null;
         lastException = AssemblyException.read(compound, registries);
         super.read(compound, registries, clientPacket);
@@ -416,6 +593,13 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                     .style(ChatFormatting.DARK_GRAY)
                     .forGoggles(tooltip);
         }
+
+        CDCLang.builder()
+                .add(illumination > 0
+                        ? Component.translatable("createdangerclose.rangefinder_bearing.illumination", illumination)
+                        : Component.translatable("createdangerclose.rangefinder_bearing.unlit"))
+                .style(illumination > 0 ? ChatFormatting.GOLD : ChatFormatting.DARK_GRAY)
+                .forGoggles(tooltip);
 
         super.addToGoggleTooltip(tooltip, isPlayerSneaking);
         return true;
