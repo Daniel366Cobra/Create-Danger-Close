@@ -111,13 +111,23 @@ public sealed interface SensorReading {
         }
     }
 
+    /**
+     * A target tracked by a rangefinder, world space.
+     *
+     * @param hitWorldPos    tracked target position as of {@code sampleTick}
+     * @param targetVelocity tracked target velocity, blocks per tick; null until tracked
+     * @param sampleTick     game time of the latest reading, for freshness and extrapolation
+     * @param rangeSigma     1σ range error of the latest reading, blocks
+     */
     record Rangefinder(
             double bearingDeg,
             double elevationDeg,
             double rangeMeters,
             boolean hitSubLevel,
             @Nullable Vector3d targetVelocity,
-            Vec3 hitWorldPos
+            Vec3 hitWorldPos,
+            long sampleTick,
+            double rangeSigma
     ) implements SensorReading {
         @Override public Kind kind() { return Kind.RANGEFINDER; }
 
@@ -136,6 +146,8 @@ public sealed interface SensorReading {
             tag.putDouble("hx", hitWorldPos.x);
             tag.putDouble("hy", hitWorldPos.y);
             tag.putDouble("hz", hitWorldPos.z);
+            tag.putLong("tick", sampleTick);
+            tag.putDouble("sigma", rangeSigma);
             return tag;
         }
 
@@ -149,7 +161,9 @@ public sealed interface SensorReading {
                     tag.getDouble("range"),
                     tag.getBoolean("hitSubLevel"),
                     tv,
-                    new Vec3(tag.getDouble("hx"), tag.getDouble("hy"), tag.getDouble("hz")));
+                    new Vec3(tag.getDouble("hx"), tag.getDouble("hy"), tag.getDouble("hz")),
+                    tag.getLong("tick"),
+                    tag.getDouble("sigma"));
         }
     }
 

@@ -11,7 +11,9 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
 import com.simibubi.create.foundation.utility.ServerSpeedProvider;
+import dev.ryanhcode.sable.Sable;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
+import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import net.createmod.catnip.math.AngleHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -30,6 +32,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Vector3d;
 
 import java.util.List;
 
@@ -47,7 +50,7 @@ import java.util.List;
  * degrees relative to the heading it was assembled at.
  */
 public class RangefinderBearingBlockEntity extends KineticBlockEntity
-        implements IBearingBlockEntity, IDisplayAssemblyExceptions {
+        implements IBearingBlockEntity, IDisplayAssemblyExceptions, SensorReading.Provider {
 
     // Top traverse speed: a quarter of CBC's cannon mount scale (0.0375°/tick
     // per RPM), i.e. 6°/s at 32 RPM, 48°/s at 256 RPM.
@@ -94,9 +97,16 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private boolean hasVelocity;
     private float rangeRate;      // blocks per second, positive = opening
     private float bearingRate;    // degrees per second, positive = clockwise
-    // Target solution for the fire control solver (server only).
+    // Target solution for the fire control solver (server only). Outlives
+    // the operator and the readouts: fire control keeps shooting on the last
+    // good solution, extrapolated, until it goes stale.
+    public static final long SOLUTION_LIFETIME_TICKS = 200;
     @Nullable private Vec3 targetPosition;
     @Nullable private Vec3 targetVelocity;
+    @Nullable private Vec3 solutionOrigin;
+    private long solutionTick;
+    private double solutionSigma;
+    private boolean solutionOnShip;
 
     public RangefinderBearingBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -285,8 +295,9 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     private void tickRanging(@Nullable Player operator) {
         if (operator == null) {
-            if (hasRange || rangingActive || targetPosition != null) {
-                clearRanging();
+            // Nobody at the eyepiece: drop the view state, keep the solution.
+            if (hasRange || hasVelocity || rangingActive || pendingSample) {
+                clearOperatorState();
                 sendData();
             }
             return;
@@ -342,9 +353,18 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
         tracker.update(sight.origin().add(sight.direction().scale(measuredRange)), level.getGameTime(), sigma);
         targetPosition = tracker.getPosition();
+        solutionOrigin = sight.origin();
+        solutionTick = level.getGameTime();
+        solutionSigma = sigma;
+        solutionOnShip = Sable.HELPER.getContaining(level, hit.getLocation()) != null;
         Vec3 toTarget = targetPosition.subtract(sight.origin());
         hasRange = true;
         range = (float) toTarget.length();
+
+        // A new track (new target, or after a pause) has no velocity yet;
+        // don't lead it with the previous target's.
+        if (tracker.getSamples() < MIN_VELOCITY_SAMPLES)
+            targetVelocity = null;
 
         if (steadiness.canTrackVelocity() && tracker.getSamples() >= MIN_VELOCITY_SAMPLES) {
             targetVelocity = tracker.getVelocity();
@@ -359,13 +379,47 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         sendData();
     }
 
+    /** Everything: view state and the target solution. */
     private void clearRanging() {
-        steadiness.reset();
+        clearOperatorState();
         tracker.reset();
+        targetPosition = targetVelocity = solutionOrigin = null;
+    }
+
+    /** The operator's view state; the target solution is kept. */
+    private void clearOperatorState() {
+        steadiness.reset();
         rangingActive = pendingSample = false;
         hasRange = hasVelocity = false;
         range = rangeRate = bearingRate = 0;
-        targetPosition = targetVelocity = null;
+    }
+
+    /**
+     * The target solution as a battle network reading, while it is fresh.
+     * Rangefinder readings outrank navigation tables in the fire control solver.
+     */
+    @Override
+    public SensorReading getSensorReading() {
+        if (level == null || targetPosition == null || solutionOrigin == null
+                || level.getGameTime() - solutionTick > SOLUTION_LIFETIME_TICKS)
+            return new SensorReading.None();
+
+        Vec3 toTarget = targetPosition.subtract(solutionOrigin);
+        double targetRange = toTarget.length();
+        if (targetRange < 1e-6)
+            return new SensorReading.None();
+        Vector3d velocity = targetVelocity != null
+                ? new Vector3d(targetVelocity.x, targetVelocity.y, targetVelocity.z)
+                : null;
+        return new SensorReading.Rangefinder(
+                RangefinderOptics.compassBearing(toTarget),
+                Math.toDegrees(Math.asin(toTarget.y / targetRange)),
+                targetRange,
+                solutionOnShip,
+                velocity,
+                targetPosition,
+                solutionTick,
+                solutionSigma);
     }
 
     public boolean hasRange() { return hasRange; }

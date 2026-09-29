@@ -41,6 +41,11 @@
       "no_sublevel": "Not on a physics object",
       "missing_altitude": "Missing: Altitude",
       "missing_target": "Missing: Target",
+      "target_source": {
+        "rangefinder": "Source: Rangefinder (%ss old, ±%s m)",
+        "nav_table": "Source: Navigation Table"
+      },
+      "target_speed": "Target Speed",
       "solutions": "Fire Solutions:",
       "solution_ok": "Solution found (%s)",
       "solution_failed": "No solution: %s",

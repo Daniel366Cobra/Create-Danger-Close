@@ -13,6 +13,7 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
 import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -71,11 +72,23 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     private double shipVelZ = 0;
     private double shipAltitude = 0;
 
-    // --- Target, from a navigation table ---
+    // --- Target: a fresh rangefinder solution outranks navigation tables ---
+    public enum TargetSource { NONE, NAV_TABLE, RANGEFINDER }
+
     private boolean hasTarget = false;
+    private TargetSource targetSource = TargetSource.NONE;
     private double targetX = 0;
     private double targetY = 0;
     private double targetZ = 0;
+    // Tracked target velocity (rangefinder only), blocks per tick, world space.
+    private boolean hasTargetVelocity = false;
+    private double targetVelX = 0;
+    private double targetVelY = 0;
+    private double targetVelZ = 0;
+    // Age and 1σ range error of the rangefinder reading, for the tooltip.
+    private long targetAgeTicks = 0;
+    private double targetSigma = 0;
+    private int rangefinderCount = 0;
 
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new java.util.HashMap<>();
 
@@ -130,7 +143,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     }
 
     private void invalidateData() {
-        gimbalCount = navHeadingCount = navTargetCount = altitudeCount = 0;
+        gimbalCount = navHeadingCount = navTargetCount = altitudeCount = rangefinderCount = 0;
         java.util.Arrays.fill(velocityAxisCounts, 0);
 
         hasPose = false;
@@ -139,7 +152,12 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         shipAltitude = 0;
 
         hasTarget = false;
+        targetSource = TargetSource.NONE;
         targetX = targetY = targetZ = 0;
+        hasTargetVelocity = false;
+        targetVelX = targetVelY = targetVelZ = 0;
+        targetAgeTicks = 0;
+        targetSigma = 0;
     }
 
     void pollNetwork() {
@@ -147,6 +165,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         KineticNetwork network = battleNetwork();
         if (network == null) return;
+
+        SensorReading.Rangefinder freshestRangefinder = null;
 
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member == this) continue;
@@ -162,16 +182,49 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                         targetY = t.worldPos().y;
                         targetZ = t.worldPos().z;
                         hasTarget = true;
+                        targetSource = TargetSource.NAV_TABLE;
                     }
                 }
                 case SensorReading.Velocity v -> velocityAxisCounts[dominantAxis(v.normal())]++;
                 case SensorReading.Altitude ignored -> altitudeCount++;
-                case SensorReading.Rangefinder ignored -> { }
+                case SensorReading.Rangefinder r -> {
+                    rangefinderCount++;
+                    if (freshestRangefinder == null || r.sampleTick() > freshestRangefinder.sampleTick())
+                        freshestRangefinder = r;
+                }
                 case SensorReading.None ignored -> { }
             }
         }
 
+        if (freshestRangefinder != null)
+            useRangefinderTarget(freshestRangefinder);
+
         readOwnShipState();
+    }
+
+    /**
+     * A fresh rangefinder solution takes over from any navigation table.
+     * Between readings the target is carried forward on its tracked
+     * velocity, so the guns keep leading it.
+     */
+    private void useRangefinderTarget(SensorReading.Rangefinder reading) {
+        long age = level.getGameTime() - reading.sampleTick();
+        if (age < 0 || age > RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS)
+            return;
+
+        Vector3d velocity = reading.targetVelocity();
+        hasTargetVelocity = velocity != null;
+        targetVelX = hasTargetVelocity ? velocity.x : 0;
+        targetVelY = hasTargetVelocity ? velocity.y : 0;
+        targetVelZ = hasTargetVelocity ? velocity.z : 0;
+
+        targetX = reading.hitWorldPos().x + targetVelX * age;
+        targetY = reading.hitWorldPos().y + targetVelY * age;
+        targetZ = reading.hitWorldPos().z + targetVelZ * age;
+        hasTarget = true;
+        targetSource = TargetSource.RANGEFINDER;
+        targetAgeTicks = age;
+        targetSigma = reading.rangeSigma();
     }
 
     /** Samples the solver's own sublevel pose for the tooltip. */
@@ -417,7 +470,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                 .transformPosition(blockCenter(mount.mountPos()), new Vector3d());
 
         Vector3d targetWorld = new Vector3d(targetX, targetY, targetZ);
-        Vector3d targetVel = new Vector3d();
+        Vector3d targetVel = new Vector3d(targetVelX, targetVelY, targetVelZ);
 
         double muzzleVelocity = charge;
         double gravity = mount.gravity();
@@ -579,6 +632,16 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         this.targetX = compound.getDouble("TargetX");
         this.targetY = compound.getDouble("TargetY");
         this.targetZ = compound.getDouble("TargetZ");
+        TargetSource[] sources = TargetSource.values();
+        int sourceOrdinal = compound.getInt("TargetSource");
+        this.targetSource = sourceOrdinal >= 0 && sourceOrdinal < sources.length ? sources[sourceOrdinal] : TargetSource.NONE;
+        this.hasTargetVelocity = compound.getBoolean("HasTargetVelocity");
+        this.targetVelX = compound.getDouble("TargetVelX");
+        this.targetVelY = compound.getDouble("TargetVelY");
+        this.targetVelZ = compound.getDouble("TargetVelZ");
+        this.targetAgeTicks = compound.getLong("TargetAge");
+        this.targetSigma = compound.getDouble("TargetSigma");
+        this.rangefinderCount = compound.getInt("RangefinderCount");
 
         if (clientPacket) {
             this.lastPitchResults.clear();
@@ -623,6 +686,14 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         compound.putDouble("TargetX", targetX);
         compound.putDouble("TargetY", targetY);
         compound.putDouble("TargetZ", targetZ);
+        compound.putInt("TargetSource", targetSource.ordinal());
+        compound.putBoolean("HasTargetVelocity", hasTargetVelocity);
+        compound.putDouble("TargetVelX", targetVelX);
+        compound.putDouble("TargetVelY", targetVelY);
+        compound.putDouble("TargetVelZ", targetVelZ);
+        compound.putLong("TargetAge", targetAgeTicks);
+        compound.putDouble("TargetSigma", targetSigma);
+        compound.putInt("RangefinderCount", rangefinderCount);
 
         ListTag results = new ListTag();
         for (Map.Entry<BlockPos, BallisticSolver.Result> e : lastPitchResults.entrySet()) {
@@ -746,6 +817,24 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                     .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
                     .add(Component.literal(String.format("%.0f", targetZ)).withStyle(ChatFormatting.GOLD))
                     .forGoggles(tooltip);
+
+            Component source = targetSource == TargetSource.RANGEFINDER
+                    ? Component.translatable("createdangerclose.fire_control_solver.target_source.rangefinder",
+                            String.format("%.1f", targetAgeTicks / 20.0), String.format("%.0f", targetSigma))
+                    : Component.translatable("createdangerclose.fire_control_solver.target_source.nav_table");
+            CDCLang.builder()
+                    .add(source)
+                    .style(ChatFormatting.GRAY)
+                    .forGoggles(tooltip);
+
+            if (hasTargetVelocity) {
+                double speed = Math.sqrt(targetVelX * targetVelX + targetVelY * targetVelY + targetVelZ * targetVelZ) * 20;
+                CDCLang.builder()
+                        .add(Component.translatable("createdangerclose.fire_control_solver.target_speed"))
+                        .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
+                        .add(CDCLang.numberWithUnit(speed, "createdangerclose.unit.velocity").withStyle(ChatFormatting.GOLD))
+                        .forGoggles(tooltip);
+            }
         } else {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.fire_control_solver.missing_target"))
@@ -796,8 +885,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         int velocityCount = velocityAxisCounts[0] + velocityAxisCounts[1] + velocityAxisCounts[2];
         CDCLang.builder()
                 .add(Component.literal(String.format(
-                        "  [G:%d H:%d T:%d V:%d A:%d]",
-                        gimbalCount, navHeadingCount, navTargetCount, velocityCount, altitudeCount)))
+                        "  [G:%d H:%d T:%d V:%d A:%d R:%d]",
+                        gimbalCount, navHeadingCount, navTargetCount, velocityCount, altitudeCount, rangefinderCount)))
                 .style(ChatFormatting.DARK_GRAY)
                 .forGoggles(tooltip);
 
