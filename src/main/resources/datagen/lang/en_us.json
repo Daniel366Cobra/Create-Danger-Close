@@ -43,6 +43,7 @@
       "missing_target": "Missing: Target",
       "target_source": {
         "rangefinder": "Source: Rangefinder (%ss old, ±%s m)",
+        "rangefinders_merged": "Source: %s Rangefinders (%ss old, ±%s m)",
         "nav_table": "Source: Navigation Table"
       },
       "target_speed": "Target Speed",
@@ -87,7 +88,12 @@
           "bearing": "BRG %s",
           "range": "RNG %s",
           "range_rate": "R/R %s",
-          "bearing_rate": "B/R %s"
+          "bearing_rate": "B/R %s",
+          "status": {
+            "directing": "DIR",
+            "merged": "MRG",
+            "standby": "STBY"
+          }
         }
       },
       "rangefinder_bearing": {

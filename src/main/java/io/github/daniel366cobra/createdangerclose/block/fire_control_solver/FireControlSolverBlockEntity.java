@@ -14,6 +14,7 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
 import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -33,6 +34,7 @@ import rbasamoyai.createbigcannons.config.CBCConfigs;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YAW;
@@ -89,6 +91,18 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     private long targetAgeTicks = 0;
     private double targetSigma = 0;
     private int rangefinderCount = 0;
+    // How many rangefinders' readings went into the target (1 = just the directing one).
+    private int mergedRangefinders = 0;
+
+    // Rangefinder in control of the guns (bearing position, server only). It
+    // keeps control until its solution goes stale, so a second manned
+    // rangefinder cannot yank the guns to a different target.
+    @Nullable private BlockPos directingRangefinder;
+    // Solutions within this many combined standard deviations of the
+    // directing one are the same target and get merged...
+    private static final double MERGE_SIGMAS = 3;
+    // ...with at least this much tolerance, blocks.
+    private static final double MIN_MERGE_DISTANCE = 4;
 
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new java.util.HashMap<>();
 
@@ -158,6 +172,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         targetVelX = targetVelY = targetVelZ = 0;
         targetAgeTicks = 0;
         targetSigma = 0;
+        mergedRangefinders = 0;
     }
 
     void pollNetwork() {
@@ -166,9 +181,12 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         KineticNetwork network = battleNetwork();
         if (network == null) return;
 
-        SensorReading.Rangefinder freshestRangefinder = null;
+        Map<BlockPos, SensorReading.Rangefinder> rangefinderReadings = new java.util.HashMap<>();
+        List<RangefinderBearingBlockEntity> rangefinders = new ArrayList<>();
 
         for (KineticBlockEntity member : network.members.keySet()) {
+            if (member instanceof RangefinderBearingBlockEntity rangefinder)
+                rangefinders.add(rangefinder);
             if (member == this) continue;
             if (!(member instanceof SensorReading.Provider provider)) continue;
 
@@ -189,42 +207,108 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                 case SensorReading.Altitude ignored -> altitudeCount++;
                 case SensorReading.Rangefinder r -> {
                     rangefinderCount++;
-                    if (freshestRangefinder == null || r.sampleTick() > freshestRangefinder.sampleTick())
-                        freshestRangefinder = r;
+                    if (isFresh(r))
+                        rangefinderReadings.put(member.getBlockPos(), r);
                 }
                 case SensorReading.None ignored -> { }
             }
         }
 
-        if (freshestRangefinder != null)
-            useRangefinderTarget(freshestRangefinder);
+        Set<BlockPos> merged = useRangefinderTargets(rangefinderReadings);
+        for (RangefinderBearingBlockEntity rangefinder : rangefinders) {
+            BlockPos pos = rangefinder.getBlockPos();
+            rangefinder.setFireControlStatus(directingRangefinder == null ? FireControlStatus.NONE
+                    : pos.equals(directingRangefinder) ? FireControlStatus.DIRECTING
+                    : merged.contains(pos) ? FireControlStatus.MERGED
+                    : FireControlStatus.STANDBY);
+        }
 
         readOwnShipState();
     }
 
-    /**
-     * A fresh rangefinder solution takes over from any navigation table.
-     * Between readings the target is carried forward on its tracked
-     * velocity, so the guns keep leading it.
-     */
-    private void useRangefinderTarget(SensorReading.Rangefinder reading) {
+    private boolean isFresh(SensorReading.Rangefinder reading) {
         long age = level.getGameTime() - reading.sampleTick();
-        if (age < 0 || age > RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS)
-            return;
+        return age >= 0 && age <= RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS;
+    }
 
-        Vector3d velocity = reading.targetVelocity();
-        hasTargetVelocity = velocity != null;
-        targetVelX = hasTargetVelocity ? velocity.x : 0;
-        targetVelY = hasTargetVelocity ? velocity.y : 0;
-        targetVelZ = hasTargetVelocity ? velocity.z : 0;
+    /** A reading carried forward to now on its tracked velocity. */
+    private Vector3d extrapolate(SensorReading.Rangefinder reading) {
+        long age = level.getGameTime() - reading.sampleTick();
+        Vector3d position = new Vector3d(reading.hitWorldPos().x, reading.hitWorldPos().y, reading.hitWorldPos().z);
+        return reading.targetVelocity() != null ? position.fma(age, reading.targetVelocity()) : position;
+    }
 
-        targetX = reading.hitWorldPos().x + targetVelX * age;
-        targetY = reading.hitWorldPos().y + targetVelY * age;
-        targetZ = reading.hitWorldPos().z + targetVelZ * age;
+    /**
+     * Picks the target from the fresh rangefinder solutions; any of them
+     * takes over from navigation tables.
+     *
+     * <p>Control: the directing rangefinder keeps control while its solution
+     * is fresh; otherwise the freshest solution takes over. Merging: other
+     * solutions on the same target (within {@link #MERGE_SIGMAS} combined
+     * standard deviations) are averaged in, weighted by 1/σ², which gives a
+     * better fix than any single rangefinder.
+     *
+     * <p>The target is carried forward to now on its tracked velocity, so the
+     * guns keep leading it between readings.
+     *
+     * @return positions of the rangefinders merged into the directing one's solution
+     */
+    private Set<BlockPos> useRangefinderTargets(Map<BlockPos, SensorReading.Rangefinder> readings) {
+        if (directingRangefinder == null || !readings.containsKey(directingRangefinder)) {
+            directingRangefinder = readings.entrySet().stream()
+                    .max(java.util.Comparator.comparingLong(e -> e.getValue().sampleTick()))
+                    .map(Map.Entry::getKey)
+                    .orElse(null);
+        }
+        if (directingRangefinder == null)
+            return Set.of();
+
+        SensorReading.Rangefinder directing = readings.get(directingRangefinder);
+        Vector3d directingPosition = extrapolate(directing);
+
+        Vector3d weightedPosition = new Vector3d();
+        Vector3d weightedVelocity = new Vector3d();
+        double positionWeight = 0;
+        double velocityWeight = 0;
+        Set<BlockPos> merged = new java.util.HashSet<>();
+
+        for (Map.Entry<BlockPos, SensorReading.Rangefinder> entry : readings.entrySet()) {
+            SensorReading.Rangefinder reading = entry.getValue();
+            Vector3d position = extrapolate(reading);
+            boolean isDirecting = entry.getKey().equals(directingRangefinder);
+            if (!isDirecting) {
+                double tolerance = Math.max(MIN_MERGE_DISTANCE, MERGE_SIGMAS * Math.sqrt(
+                        directing.rangeSigma() * directing.rangeSigma() + reading.rangeSigma() * reading.rangeSigma()));
+                if (position.distance(directingPosition) > tolerance)
+                    continue; // a different target: standby
+                merged.add(entry.getKey());
+            }
+            double weight = 1 / Math.max(1e-4, reading.rangeSigma() * reading.rangeSigma());
+            weightedPosition.fma(weight, position);
+            positionWeight += weight;
+            if (reading.targetVelocity() != null) {
+                weightedVelocity.fma(weight, reading.targetVelocity());
+                velocityWeight += weight;
+            }
+        }
+
+        weightedPosition.div(positionWeight);
+        hasTargetVelocity = velocityWeight > 0;
+        if (hasTargetVelocity)
+            weightedVelocity.div(velocityWeight);
+        targetVelX = hasTargetVelocity ? weightedVelocity.x : 0;
+        targetVelY = hasTargetVelocity ? weightedVelocity.y : 0;
+        targetVelZ = hasTargetVelocity ? weightedVelocity.z : 0;
+
+        targetX = weightedPosition.x;
+        targetY = weightedPosition.y;
+        targetZ = weightedPosition.z;
         hasTarget = true;
         targetSource = TargetSource.RANGEFINDER;
-        targetAgeTicks = age;
-        targetSigma = reading.rangeSigma();
+        targetAgeTicks = level.getGameTime() - directing.sampleTick();
+        targetSigma = 1 / Math.sqrt(positionWeight);
+        mergedRangefinders = 1 + merged.size();
+        return merged;
     }
 
     /** Samples the solver's own sublevel pose for the tooltip. */
@@ -642,6 +726,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         this.targetAgeTicks = compound.getLong("TargetAge");
         this.targetSigma = compound.getDouble("TargetSigma");
         this.rangefinderCount = compound.getInt("RangefinderCount");
+        this.mergedRangefinders = compound.getInt("MergedRangefinders");
 
         if (clientPacket) {
             this.lastPitchResults.clear();
@@ -694,6 +779,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         compound.putLong("TargetAge", targetAgeTicks);
         compound.putDouble("TargetSigma", targetSigma);
         compound.putInt("RangefinderCount", rangefinderCount);
+        compound.putInt("MergedRangefinders", mergedRangefinders);
 
         ListTag results = new ListTag();
         for (Map.Entry<BlockPos, BallisticSolver.Result> e : lastPitchResults.entrySet()) {
@@ -818,10 +904,16 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                     .add(Component.literal(String.format("%.0f", targetZ)).withStyle(ChatFormatting.GOLD))
                     .forGoggles(tooltip);
 
-            Component source = targetSource == TargetSource.RANGEFINDER
-                    ? Component.translatable("createdangerclose.fire_control_solver.target_source.rangefinder",
-                            String.format("%.1f", targetAgeTicks / 20.0), String.format("%.0f", targetSigma))
-                    : Component.translatable("createdangerclose.fire_control_solver.target_source.nav_table");
+            Component source;
+            if (targetSource != TargetSource.RANGEFINDER) {
+                source = Component.translatable("createdangerclose.fire_control_solver.target_source.nav_table");
+            } else if (mergedRangefinders > 1) {
+                source = Component.translatable("createdangerclose.fire_control_solver.target_source.rangefinders_merged",
+                        mergedRangefinders, String.format("%.1f", targetAgeTicks / 20.0), String.format("%.0f", targetSigma));
+            } else {
+                source = Component.translatable("createdangerclose.fire_control_solver.target_source.rangefinder",
+                        String.format("%.1f", targetAgeTicks / 20.0), String.format("%.0f", targetSigma));
+            }
             CDCLang.builder()
                     .add(source)
                     .style(ChatFormatting.GRAY)

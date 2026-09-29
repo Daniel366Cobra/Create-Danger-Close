@@ -108,6 +108,24 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private double solutionSigma;
     private boolean solutionOnShip;
 
+    /** This rangefinder's role in fire control, as decided by the solver. */
+    public enum FireControlStatus {
+        /** No fire control using rangefinder data (no solver, or nothing ranged). */
+        NONE,
+        /** In control: the guns follow this rangefinder. */
+        DIRECTING,
+        /** Ranging the same target as the directing rangefinder; readings are merged. */
+        MERGED,
+        /** Another rangefinder is directing; this one's readings are not used. */
+        STANDBY
+    }
+
+    // The solver refreshes this every poll (at most every 20 ticks); without
+    // refreshes the status lapses.
+    private static final long STATUS_LIFETIME_TICKS = 40;
+    private FireControlStatus fireControlStatus = FireControlStatus.NONE;
+    private long fireControlStatusTick;
+
     public RangefinderBearingBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
         setLazyTickRate(3);
@@ -256,6 +274,11 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 illumination = signal;
                 sendData();
             }
+            if (fireControlStatus != FireControlStatus.NONE
+                    && level.getGameTime() - fireControlStatusTick > STATUS_LIFETIME_TICKS) {
+                fireControlStatus = FireControlStatus.NONE;
+                sendData();
+            }
         }
 
         if (!running)
@@ -392,6 +415,19 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         rangingActive = pendingSample = false;
         hasRange = hasVelocity = false;
         range = rangeRate = bearingRate = 0;
+    }
+
+    /** Called by the fire control solver on every poll. */
+    public void setFireControlStatus(FireControlStatus status) {
+        fireControlStatusTick = level.getGameTime();
+        if (status != fireControlStatus) {
+            fireControlStatus = status;
+            sendData();
+        }
+    }
+
+    public FireControlStatus getFireControlStatus() {
+        return fireControlStatus;
     }
 
     /**
@@ -566,6 +602,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         compound.putBoolean("HasVelocity", hasVelocity);
         compound.putFloat("RangeRate", rangeRate);
         compound.putFloat("BearingRate", bearingRate);
+        compound.putInt("FireControlStatus", fireControlStatus.ordinal());
         if (operatorTarget != null)
             compound.putFloat("OperatorTarget", operatorTarget);
         AssemblyException.write(compound, registries, lastException);
@@ -590,6 +627,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         hasVelocity = compound.getBoolean("HasVelocity");
         rangeRate = compound.getFloat("RangeRate");
         bearingRate = compound.getFloat("BearingRate");
+        FireControlStatus[] statuses = FireControlStatus.values();
+        int statusOrdinal = compound.getInt("FireControlStatus");
+        fireControlStatus = statusOrdinal >= 0 && statusOrdinal < statuses.length
+                ? statuses[statusOrdinal] : FireControlStatus.NONE;
         operatorTarget = compound.contains("OperatorTarget") ? compound.getFloat("OperatorTarget") : null;
         lastException = AssemblyException.read(compound, registries);
         super.read(compound, registries, clientPacket);

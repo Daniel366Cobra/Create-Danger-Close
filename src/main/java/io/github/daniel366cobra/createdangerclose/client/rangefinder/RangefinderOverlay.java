@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -146,6 +147,17 @@ public final class RangefinderOverlay {
                 ? format("%+.1f m/s", bearing.getRangeRate()) : null), rateX, rangeY, color, false);
         graphics.drawString(font, readout("bearing_rate", hasVelocity
                 ? format("%+.2f°/s", bearing.getBearingRate()) : null), rateX, rangeY + font.lineHeight + 1, color, false);
+
+        // Fire control role, mirroring the rate column on the left: whether
+        // the guns follow this rangefinder (DIR), merge its readings (MRG), or
+        // another rangefinder is directing (STBY).
+        FireControlStatus status = bearing != null ? bearing.getFireControlStatus() : FireControlStatus.NONE;
+        if (status != FireControlStatus.NONE) {
+            Component label = Component.translatable(
+                    "createdangerclose.rangefinder.readout.status." + status.name().toLowerCase(Locale.ROOT));
+            int statusRight = Math.round(left + (center - RATE_COLUMN_PX) * texel);
+            graphics.drawString(font, label, statusRight - font.width(label), rangeY, color, false);
+        }
     }
 
     private static Component readout(String key, @Nullable String value) {
