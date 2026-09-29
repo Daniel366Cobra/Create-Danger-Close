@@ -1,6 +1,7 @@
 package io.github.daniel366cobra.createdangerclose;
 
 import io.github.daniel366cobra.createdangerclose.registries.CDCPartialModels;
+import io.github.daniel366cobra.createdangerclose.registries.CDCSpriteShifts;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -21,6 +22,7 @@ public class CreateDangerCloseClient {
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.
         CDCPartialModels.register();
+        CDCSpriteShifts.init();
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
     }
 

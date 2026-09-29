@@ -11,6 +11,7 @@ import io.github.daniel366cobra.createdangerclose.events.CDCCommonEvents;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import io.github.daniel366cobra.createdangerclose.registries.CDCContraptionTypes;
+import io.github.daniel366cobra.createdangerclose.registries.CDCMenuTypes;
 import io.github.daniel366cobra.createdangerclose.registries.CDCCreativeTabs;
 import io.github.daniel366cobra.createdangerclose.registries.CDCItems;
 import net.createmod.catnip.lang.FontHelper;
@@ -53,6 +54,7 @@ public class CreateDangerClose {
         CDCBlocks.register();
         CDCItems.register();
         CDCBlockEntities.register();
+        CDCMenuTypes.register();
 
         // Create's contraption type registry only accepts entries while it is
         // being populated, i.e. during its RegisterEvent (same as CBC).

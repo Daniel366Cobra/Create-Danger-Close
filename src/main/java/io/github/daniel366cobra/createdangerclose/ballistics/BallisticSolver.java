@@ -338,6 +338,53 @@ public final class BallisticSolver {
                 pitchDeg, yawDeg, finalTraj.ticks(), horizontalRange, fuzeTicks);
     }
 
+    /**
+     * How far a shell fired at {@code pitchDeg} travels before coming down to
+     * {@code relativeY} (relative to the muzzle), horizontally. With the pitch
+     * {@link #solveStatic} tops out at (45° or the mount's limit), this is the
+     * range beyond which it reports {@link Result.Reason#OUT_OF_RANGE}.
+     *
+     * @return the range, or 0 if the shell never reaches that height
+     */
+    public static double maxRange(
+            double muzzleVelocity, double gravity, double drag, boolean isQuadraticDrag,
+            double pitchDeg, double relativeY
+    ) {
+        if (muzzleVelocity <= 0 || gravity >= 0) return 0;
+        double pitchRad = Math.toRadians(pitchDeg);
+        double vx = muzzleVelocity * Math.cos(pitchRad);
+        double vy = muzzleVelocity * Math.sin(pitchRad);
+        double px = 0, py = 0;
+
+        for (int tick = 1; tick <= MAX_TICKS; tick++) {
+            double speed = Math.sqrt(vx * vx + vy * vy);
+            double dragForce = drag * DENSITY * speed;
+            if (isQuadraticDrag) dragForce *= speed;
+            dragForce = Math.min(dragForce, speed);
+
+            double ax = 0, ay = gravity;
+            if (speed > 1e-6) {
+                ax -= vx / speed * dragForce;
+                ay -= vy / speed * dragForce;
+            }
+
+            // CBC's kinematic step.
+            double prevPx = px, prevPy = py;
+            px += vx + 0.5 * ax;
+            py += vy + 0.5 * ay;
+            vx += ax;
+            vy += ay;
+
+            // Coming down through the height: interpolate within the tick.
+            if (vy < 0 && py <= relativeY) {
+                if (prevPy <= relativeY) return 0; // was never above it
+                double t = (prevPy - relativeY) / (prevPy - py);
+                return prevPx + t * (px - prevPx);
+            }
+        }
+        return px; // still in the air after the tick budget
+    }
+
     // ------------------------------------------------------------------
     // Integration
     // ------------------------------------------------------------------

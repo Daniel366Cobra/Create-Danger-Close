@@ -15,6 +15,8 @@ import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServo
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoInputBlock;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlock;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlock;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableCTBehaviour;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderEyepieceBlock;
@@ -26,6 +28,7 @@ import net.minecraft.world.level.material.MapColor;
 
 import java.util.ArrayList;
 
+import static com.simibubi.create.foundation.data.CreateRegistrate.connectedTextures;
 import static com.simibubi.create.foundation.data.ModelGen.customItemModel;
 import static com.simibubi.create.foundation.data.TagGen.axeOrPickaxe;
 
@@ -203,6 +206,28 @@ public class CDCBlocks {
             .lang("Rangefinder Eyepiece")
             .register();
 
+    public static final BlockEntry<MapTableBlock> MAP_TABLE = REGISTRATE.block("map_table", MapTableBlock::new)
+            .initialProperties(SharedProperties::wooden)
+            .properties(p -> p.mapColor(MapColor.WOOD))
+            .transform(axeOrPickaxe())
+            .blockstate((c, p) -> p.simpleBlock(c.get(), p.models().cubeBottomTop(c.getName(),
+                    p.modLoc("block/map_table/side"),
+                    p.modLoc("block/map_table/bottom"),
+                    p.modLoc("block/map_table/top"))))
+            .onRegister(connectedTextures(MapTableCTBehaviour::new))
+            .item()
+            .build()
+            .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
+                    .pattern(" T ")
+                    .pattern("SCS")
+                    .define('T', Items.CARTOGRAPHY_TABLE)
+                    .define('S', AllItems.BRASS_SHEET)
+                    .define('C', AllBlocks.BRASS_CASING)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(Items.CARTOGRAPHY_TABLE))
+                    .save(p))
+            .lang("Map Table")
+            .register();
+
     public static void register() {
         BLOCKS.add(NETWORK_INTERFACE);
         BLOCKS.add(FIRE_CONTROL_SOLVER);
@@ -211,5 +236,6 @@ public class CDCBlocks {
         BLOCKS.add(RANGEFINDER_BEARING);
         BLOCKS.add(RANGEFINDER_LENS);
         BLOCKS.add(RANGEFINDER_EYEPIECE);
+        BLOCKS.add(MAP_TABLE);
     }
 }

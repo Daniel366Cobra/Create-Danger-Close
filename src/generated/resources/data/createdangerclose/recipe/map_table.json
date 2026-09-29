@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "create:brass_casing"
+    },
+    "S": {
+      "item": "create:brass_sheet"
+    },
+    "T": {
+      "item": "minecraft:cartography_table"
+    }
+  },
+  "pattern": [
+    " T ",
+    "SCS"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:map_table"
+  }
+}

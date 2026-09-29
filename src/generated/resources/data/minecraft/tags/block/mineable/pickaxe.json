@@ -6,6 +6,7 @@
     "createdangerclose:cannon_servo_output",
     "createdangerclose:rangefinder_bearing",
     "createdangerclose:rangefinder_lens",
-    "createdangerclose:rangefinder_eyepiece"
+    "createdangerclose:rangefinder_eyepiece",
+    "createdangerclose:map_table"
   ]
 }

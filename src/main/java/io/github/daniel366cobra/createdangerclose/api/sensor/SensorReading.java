@@ -11,7 +11,8 @@ public sealed interface SensorReading {
     CompoundTag serializeNBT(HolderLookup.Provider registries);
 
     enum Kind {
-        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE
+        // Saved by ordinal: add new kinds at the end.
+        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE, MAP_TARGET
     }
 
     interface Provider {
@@ -167,6 +168,35 @@ public sealed interface SensorReading {
         }
     }
 
+    /**
+     * A map table on the network, and the target designated on it, world space.
+     *
+     * @param worldPos       the target, or null if none is designated
+     * @param designatedTick game time it was designated, so the newest of several tables wins
+     */
+    record MapTarget(@Nullable Vec3 worldPos, long designatedTick) implements SensorReading {
+        @Override public Kind kind() { return Kind.MAP_TARGET; }
+
+        @Override
+        public CompoundTag serializeNBT(HolderLookup.Provider registries) {
+            CompoundTag tag = new CompoundTag();
+            if (worldPos != null) {
+                tag.putDouble("px", worldPos.x);
+                tag.putDouble("py", worldPos.y);
+                tag.putDouble("pz", worldPos.z);
+            }
+            tag.putLong("tick", designatedTick);
+            return tag;
+        }
+
+        static MapTarget fromNBT(CompoundTag tag) {
+            Vec3 pos = tag.contains("px")
+                    ? new Vec3(tag.getDouble("px"), tag.getDouble("py"), tag.getDouble("pz"))
+                    : null;
+            return new MapTarget(pos, tag.getLong("tick"));
+        }
+    }
+
     record None() implements SensorReading {
         @Override public Kind kind() { return Kind.NONE; }
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
@@ -192,6 +222,7 @@ public sealed interface SensorReading {
             case ALTITUDE    -> Altitude.fromNBT(tag);
             case RANGEFINDER -> Rangefinder.fromNBT(tag);
             case NONE        -> new None();
+            case MAP_TARGET  -> MapTarget.fromNBT(tag);
         };
     }
 }

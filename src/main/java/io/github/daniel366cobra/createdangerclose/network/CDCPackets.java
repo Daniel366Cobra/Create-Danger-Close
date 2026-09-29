@@ -17,6 +17,8 @@ public final class CDCPackets {
     static void register(RegisterPayloadHandlersEvent event) {
         event.registrar(PROTOCOL_VERSION)
                 .playToServer(RangefinderRangingPayload.TYPE, RangefinderRangingPayload.STREAM_CODEC,
-                        RangefinderRangingPayload::handle);
+                        RangefinderRangingPayload::handle)
+                .playToServer(MapTableTargetPayload.TYPE, MapTableTargetPayload.STREAM_CODEC,
+                        MapTableTargetPayload::handle);
     }
 }

@@ -8,6 +8,7 @@ import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
@@ -18,6 +19,9 @@ import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderB
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.SectionPos;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -58,6 +62,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     private int gimbalCount = 0;
     private int navHeadingCount = 0;
     private int navTargetCount = 0;
+    private int mapTableCount = 0;
     private int altitudeCount = 0;
     // Velocity sensors per ship axis (X, Y, Z). Sensors on an axis that is
     // already covered are redundant: they count, but add no capability.
@@ -74,8 +79,9 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     private double shipVelZ = 0;
     private double shipAltitude = 0;
 
-    // --- Target: a fresh rangefinder solution outranks navigation tables ---
-    public enum TargetSource { NONE, NAV_TABLE, RANGEFINDER }
+    // --- Target: rangefinder solution > map table > navigation table ---
+    // Saved by ordinal: add new sources at the end.
+    public enum TargetSource { NONE, NAV_TABLE, RANGEFINDER, MAP_TABLE }
 
     private boolean hasTarget = false;
     private TargetSource targetSource = TargetSource.NONE;
@@ -103,6 +109,10 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     private static final double MERGE_SIGMAS = 3;
     // ...with at least this much tolerance, blocks.
     private static final double MIN_MERGE_DISTANCE = 4;
+
+    // For map tables (server only): the rangefinder fixes and gun ranges of the last poll.
+    private BattlePlot plot = BattlePlot.EMPTY;
+    private List<BattlePlot.RangefinderFix> plotFixes = List.of();
 
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new java.util.HashMap<>();
 
@@ -157,7 +167,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     }
 
     private void invalidateData() {
-        gimbalCount = navHeadingCount = navTargetCount = altitudeCount = rangefinderCount = 0;
+        gimbalCount = navHeadingCount = navTargetCount = mapTableCount = altitudeCount = rangefinderCount = 0;
         java.util.Arrays.fill(velocityAxisCounts, 0);
 
         hasPose = false;
@@ -173,6 +183,14 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         targetAgeTicks = 0;
         targetSigma = 0;
         mergedRangefinders = 0;
+
+        plot = BattlePlot.EMPTY;
+        plotFixes = List.of();
+    }
+
+    /** The rangefinder fixes and gun ranges of the last poll, for map tables. */
+    public BattlePlot getPlot() {
+        return plot;
     }
 
     void pollNetwork() {
@@ -183,6 +201,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         Map<BlockPos, SensorReading.Rangefinder> rangefinderReadings = new java.util.HashMap<>();
         List<RangefinderBearingBlockEntity> rangefinders = new ArrayList<>();
+        SensorReading.MapTarget mapTarget = null;
 
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member instanceof RangefinderBearingBlockEntity rangefinder)
@@ -210,9 +229,32 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                     if (isFresh(r))
                         rangefinderReadings.put(member.getBlockPos(), r);
                 }
+                case SensorReading.MapTarget m -> {
+                    mapTableCount++;
+                    // Several tables: the latest designation wins.
+                    if (m.worldPos() != null
+                            && (mapTarget == null || m.designatedTick() > mapTarget.designatedTick()))
+                        mapTarget = m;
+                }
                 case SensorReading.None ignored -> { }
             }
         }
+
+        // A map table's target outranks navigation tables; rangefinders outrank both, below.
+        if (mapTarget != null) {
+            targetX = mapTarget.worldPos().x;
+            targetY = mapTarget.worldPos().y;
+            targetZ = mapTarget.worldPos().z;
+            hasTarget = true;
+            targetSource = TargetSource.MAP_TABLE;
+        }
+
+        List<BattlePlot.RangefinderFix> fixes = new ArrayList<>();
+        for (SensorReading.Rangefinder reading : rangefinderReadings.values()) {
+            Vector3d position = extrapolate(reading);
+            fixes.add(new BattlePlot.RangefinderFix(position.x, position.y, position.z, reading.rangeSigma()));
+        }
+        plotFixes = fixes;
 
         Set<BlockPos> merged = useRangefinderTargets(rangefinderReadings);
         for (RangefinderBearingBlockEntity rangefinder : rangefinders) {
@@ -385,6 +427,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         // and cache the result per mount. Yaw servos run afterwards so both axes
         // of a mount aim along the same 3D direction.
         List<SolverServo> yawServos = new ArrayList<>();
+        List<BattlePlot.GunRange> guns = new ArrayList<>();
 
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member == this) continue;
@@ -398,6 +441,9 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
             if (status.axis() == PITCH) {
                 servo.receiveFiringSolution(withRates(status, solvePitch(status)));
+                BattlePlot.GunRange range = gunRange(status.mounts().get(0));
+                if (range != null)
+                    guns.add(range);
             } else if (status.axis() == YAW) {
                 yawServos.add(servo);
             } else {
@@ -409,6 +455,44 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
             ServoStatus status = servo.getServoStatus();
             servo.receiveFiringSolution(withRates(status, solveYaw(status)));
         }
+
+        plot = plotFixes.isEmpty() && guns.isEmpty() ? BattlePlot.EMPTY : new BattlePlot(plotFixes, guns);
+    }
+
+    /**
+     * How far a mount can reach with its current shell and charge, for the
+     * map table: down to the target's height, or without a target to the
+     * ground (or sea level, if unloaded) under the mount. Uses the same top
+     * pitch as the solver (45°, or less if the mount cannot elevate that far),
+     * so it matches where solutions turn into "out of range". The ship's own
+     * motion is left out.
+     */
+    @Nullable
+    private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount) {
+        if (level == null || !mount.hasShell())
+            return null;
+        double charge = mount.totalChargePower() + mount.addedChargePower();
+        if (mount.minimumChargePower() > charge)
+            return null;
+
+        SubLevel mountSubLevel = subLevelOf(mount);
+        Vector3d muzzleWorld = mountSubLevel != null
+                ? mountSubLevel.logicalPose().transformPosition(blockCenter(mount.mountPos()), new Vector3d())
+                : blockCenter(mount.mountPos());
+
+        double referenceY;
+        if (hasTarget) {
+            referenceY = targetY;
+        } else {
+            int x = Mth.floor(muzzleWorld.x), z = Mth.floor(muzzleWorld.z);
+            referenceY = level.hasChunk(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z))
+                    ? level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z)
+                    : level.getSeaLevel();
+        }
+
+        double radius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
+                Math.min(45, mount.maxElevation()), referenceY - muzzleWorld.y);
+        return radius > 0 ? new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius) : null;
     }
 
     /**
@@ -698,6 +782,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         this.gimbalCount = compound.getInt("GimbalCount");
         this.navHeadingCount = compound.getInt("NavHeadingCount");
         this.navTargetCount = compound.getInt("NavTargetCount");
+        this.mapTableCount = compound.getInt("MapTableCount");
         this.altitudeCount = compound.getInt("AltitudeCount");
         this.velocityAxisCounts[0] = compound.getInt("VelocityCountX");
         this.velocityAxisCounts[1] = compound.getInt("VelocityCountY");
@@ -753,6 +838,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         compound.putInt("GimbalCount", gimbalCount);
         compound.putInt("NavHeadingCount", navHeadingCount);
         compound.putInt("NavTargetCount", navTargetCount);
+        compound.putInt("MapTableCount", mapTableCount);
         compound.putInt("AltitudeCount", altitudeCount);
         compound.putInt("VelocityCountX", velocityAxisCounts[0]);
         compound.putInt("VelocityCountY", velocityAxisCounts[1]);
@@ -905,7 +991,9 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                     .forGoggles(tooltip);
 
             Component source;
-            if (targetSource != TargetSource.RANGEFINDER) {
+            if (targetSource == TargetSource.MAP_TABLE) {
+                source = Component.translatable("createdangerclose.fire_control_solver.target_source.map_table");
+            } else if (targetSource != TargetSource.RANGEFINDER) {
                 source = Component.translatable("createdangerclose.fire_control_solver.target_source.nav_table");
             } else if (mergedRangefinders > 1) {
                 source = Component.translatable("createdangerclose.fire_control_solver.target_source.rangefinders_merged",
@@ -977,8 +1065,9 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         int velocityCount = velocityAxisCounts[0] + velocityAxisCounts[1] + velocityAxisCounts[2];
         CDCLang.builder()
                 .add(Component.literal(String.format(
-                        "  [G:%d H:%d T:%d V:%d A:%d R:%d]",
-                        gimbalCount, navHeadingCount, navTargetCount, velocityCount, altitudeCount, rangefinderCount)))
+                        "  [G:%d H:%d T:%d M:%d V:%d A:%d R:%d]",
+                        gimbalCount, navHeadingCount, navTargetCount, mapTableCount, velocityCount, altitudeCount,
+                        rangefinderCount)))
                 .style(ChatFormatting.DARK_GRAY)
                 .forGoggles(tooltip);
 

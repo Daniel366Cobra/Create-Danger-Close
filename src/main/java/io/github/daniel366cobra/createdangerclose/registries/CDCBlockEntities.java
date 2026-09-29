@@ -9,6 +9,8 @@ import io.github.daniel366cobra.createdangerclose.block.cannon_servo.*;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverRenderer;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverVisual;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceRenderer;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceVisual;
@@ -56,11 +58,18 @@ public class CDCBlockEntities {
             .renderer(() -> BearingRenderer::new)
             .register();
 
+    public static final BlockEntityEntry<MapTableBlockEntity> MAP_TABLE = REGISTRATE
+            .blockEntity("map_table", MapTableBlockEntity::new)
+            .validBlocks(CDCBlocks.MAP_TABLE)
+            .renderer(() -> MapTableRenderer::new)
+            .register();
+
     public static void register() {
         BLOCK_ENTITIES.add(NETWORK_INTERFACE);
         BLOCK_ENTITIES.add(FIRE_CONTROL_SOLVER);
         BLOCK_ENTITIES.add(CANNON_SERVO_INPUT);
         BLOCK_ENTITIES.add(CANNON_SERVO_OUTPUT);
         BLOCK_ENTITIES.add(RANGEFINDER_BEARING);
+        BLOCK_ENTITIES.add(MAP_TABLE);
     }
 }

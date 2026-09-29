@@ -25,7 +25,9 @@
       "gimbal_z_angle": "Gimbal Z angle: %s",
       "nav_y_angle": "Nav Y angle: %s",
       "nav_target": "Target: %s",
-      "rangefinder": "Range: %s"
+      "rangefinder": "Range: %s",
+      "map_target": "Map target: %s",
+      "map_no_target": "Map table: no target"
     },
     "fire_control_solver": {
       "title": "Fire Control Solver",
@@ -44,7 +46,8 @@
       "target_source": {
         "rangefinder": "Source: Rangefinder (%ss old, ±%s m)",
         "rangefinders_merged": "Source: %s Rangefinders (%ss old, ±%s m)",
-        "nav_table": "Source: Navigation Table"
+        "nav_table": "Source: Navigation Table",
+        "map_table": "Source: Map Table"
       },
       "target_speed": "Target Speed",
       "solutions": "Fire Solutions:",
@@ -82,6 +85,16 @@
         "mount_fuze_other": "Fuze: %s",
         "mount_fuze_none": "Fuze: None",
         "mount_charge": "Charge: %s"
+      },
+      "map_table": {
+        "title": "Map Table",
+        "occupied": "There is already a map on this part of the table.",
+        "does_not_fit": "This map does not fit the others: it needs the same zoom and dimension, laid out like the land (north up).",
+        "target": "Target:",
+        "hint": {
+          "target": "Right-click: mark target, Shift: clear",
+          "view": "Scroll: zoom, Drag: move"
+        }
       },
       "rangefinder": {
         "readout": {
@@ -154,6 +167,15 @@
         "behaviour1": "The _further apart_ the lenses, the more _accurate_ the range reading.",
         "condition2": "When Wrenched on the top or bottom:",
         "behaviour2": "_Turns_ the lens to face the next direction."
+      },
+      "map_table.tooltip": {
+        "summary": "A plotting table for _maps_. Joins with neighbouring tables into a square of up to _3×3_.",
+        "condition1": "When right-clicked with a Filled Map:",
+        "behaviour1": "_Lays_ the map on that part of the table. Maps must share the same zoom and fit together _like the land_, north up.",
+        "condition2": "When right-clicked with an empty hand:",
+        "behaviour2": "_Opens_ the table, showing all its maps stitched together. _Right-click_ the maps to mark a _target_.",
+        "condition3": "When a Battle Network Interface faces it:",
+        "behaviour3": "_Shows_ the ship's position and _sends_ the marked target to the _Fire Control Solver_."
       },
       "rangefinder_eyepiece.tooltip": {
         "summary": "The operator's station on a _rangefinder_ tube. Place it _centred_ between the lenses, looking the same way.",

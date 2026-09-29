@@ -1,6 +1,8 @@
 package io.github.daniel366cobra.createdangerclose.block.network_interface;
 
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
+import com.simibubi.create.Create;
+import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dev.simulated_team.simulated.content.blocks.altitude_sensor.AltitudeSensorBlockEntity;
 import dev.simulated_team.simulated.content.blocks.gimbal_sensor.GimbalSensorBlockEntity;
@@ -12,6 +14,10 @@ import dev.simulated_team.simulated.index.SimBlocks;
 import dev.simulated_team.simulated.index.SimDataComponents;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -89,7 +95,24 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         if (be instanceof NavTableBlockEntity navTable) {
             return buildNavReading(navTable);
         }
+        if (be instanceof MapTableBlockEntity mapTable) {
+            return buildMapReading(mapTable);
+        }
         return new SensorReading.None();
+    }
+
+    /**
+     * Any block of a map table connects the whole table: it now shows the
+     * ship and the solver's plot, and its target (if any) goes onto the
+     * network. This is the one place data flows back from the network.
+     */
+    private SensorReading buildMapReading(MapTableBlockEntity mapTable) {
+        MapTableBlockEntity controller = mapTable.getControllerBE();
+        if (controller == null) {
+            return new SensorReading.None();
+        }
+        controller.markLinked(findSolverPlot());
+        return new SensorReading.MapTarget(controller.getTarget(), controller.getTargetTick());
     }
 
     private SensorReading buildGimbalReading(GimbalSensorBlockEntity gimbal) {
@@ -136,6 +159,20 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         }
 
         return new SensorReading.NavTarget(targetPos, navTable.getRelativeAngle());
+    }
+
+    /** The plot of the fire control solver on this interface's network, or an empty one. */
+    private BattlePlot findSolverPlot() {
+        KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
+        if (network == null) {
+            return BattlePlot.EMPTY;
+        }
+        for (KineticBlockEntity member : network.members.keySet()) {
+            if (member instanceof FireControlSolverBlockEntity solver) {
+                return solver.getPlot();
+            }
+        }
+        return BattlePlot.EMPTY;
     }
 
     private SensorReading buildVelocityReading(VelocitySensorBlockEntity velocity) {
@@ -227,6 +264,10 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 renderRangefinder(tooltip, r);
                 yield true;
             }
+            case SensorReading.MapTarget m -> {
+                renderMapTarget(tooltip, m);
+                yield true;
+            }
             case SensorReading.None ignored -> false;
         };
 
@@ -283,6 +324,18 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 .add(Component.literal("  • "))
                 .add(Component.translatable("createdangerclose.network_interface.nav_target",
                         String.format("%.0f, %.0f, %.0f", t.worldPos().x, t.worldPos().y, t.worldPos().z)))
+                .style(ChatFormatting.GOLD)
+                .forGoggles(tooltip);
+    }
+
+    private void renderMapTarget(List<Component> tooltip, SensorReading.MapTarget m) {
+        Vec3 pos = m.worldPos();
+        CDCLang.builder()
+                .add(Component.literal("  • "))
+                .add(pos != null
+                        ? Component.translatable("createdangerclose.network_interface.map_target",
+                                String.format("%.0f, %.0f, %.0f", pos.x, pos.y, pos.z))
+                        : Component.translatable("createdangerclose.network_interface.map_no_target"))
                 .style(ChatFormatting.GOLD)
                 .forGoggles(tooltip);
     }
