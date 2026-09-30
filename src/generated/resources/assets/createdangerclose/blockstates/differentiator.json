@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "createdangerclose:block/differentiator",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/differentiator"
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/differentiator",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/differentiator",
+      "y": 270
+    }
+  }
+}

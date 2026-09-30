@@ -1,6 +1,8 @@
 package io.github.daniel366cobra.createdangerclose.client.rangefinder;
 
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.network.RangefinderFirePayload;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -82,6 +84,13 @@ public final class RangefinderClientEvents {
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     static void onInteractionKey(InputEvent.InteractionKeyMappingTriggered event) {
         if (event.isUseItem() && RangefinderSight.isOperating()) {
+            event.setCanceled(true);
+            event.setSwingHand(false);
+        }
+        // TEMPORARY TEST AID: LMB at the eyepiece fires the guns on the
+        // rangefinder's battle network (see RangefinderFirePayload).
+        if (RangefinderFirePayload.ENABLED && event.isAttack() && RangefinderSight.isOperating()) {
+            PacketDistributor.sendToServer(new RangefinderFirePayload());
             event.setCanceled(true);
             event.setSwingHand(false);
         }

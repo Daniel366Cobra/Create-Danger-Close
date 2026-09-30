@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "createdangerclose:block/fuze_computer",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/fuze_computer"
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/fuze_computer",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/fuze_computer",
+      "y": 270
+    }
+  }
+}

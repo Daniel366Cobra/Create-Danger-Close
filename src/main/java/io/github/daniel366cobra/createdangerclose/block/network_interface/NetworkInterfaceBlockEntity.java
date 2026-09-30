@@ -15,9 +15,15 @@ import dev.simulated_team.simulated.index.SimDataComponents;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerBank;
+import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerModuleBlock;
+import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
+import net.minecraft.world.level.block.Block;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -78,6 +84,18 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return;
         }
 
+        // Facing any block of a fire control computer's bank (the Ballistic
+        // Computer or a module): not a sensor. This interface connects the
+        // computer to the network and drives it, one poll of the computer per
+        // poll of its own.
+        Block facing = level.getBlockState(checkPos).getBlock();
+        if (facing instanceof FireControlSolverBlock || facing instanceof ComputerModuleBlock) {
+            FireControlSolverBlockEntity computer = ComputerBank.findComputer(level, checkPos);
+            setSensorReading(computer != null && computer.pollFrom(this)
+                    ? new SensorReading.Computer() : new SensorReading.None());
+            return;
+        }
+
         var be = level.getBlockEntity(checkPos);
         setSensorReading(classify(be));
     }
@@ -98,7 +116,21 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         if (be instanceof MapTableBlockEntity mapTable) {
             return buildMapReading(mapTable);
         }
+        if (be instanceof NavigationConsoleBlockEntity console) {
+            // Not a sensor: the console reads the network's sensors through this interface.
+            console.pollFrom(this);
+            return new SensorReading.NavConsole();
+        }
         return new SensorReading.None();
+    }
+
+    /** The fire control computer this interface faces and drives, if any. */
+    @Nullable
+    public FireControlSolverBlockEntity getLinkedComputer() {
+        if (level == null || !(reading instanceof SensorReading.Computer)) {
+            return null;
+        }
+        return ComputerBank.findComputer(level, worldPosition.relative(getBlockState().getValue(FACING)));
     }
 
     /**
@@ -161,15 +193,22 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return new SensorReading.NavTarget(targetPos, navTable.getRelativeAngle());
     }
 
-    /** The plot of the fire control solver on this interface's network, or an empty one. */
+    /**
+     * The plot of the fire control computer on this interface's network, or
+     * an empty one. The computer is not on the network itself; it is found
+     * through the interface that drives it.
+     */
     private BattlePlot findSolverPlot() {
         KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
         if (network == null) {
             return BattlePlot.EMPTY;
         }
         for (KineticBlockEntity member : network.members.keySet()) {
-            if (member instanceof FireControlSolverBlockEntity solver) {
-                return solver.getPlot();
+            if (member instanceof NetworkInterfaceBlockEntity other) {
+                FireControlSolverBlockEntity computer = other.getLinkedComputer();
+                if (computer != null) {
+                    return computer.getPlot();
+                }
             }
         }
         return BattlePlot.EMPTY;
@@ -266,6 +305,22 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             }
             case SensorReading.MapTarget m -> {
                 renderMapTarget(tooltip, m);
+                yield true;
+            }
+            case SensorReading.Computer ignored -> {
+                CDCLang.builder()
+                        .add(Component.literal("  • "))
+                        .add(Component.translatable("createdangerclose.network_interface.computer"))
+                        .style(ChatFormatting.GREEN)
+                        .forGoggles(tooltip);
+                yield true;
+            }
+            case SensorReading.NavConsole ignored -> {
+                CDCLang.builder()
+                        .add(Component.literal("  • "))
+                        .add(Component.translatable("createdangerclose.network_interface.nav_console"))
+                        .style(ChatFormatting.GREEN)
+                        .forGoggles(tooltip);
                 yield true;
             }
             case SensorReading.None ignored -> false;

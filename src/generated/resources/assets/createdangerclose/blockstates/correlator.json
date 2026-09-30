@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "createdangerclose:block/correlator",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/correlator"
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/correlator",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/correlator",
+      "y": 270
+    }
+  }
+}

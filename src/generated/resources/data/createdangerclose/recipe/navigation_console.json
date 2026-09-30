@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "create:brass_casing"
+    },
+    {
+      "item": "create:precision_mechanism"
+    },
+    {
+      "item": "minecraft:compass"
+    }
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:navigation_console"
+  }
+}

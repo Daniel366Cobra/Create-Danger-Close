@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "create:brass_casing"
+    },
+    {
+      "item": "create:precision_mechanism"
+    },
+    {
+      "item": "create:turntable"
+    }
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:integrator"
+  }
+}

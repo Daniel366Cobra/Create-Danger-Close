@@ -3,8 +3,6 @@ package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 import com.mojang.serialization.MapCodec;
 import io.github.daniel366cobra.createdangerclose.CDCStats;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -44,17 +42,6 @@ public class RangefinderLensBlock extends RangefinderOpticBlock {
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         super.createBlockStateDefinition(builder);
         builder.add(CRACKED);
-    }
-
-    /**
-     * Like Create's directional blocks: the lens looks back at the player
-     * placing it, or away from them when they sneak.
-     */
-    @Override
-    public BlockState getStateForPlacement(BlockPlaceContext context) {
-        Direction looking = context.getHorizontalDirection();
-        boolean sneaking = context.getPlayer() != null && context.getPlayer().isShiftKeyDown();
-        return defaultBlockState().setValue(FACING, sneaking ? looking : looking.getOpposite());
     }
 
     /** Whether this is a cracked lens that the held item (a glass pane) can repair. */

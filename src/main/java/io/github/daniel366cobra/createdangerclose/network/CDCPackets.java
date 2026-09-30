@@ -19,6 +19,9 @@ public final class CDCPackets {
                 .playToServer(RangefinderRangingPayload.TYPE, RangefinderRangingPayload.STREAM_CODEC,
                         RangefinderRangingPayload::handle)
                 .playToServer(MapTableTargetPayload.TYPE, MapTableTargetPayload.STREAM_CODEC,
-                        MapTableTargetPayload::handle);
+                        MapTableTargetPayload::handle)
+                // Temporary test aid, see RangefinderFirePayload.
+                .playToServer(RangefinderFirePayload.TYPE, RangefinderFirePayload.STREAM_CODEC,
+                        RangefinderFirePayload::handle);
     }
 }

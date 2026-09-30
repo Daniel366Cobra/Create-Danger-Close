@@ -4,6 +4,8 @@ import com.simibubi.create.Create;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
+import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
@@ -14,6 +16,7 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
 import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
+import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
 import net.minecraft.ChatFormatting;
@@ -36,6 +39,7 @@ import org.joml.Vector3dc;
 import rbasamoyai.createbigcannons.config.CBCConfigs;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,7 +48,14 @@ import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PI
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YAW;
 
 /**
- * Fire control solver.
+ * The Ballistic Computer: the core of the fire control computer, which works
+ * out the firing solutions.
+ *
+ * <p>It is not a kinetic block. A Battle Network Interface facing it connects
+ * it to the battle network: each time that interface polls, it drives one
+ * poll of the computer ({@link #pollFrom}), which reads the sensors and
+ * servos on the interface's network. When the interface stops, the link
+ * lapses and the computer goes idle.
  *
  * <p>Sensors on the battle network act as <em>gates</em>: they decide which
  * capabilities the solver has, but their readings are not fed into the math.
@@ -53,10 +64,25 @@ import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YA
  * readings from anyway. The only sensor value that is used is the target
  * position from a navigation table, which the pose cannot provide.
  */
-public class FireControlSolverBlockEntity extends KineticBlockEntity
+public class FireControlSolverBlockEntity extends SmartBlockEntity
         implements IHaveGoggleInformation {
 
-    public static final float MIN_OPERATING_RPM = 32.0f;
+    // The link to the interface lapses this long after its last poll
+    // (a powered interface polls at least every 20 ticks).
+    private static final int LINK_TIMEOUT_TICKS = 40;
+
+    // The network interface driving this computer (server only), and when it last polled.
+    @Nullable private BlockPos linkedInterface;
+    private long lastLinkTick;
+
+    // Without an Integrator, a rangefinder solution lapses this soon after its
+    // last reading (two polls at the slowest poll rate, so it does not flicker).
+    private static final int UNHELD_SOLUTION_LIFETIME_TICKS = 40;
+
+    // --- Module gates: what is in the bank around this computer ---
+    private final Set<ComputerModule> modules = EnumSet.noneOf(ComputerModule.class);
+    // Another Ballistic Computer touches this one's modules: neither works.
+    private boolean bankConflict = false;
 
     // --- Sensor gates: what is present on the battle network ---
     private int gimbalCount = 0;
@@ -68,16 +94,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     // already covered are redundant: they count, but add no capability.
     private final int[] velocityAxisCounts = new int[3];
 
-    // --- Own-ship state from the sublevel pose (tooltip only) ---
+    // Whether the computer is on a physics object at all (tooltip warning).
     private boolean hasPose = false;
-    private double shipPitchDeg = 0;
-    private double shipHeadingDeg = 0;
-    private double shipRollDeg = 0;
-    // Ship-frame velocity at the solver, m/s.
-    private double shipVelX = 0;
-    private double shipVelY = 0;
-    private double shipVelZ = 0;
-    private double shipAltitude = 0;
 
     // --- Target: rangefinder solution > map table > navigation table ---
     // Saved by ordinal: add new sources at the end.
@@ -134,14 +152,76 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         super(type, pos, state);
     }
 
+    @Override
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
+
     /**
-     * The battle network, looked up fresh on every use: Create replaces the
-     * {@link KineticNetwork} instance when a network loses and regains its
-     * source, so a cached reference goes stale.
+     * The battle network: that of the interface driving this computer. Looked
+     * up fresh on every use: Create replaces the {@link KineticNetwork}
+     * instance when a network loses and regains its source, so a cached
+     * reference goes stale.
      */
     @Nullable
     private KineticNetwork battleNetwork() {
-        return Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
+        if (level == null || linkedInterface == null
+                || !(level.getBlockEntity(linkedInterface) instanceof NetworkInterfaceBlockEntity networkInterface))
+            return null;
+        return Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(networkInterface);
+    }
+
+    /**
+     * Called by a powered network interface facing this computer, each time
+     * it polls: links the computer to that interface's network and runs one
+     * poll. Only one interface can drive a computer; a second one is turned
+     * away while the first is still polling.
+     *
+     * @return whether this interface is the one driving the computer
+     */
+    public boolean pollFrom(NetworkInterfaceBlockEntity networkInterface) {
+        if (level == null || level.isClientSide())
+            return false;
+        BlockPos interfacePos = networkInterface.getBlockPos();
+        if (linkedInterface != null && !linkedInterface.equals(interfacePos) && isLinkFresh())
+            return false;
+
+        linkedInterface = interfacePos;
+        lastLinkTick = level.getGameTime();
+        isPowered = true;
+        scanBank();
+        if (bankConflict) {
+            invalidateData();
+            clearServos();
+        } else {
+            pollNetwork();
+            pollAndPushServos();
+        }
+        notifyUpdate();
+        return true;
+    }
+
+    /** Rescans the bank each poll: it is at most a handful of blocks, and needs no bookkeeping. */
+    private void scanBank() {
+        ComputerBank.Scan scan = ComputerBank.scan(level, worldPosition);
+        modules.clear();
+        modules.addAll(scan.modules());
+        bankConflict = scan.cores().size() > 1;
+    }
+
+    /** Whether the bank has this module, i.e. the computer has its capability. */
+    public boolean has(ComputerModule module) {
+        return modules.contains(module);
+    }
+
+    private void clearServos() {
+        KineticNetwork network = battleNetwork();
+        if (network == null) return;
+        for (KineticBlockEntity member : network.members.keySet())
+            if (member instanceof SolverServo servo)
+                servo.receiveFiringSolution(null);
+    }
+
+    private boolean isLinkFresh() {
+        return level != null && level.getGameTime() - lastLinkTick <= LINK_TIMEOUT_TICKS;
     }
 
     @Override
@@ -150,18 +230,11 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         if (level == null || level.isClientSide()) return;
 
-        float speed = Math.abs(getSpeed());
-        isPowered = speed >= MIN_OPERATING_RPM;
-
-        if (!isPowered) {
+        // The interface stopped polling (unpowered, turned away, removed): go idle.
+        if (isPowered && !isLinkFresh()) {
+            isPowered = false;
+            linkedInterface = null;
             invalidateData();
-            notifyUpdate();
-        }
-
-        int pollInterval = (int) Math.max(1, 640f / speed);
-        if (level.getGameTime() % pollInterval == 0) {
-            pollNetwork();
-            pollAndPushServos();
             notifyUpdate();
         }
     }
@@ -171,9 +244,6 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         java.util.Arrays.fill(velocityAxisCounts, 0);
 
         hasPose = false;
-        shipPitchDeg = shipHeadingDeg = shipRollDeg = 0;
-        shipVelX = shipVelY = shipVelZ = 0;
-        shipAltitude = 0;
 
         hasTarget = false;
         targetSource = TargetSource.NONE;
@@ -206,7 +276,6 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member instanceof RangefinderBearingBlockEntity rangefinder)
                 rangefinders.add(rangefinder);
-            if (member == this) continue;
             if (!(member instanceof SensorReading.Provider provider)) continue;
 
             switch (provider.getSensorReading()) {
@@ -236,6 +305,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                             && (mapTarget == null || m.designatedTick() > mapTarget.designatedTick()))
                         mapTarget = m;
                 }
+                case SensorReading.Computer ignored -> { }
+                case SensorReading.NavConsole ignored -> { }
                 case SensorReading.None ignored -> { }
             }
         }
@@ -270,14 +341,23 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
     private boolean isFresh(SensorReading.Rangefinder reading) {
         long age = level.getGameTime() - reading.sampleTick();
-        return age >= 0 && age <= RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS;
+        // Without an Integrator nothing holds the solution between readings.
+        long lifetime = has(ComputerModule.INTEGRATOR)
+                ? RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS : UNHELD_SOLUTION_LIFETIME_TICKS;
+        return age >= 0 && age <= lifetime;
     }
 
-    /** A reading carried forward to now on its tracked velocity. */
+    /**
+     * A reading carried forward to now on its tracked velocity. That takes
+     * both the Differentiator (the velocity) and the Integrator (carrying it
+     * forward); otherwise the reading stays where it was measured.
+     */
     private Vector3d extrapolate(SensorReading.Rangefinder reading) {
         long age = level.getGameTime() - reading.sampleTick();
         Vector3d position = new Vector3d(reading.hitWorldPos().x, reading.hitWorldPos().y, reading.hitWorldPos().z);
-        return reading.targetVelocity() != null ? position.fma(age, reading.targetVelocity()) : position;
+        boolean carryForward = reading.targetVelocity() != null
+                && has(ComputerModule.DIFFERENTIATOR) && has(ComputerModule.INTEGRATOR);
+        return carryForward ? position.fma(age, reading.targetVelocity()) : position;
     }
 
     /**
@@ -319,6 +399,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
             Vector3d position = extrapolate(reading);
             boolean isDirecting = entry.getKey().equals(directingRangefinder);
             if (!isDirecting) {
+                if (!has(ComputerModule.CORRELATOR))
+                    continue; // nothing to merge readings with: standby
                 double tolerance = Math.max(MIN_MERGE_DISTANCE, MERGE_SIGMAS * Math.sqrt(
                         directing.rangeSigma() * directing.rangeSigma() + reading.rangeSigma() * reading.rangeSigma()));
                 if (position.distance(directingPosition) > tolerance)
@@ -335,7 +417,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         }
 
         weightedPosition.div(positionWeight);
-        hasTargetVelocity = velocityWeight > 0;
+        // Leading the target takes a Differentiator.
+        hasTargetVelocity = velocityWeight > 0 && has(ComputerModule.DIFFERENTIATOR);
         if (hasTargetVelocity)
             weightedVelocity.div(velocityWeight);
         targetVelX = hasTargetVelocity ? weightedVelocity.x : 0;
@@ -353,31 +436,9 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         return merged;
     }
 
-    /** Samples the solver's own sublevel pose for the tooltip. */
+    /** Whether the computer sits on a physics object, for the tooltip warning. */
     private void readOwnShipState() {
-        if (level == null) return;
-        SubLevel subLevel = Sable.HELPER.getContaining(level, worldPosition);
-        if (subLevel == null) return;
-
-        Quaterniondc q = subLevel.logicalPose().orientation();
-
-        // Heading/pitch of the ship's +Z axis, roll of its +X axis about it.
-        Vector3d forward = q.transform(new Vector3d(0, 0, 1));
-        Vector3d right = q.transform(new Vector3d(1, 0, 0));
-        Vector3d up = q.transform(new Vector3d(0, 1, 0));
-        shipHeadingDeg = yawOf(forward);
-        shipPitchDeg = pitchOf(forward);
-        shipRollDeg = Math.toDegrees(Math.atan2(right.y, up.y));
-
-        Vector3d center = blockCenter(worldPosition);
-        Vector3d worldVel = Sable.HELPER.getVelocity(level, subLevel, center, new Vector3d());
-        Vector3d shipVel = q.transformInverse(worldVel, new Vector3d());
-        shipVelX = shipVel.x;
-        shipVelY = shipVel.y;
-        shipVelZ = shipVel.z;
-
-        shipAltitude = subLevel.logicalPose().transformPosition(center, new Vector3d()).y;
-        hasPose = true;
+        hasPose = level != null && Sable.HELPER.getContaining(level, worldPosition) != null;
     }
 
     // --- Gates ---
@@ -430,7 +491,6 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         List<BattlePlot.GunRange> guns = new ArrayList<>();
 
         for (KineticBlockEntity member : network.members.keySet()) {
-            if (member == this) continue;
             if (!(member instanceof SolverServo servo)) continue;
 
             var status = servo.getServoStatus();
@@ -502,7 +562,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
      */
     @Nullable
     private FireSolution withRates(ServoStatus status, @Nullable FireSolution solution) {
-        if (solution == null || level == null) return solution;
+        // Rates are the Differentiator's job; without it servos only chase the angles.
+        if (solution == null || level == null || !has(ComputerModule.DIFFERENTIATOR)) return solution;
 
         BlockPos mountPos = status.mounts().get(0).mountPos();
         long now = level.getGameTime();
@@ -684,7 +745,9 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         lastPitchResults.put(servoPos, result);
         logSolve(mount, "PITCH", "OK", result, shipPitchDeg, shipYawDeg, inheritedVelocity);
 
-        FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg, result.fuzeTicks(), true);
+        // A fuze time of 0 leaves the fuze as loaded; setting it takes a Fuze Computer.
+        FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg,
+                has(ComputerModule.FUZE_COMPUTER) ? result.fuzeTicks() : 0, true);
         aimCache.put(mount.mountPos(), solution);
         return solution;
     }
@@ -699,7 +762,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
      * The solver only compensates along ship axes it has velocity sensors for.
      */
     private Vector3d inheritedLaunchVelocity(SubLevel mountSubLevel, BlockPos mountPos) {
-        if (level == null || velocityAxesCovered() == 0
+        // Compensating for own-ship speed takes an Integrator (and velocity sensors).
+        if (level == null || velocityAxesCovered() == 0 || !has(ComputerModule.INTEGRATOR)
                 || !CBCConfigs.server().compat.sableProjectilesInheritPhysicsObjectVelocity.get()) {
             return new Vector3d();
         }
@@ -754,15 +818,8 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     public boolean hasPose() { return hasPose; }
     public boolean hasTarget() { return hasTarget; }
 
-    public double getShipPitchDeg() { return shipPitchDeg; }
-    public double getShipHeadingDeg() { return shipHeadingDeg; }
-    public double getShipRollDeg() { return shipRollDeg; }
 
-    public double getShipVelX() { return shipVelX; }
-    public double getShipVelY() { return shipVelY; }
-    public double getShipVelZ() { return shipVelZ; }
 
-    public double getShipAltitude() { return shipAltitude; }
 
     public double getTargetX() { return targetX; }
     public double getTargetY() { return targetY; }
@@ -778,6 +835,12 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(compound, registries, clientPacket);
         this.isPowered = compound.getBoolean("IsPowered");
+        this.bankConflict = compound.getBoolean("BankConflict");
+        this.modules.clear();
+        int moduleBits = compound.getInt("Modules");
+        for (ComputerModule module : ComputerModule.values())
+            if ((moduleBits & 1 << module.ordinal()) != 0)
+                this.modules.add(module);
 
         this.gimbalCount = compound.getInt("GimbalCount");
         this.navHeadingCount = compound.getInt("NavHeadingCount");
@@ -789,13 +852,6 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         this.velocityAxisCounts[2] = compound.getInt("VelocityCountZ");
 
         this.hasPose = compound.getBoolean("HasPose");
-        this.shipPitchDeg = compound.getDouble("ShipPitch");
-        this.shipHeadingDeg = compound.getDouble("ShipHeading");
-        this.shipRollDeg = compound.getDouble("ShipRoll");
-        this.shipVelX = compound.getDouble("VelX");
-        this.shipVelY = compound.getDouble("VelY");
-        this.shipVelZ = compound.getDouble("VelZ");
-        this.shipAltitude = compound.getDouble("Altitude");
 
         this.hasTarget = compound.getBoolean("HasTarget");
         this.targetX = compound.getDouble("TargetX");
@@ -834,6 +890,11 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
     protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(compound, registries, clientPacket);
         compound.putBoolean("IsPowered", isPowered);
+        compound.putBoolean("BankConflict", bankConflict);
+        int moduleBits = 0;
+        for (ComputerModule module : modules)
+            moduleBits |= 1 << module.ordinal();
+        compound.putInt("Modules", moduleBits);
 
         compound.putInt("GimbalCount", gimbalCount);
         compound.putInt("NavHeadingCount", navHeadingCount);
@@ -845,13 +906,6 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
         compound.putInt("VelocityCountZ", velocityAxisCounts[2]);
 
         compound.putBoolean("HasPose", hasPose);
-        compound.putDouble("ShipPitch", shipPitchDeg);
-        compound.putDouble("ShipHeading", shipHeadingDeg);
-        compound.putDouble("ShipRoll", shipRollDeg);
-        compound.putDouble("VelX", shipVelX);
-        compound.putDouble("VelY", shipVelY);
-        compound.putDouble("VelZ", shipVelZ);
-        compound.putDouble("Altitude", shipAltitude);
 
         compound.putBoolean("HasTarget", hasTarget);
         compound.putDouble("TargetX", targetX);
@@ -891,10 +945,34 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
 
         if (!isPowered) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.error.network_too_slow"))
+                    .add(Component.translatable("createdangerclose.fire_control_solver.not_connected"))
                     .style(ChatFormatting.RED)
                     .forGoggles(tooltip);
             return true;
+        }
+
+        if (bankConflict) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.fire_control_solver.bank_conflict"))
+                    .style(ChatFormatting.RED)
+                    .forGoggles(tooltip);
+            return true;
+        }
+
+        // --- Modules: installed ones, then what each missing one costs ---
+        CDCLang.builder()
+                .add(Component.translatable("createdangerclose.fire_control_solver.modules"))
+                .style(ChatFormatting.GRAY)
+                .forGoggles(tooltip);
+        for (ComputerModule module : ComputerModule.values()) {
+            boolean installed = has(module);
+            CDCLang.builder()
+                    .add(Component.literal(installed ? "  ✔ " : "  ✖ "))
+                    .add(Component.translatable("block.createdangerclose." + module.id()))
+                    .add(installed ? Component.empty() : Component.literal(": ").append(Component.translatable(
+                            "createdangerclose.fire_control_solver.module_missing." + module.id())))
+                    .style(installed ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
+                    .forGoggles(tooltip);
         }
 
         if (!hasPose) {
@@ -904,57 +982,11 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                     .forGoggles(tooltip);
         }
 
-        // --- Orientation ---
-        boolean hasGimbal = gimbalCount > 0;
-        boolean hasHeading = navHeadingCount > 0;
-        if (hasGimbal && hasHeading) {
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.ship_angle"))
-                    .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
-                    .add(CDCLang.numberWithUnit(shipPitchDeg, "createdangerclose.unit.angle").withStyle(ChatFormatting.RED))
-                    .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
-                    .add(CDCLang.numberWithUnit(shipHeadingDeg, "createdangerclose.unit.angle").withStyle(ChatFormatting.GREEN))
-                    .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
-                    .add(CDCLang.numberWithUnit(shipRollDeg, "createdangerclose.unit.angle").withStyle(ChatFormatting.BLUE))
-                    .forGoggles(tooltip);
-        } else if (hasGimbal) {
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.gimbal_angle"))
-                    .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
-                    .add(CDCLang.numberWithUnit(shipPitchDeg, "createdangerclose.unit.angle").withStyle(ChatFormatting.RED))
-                    .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
-                    .add(CDCLang.numberWithUnit(shipRollDeg, "createdangerclose.unit.angle").withStyle(ChatFormatting.BLUE))
-                    .forGoggles(tooltip);
-        } else if (hasHeading) {
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.heading_angle"))
-                    .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
-                    .add(CDCLang.numberWithUnit(shipHeadingDeg, "createdangerclose.unit.angle").withStyle(ChatFormatting.GREEN))
-                    .forGoggles(tooltip);
-        }
+        // --- Missing sensors (the ship's own readings are on the Navigation Console) ---
         if (!hasOrientationSensors()) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.fire_control_solver.missing_orientation"))
                     .style(ChatFormatting.DARK_RED)
-                    .forGoggles(tooltip);
-        }
-
-        // --- Velocity ---
-        if (velocityAxesCovered() > 0) {
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.ship_velocity"))
-                    .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
-                    .add(velocityComponent(0, shipVelX))
-                    .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
-                    .add(velocityComponent(1, shipVelY))
-                    .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
-                    .add(velocityComponent(2, shipVelZ))
-                    .forGoggles(tooltip);
-
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.velocity_axes",
-                            velocityAxisCount(0), velocityAxisCount(1), velocityAxisCount(2)))
-                    .style(ChatFormatting.GRAY)
                     .forGoggles(tooltip);
         }
         if (!hasFullVelocity()) {
@@ -963,15 +995,7 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
-
-        // --- Altitude ---
-        if (hasAltitudeSensor()) {
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.ship_altitude"))
-                    .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
-                    .add(CDCLang.numberWithUnit(shipAltitude, "createdangerclose.unit.distance").withStyle(ChatFormatting.AQUA))
-                    .forGoggles(tooltip);
-        } else {
+        if (!hasAltitudeSensor()) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.fire_control_solver.missing_altitude"))
                     .style(ChatFormatting.DARK_RED)
@@ -1072,22 +1096,5 @@ public class FireControlSolverBlockEntity extends KineticBlockEntity
                 .forGoggles(tooltip);
 
         return true;
-    }
-
-    /** A ship-frame velocity component, or a dash if no sensor covers that axis. */
-    private MutableComponent velocityComponent(int axis, double value) {
-        if (velocityAxisCounts[axis] == 0) {
-            return Component.literal("--").withStyle(ChatFormatting.DARK_GRAY);
-        }
-        return CDCLang.numberWithUnit(value, "createdangerclose.unit.velocity").withStyle(ChatFormatting.WHITE);
-    }
-
-    /** Sensor count for an axis: red if missing, yellow if redundant. */
-    private MutableComponent velocityAxisCount(int axis) {
-        int count = velocityAxisCounts[axis];
-        ChatFormatting color = count == 0 ? ChatFormatting.RED
-                : count > 1 ? ChatFormatting.YELLOW
-                : ChatFormatting.WHITE;
-        return Component.literal(Integer.toString(count)).withStyle(color);
     }
 }

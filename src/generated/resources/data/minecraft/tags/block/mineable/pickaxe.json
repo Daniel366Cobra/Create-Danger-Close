@@ -2,6 +2,11 @@
   "values": [
     "createdangerclose:network_interface",
     "createdangerclose:fire_control_solver",
+    "createdangerclose:differentiator",
+    "createdangerclose:integrator",
+    "createdangerclose:correlator",
+    "createdangerclose:fuze_computer",
+    "createdangerclose:navigation_console",
     "createdangerclose:cannon_servo_input",
     "createdangerclose:cannon_servo_output",
     "createdangerclose:rangefinder_bearing",

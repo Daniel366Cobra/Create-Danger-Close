@@ -1,92 +1,31 @@
 package io.github.daniel366cobra.createdangerclose.block.fire_control_solver;
 
-import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
-import com.simibubi.create.content.logistics.chute.AbstractChuteBlock;
 import com.simibubi.create.foundation.block.IBE;
-import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
+import com.simibubi.create.foundation.block.WrenchableDirectionalBlock;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
-import net.createmod.catnip.levelWrappers.WrappedLevel;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.item.context.UseOnContext;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.LevelReader;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
-public class FireControlSolverBlock extends DirectionalKineticBlock implements IBE<FireControlSolverBlockEntity> {
+/**
+ * The Ballistic Computer: the core of the fire control computer. It has no
+ * shaft of its own; a Battle Network Interface facing it connects it to the
+ * battle network and drives it. (The registry name is still
+ * {@code fire_control_solver}, from when it was a single kinetic block.)
+ */
+public class FireControlSolverBlock extends WrenchableDirectionalBlock implements IBE<FireControlSolverBlockEntity> {
 
     public FireControlSolverBlock(Properties properties) {
         super(properties);
     }
 
-    @Override
-    public void onPlace(BlockState state, Level worldIn, BlockPos pos, BlockState oldState, boolean isMoving) {
-        super.onPlace(state, worldIn, pos, oldState, isMoving);
-        blockUpdate(state, worldIn, pos);
-    }
-
-    @Override
-    public void updateIndirectNeighbourShapes(BlockState stateIn, LevelAccessor worldIn, BlockPos pos, int flags, int count) {
-        super.updateIndirectNeighbourShapes(stateIn, worldIn, pos, flags, count);
-        blockUpdate(stateIn, worldIn, pos);
-    }
-
-    @Override
-    public void neighborChanged(BlockState state, Level worldIn, BlockPos pos, Block blockIn, BlockPos fromPos,
-                                boolean isMoving) {
-        blockUpdate(state, worldIn, pos);
-    }
-
+    /** Like Create's directional blocks: faces the player placing it, or away when they sneak. */
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        Level world = context.getLevel();
-        BlockPos pos = context.getClickedPos();
-        Direction face = context.getClickedFace();
-
-        BlockState placedOn = world.getBlockState(pos.relative(face.getOpposite()));
-        BlockState placedOnOpposite = world.getBlockState(pos.relative(face));
-        if (AbstractChuteBlock.isChute(placedOn))
-            return defaultBlockState().setValue(FACING, face.getOpposite());
-        if (AbstractChuteBlock.isChute(placedOnOpposite))
-            return defaultBlockState().setValue(FACING, face);
-
-        Direction preferredFacing = getPreferredFacing(context);
-        if (preferredFacing == null)
-            preferredFacing = context.getNearestLookingDirection();
-        return defaultBlockState().setValue(FACING, context.getPlayer() != null && context.getPlayer()
-                .isShiftKeyDown() ? preferredFacing : preferredFacing.getOpposite());
-    }
-
-    protected void blockUpdate(BlockState state, LevelAccessor worldIn, BlockPos pos) {
-        if (worldIn instanceof WrappedLevel)
-            return;
-        notifyBlockEntity(worldIn, pos);
-    }
-
-    protected void notifyBlockEntity(LevelAccessor world, BlockPos pos) {
-        withBlockEntityDo(world, pos, FireControlSolverBlockEntity::pollNetwork);
-    }
-
-    @Override
-    public BlockState updateAfterWrenched(BlockState newState, UseOnContext context) {
-        blockUpdate(newState, context.getLevel(), context.getClickedPos());
-        return newState;
-    }
-
-    @Override
-    public Direction.Axis getRotationAxis(BlockState state) {
-        return state.getValue(FACING)
-                .getAxis();
-    }
-
-    @Override
-    public boolean hasShaftTowards(LevelReader world, BlockPos pos, BlockState state, Direction face) {
-        return face == state.getValue(FACING)
-                .getOpposite();
+        Direction looking = context.getNearestLookingDirection();
+        boolean sneaking = context.getPlayer() != null && context.getPlayer().isShiftKeyDown();
+        return defaultBlockState().setValue(FACING, sneaking ? looking : looking.getOpposite());
     }
 
     @Override

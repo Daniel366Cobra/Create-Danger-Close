@@ -10,15 +10,11 @@
     },
     "P": {
       "item": "create:precision_mechanism"
-    },
-    "S": {
-      "item": "create:shaft"
     }
   },
   "pattern": [
     "CEC",
-    "PPP",
-    " S "
+    "PPP"
   ],
   "result": {
     "count": 1,

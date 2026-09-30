@@ -7,6 +7,7 @@
       "network_too_slow": "This equipment's network is not rotating fast enough.",
       "jostled_case": "This equipment has been jostled. Accuracy is reduced. \nHit with Wrench to realign.",
       "broken_cogwheel": "This equipment has a broken cog. It is out of order. \nRMB with Cogwheel to repair.",
+      "broken_mechanism": "This equipment has a broken mechanism. It is out of order. \nRMB with Precision Mechanism to repair.",
       "broken_lens": "This equipment has a cracked lens. Accuracy is severely reduced. \nRMB with Glass Pane to repair.",
       "dusty_lens": "This equipment has a dusty lens. Accuracy is reduced. \nRMB with Water Bucket to clean."
     },
@@ -27,19 +28,39 @@
       "nav_target": "Target: %s",
       "rangefinder": "Range: %s",
       "map_target": "Map target: %s",
-      "map_no_target": "Map table: no target"
+      "map_no_target": "Map table: no target",
+      "computer": "Fire control computer (driving)",
+      "nav_console": "Navigation console"
     },
-    "fire_control_solver": {
-      "title": "Fire Control Solver",
-      "ship_velocity": "Ship Velocity",
+    "navigation_console": {
+      "title": "Navigation Console",
+      "not_connected": "Not connected. Needs a powered Battle Network Interface facing it.",
+      "no_sublevel": "Not on a physics object",
       "ship_angle": "Ship Angle",
       "gimbal_angle": "Gimbal Angle",
       "heading_angle": "Ship Heading",
+      "ship_velocity": "Ship Velocity",
+      "velocity_axes": "Velocity Sensors: X %s, Y %s, Z %s",
       "ship_altitude": "Ship Altitude",
+      "no_gimbal": "Pitch and roll: no Gimbal Sensor on the network",
+      "no_heading": "Heading: no heading sensor on the network",
+      "no_velocity": "Velocity: no Velocity Sensor on the network",
+      "no_altitude": "Altitude: no Altitude Sensor on the network"
+    },
+    "fire_control_solver": {
+      "title": "Ballistic Computer",
+      "not_connected": "Not connected. Needs a powered Battle Network Interface facing it.",
+      "bank_conflict": "Two Ballistic Computers share modules. Move them apart.",
+      "modules": "Modules:",
+      "module_missing": {
+        "differentiator": "no target lead, servos lag",
+        "integrator": "solutions lapse in 2 s, no own-ship speed correction",
+        "correlator": "rangefinders are not merged",
+        "fuze_computer": "fuze timers are not set"
+      },
       "target": "Target",
       "missing_orientation": "Missing: Gimbal or Heading",
       "missing_velocity": "Missing: Velocity (needs sensors on X, Y and Z)",
-      "velocity_axes": "Velocity Sensors: X %s, Y %s, Z %s",
       "no_sublevel": "Not on a physics object",
       "missing_altitude": "Missing: Altitude",
       "missing_target": "Missing: Target",
@@ -90,6 +111,9 @@
         "title": "Map Table",
         "occupied": "There is already a map on this part of the table.",
         "does_not_fit": "This map does not fit the others: it needs the same zoom and dimension, laid out like the land (north up).",
+        "connected": "Connected to the battle network",
+        "not_connected": "Not connected to a battle network",
+        "no_target": "No target marked",
         "target": "Target:",
         "hint": {
           "target": "Right-click: mark target, Shift: clear",
@@ -147,13 +171,44 @@
     "block.createdangerclose": {
       "network_interface.tooltip": {
         "summary": "Interfaces Simulated Sensors to kinetic Battle Networks.",
-        "condition1": "When facing a Gimbal, Altitude or Velocity Sensor, or a Navigation table:",
-        "behaviour1": "_Polls_ the sensor at a rate proportional to input RPM."
+        "condition1": "When facing a Gimbal, Altitude or Velocity Sensor, or a Navigation Table:",
+        "behaviour1": "_Polls_ the sensor at a rate proportional to input RPM.",
+        "condition2": "When facing a Ballistic Computer:",
+        "behaviour2": "_Connects_ the computer to the Battle Network and _drives_ it at the same rate.",
+        "condition3": "When facing a Map Table:",
+        "behaviour3": "_Connects_ the table: it shows the ship and the computer's plot, and its target goes to the computer."
       },
       "fire_control_solver.tooltip": {
-        "summary": "Computes firing solutions for Cannon Mounts.",
-        "condition1": "When connected to a kinetic Battle Network:",
-        "behaviour1": "_Polls_ sensor Interfaces and _computes_ firing solutions."
+        "summary": "The core of the fire control computer: _computes_ firing solutions for Cannon Mounts.",
+        "condition1": "When a powered Battle Network Interface faces it:",
+        "behaviour1": "_Joins_ that interface's Battle Network, reads its sensors and _sends_ firing solutions to its servos.",
+        "condition2": "When modules touch it, directly or through other modules:",
+        "behaviour2": "Each kind of module _adds a capability_. The computer's goggles list what is installed and what is missing."
+      },
+      "differentiator.tooltip": {
+        "summary": "A module for the _Ballistic Computer_. Works out how fast the target is moving.",
+        "condition1": "When part of a computer's bank:",
+        "behaviour1": "The guns _lead_ a moving target, and servos _track smoothly_ instead of lagging behind."
+      },
+      "integrator.tooltip": {
+        "summary": "A module for the _Ballistic Computer_. Keeps the solution running between readings.",
+        "condition1": "When part of a computer's bank:",
+        "behaviour1": "A rangefinder solution is _held for 10 seconds_ after ranging stops, and the ship's own speed is _compensated_ (needs Velocity Sensors). With a _Differentiator_, the held target keeps moving."
+      },
+      "correlator.tooltip": {
+        "summary": "A module for the _Ballistic Computer_. Combines several rangefinders.",
+        "condition1": "When part of a computer's bank:",
+        "behaviour1": "Rangefinders ranging the _same target_ are _merged_ into one more accurate fix."
+      },
+      "navigation_console.tooltip": {
+        "summary": "Shows the ship's own _attitude_, _speed_ and _altitude_ through Goggles.",
+        "condition1": "When a powered Battle Network Interface faces it:",
+        "behaviour1": "_Shows_ each reading the network has a _sensor_ for: Gimbal, heading, Velocity and Altitude."
+      },
+      "fuze_computer.tooltip": {
+        "summary": "A module for the _Ballistic Computer_. Works out fuze times.",
+        "condition1": "When part of a computer's bank:",
+        "behaviour1": "_Timed fuzes_ in loaded shells are _set_ to the time of flight."
       },
       "rangefinder_bearing.tooltip": {
         "summary": "Carries a _rangefinder_ and trains it towards a bearing.",

@@ -1,6 +1,9 @@
 package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.simibubi.create.api.connectivity.ConnectivityHandler;
+import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
+import io.github.daniel366cobra.createdangerclose.CDCLang;
+import net.minecraft.ChatFormatting;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
@@ -58,7 +61,8 @@ import java.util.UUID;
  * by exactly as many map widths as its block is offset from theirs (east = +X,
  * south = +Z, north up).
  */
-public class MapTableBlockEntity extends SmartBlockEntity implements IMultiBlockEntityContainer, MenuProvider {
+public class MapTableBlockEntity extends SmartBlockEntity
+        implements IMultiBlockEntityContainer, MenuProvider, IHaveGoggleInformation {
 
     public static final int MAX_WIDTH = 3;
     // How often, and how far out, the controller pushes map contents to players.
@@ -487,6 +491,39 @@ public class MapTableBlockEntity extends SmartBlockEntity implements IMultiBlock
     @Override
     public void setWidth(int width) {
         this.width = width;
+    }
+
+    // --- Tooltip ---
+
+    /** Any block of the table shows the whole table's state, which the controller holds. */
+    @Override
+    public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+        MapTableBlockEntity table = getControllerBE();
+        if (table == null)
+            return false;
+
+        CDCLang.builder()
+                .add(Component.translatable("createdangerclose.map_table.title"))
+                .forGoggles(tooltip);
+        CDCLang.builder()
+                .add(Component.translatable(table.linked
+                        ? "createdangerclose.map_table.connected" : "createdangerclose.map_table.not_connected"))
+                .style(table.linked ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
+                .forGoggles(tooltip);
+        if (table.target != null) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.map_table.target"))
+                    .add(Component.literal(" ").withStyle(ChatFormatting.RESET))
+                    .add(Component.literal(String.format("%.0f, %.0f, %.0f",
+                            table.target.x, table.target.y, table.target.z)).withStyle(ChatFormatting.GOLD))
+                    .forGoggles(tooltip);
+        } else {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.map_table.no_target"))
+                    .style(ChatFormatting.DARK_GRAY)
+                    .forGoggles(tooltip);
+        }
+        return true;
     }
 
     // --- Menu ---
