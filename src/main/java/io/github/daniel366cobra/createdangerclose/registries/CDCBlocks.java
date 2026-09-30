@@ -14,6 +14,7 @@ import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoBlockItem;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoInputBlock;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlock;
+import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerCasingCTBehaviour;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerModule;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerModuleBlock;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
@@ -35,6 +36,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.storage.loot.functions.CopyBlockState;
 import net.minecraft.world.level.storage.loot.predicates.LootItemBlockStatePropertyCondition;
+import net.neoforged.neoforge.client.model.generators.ConfiguredModel;
 import net.neoforged.neoforge.client.model.generators.ModelFile;
 
 import java.util.ArrayList;
@@ -76,7 +78,16 @@ public class CDCBlocks {
     public static final BlockEntry<FireControlSolverBlock> FIRE_CONTROL_SOLVER = REGISTRATE.block("fire_control_solver", FireControlSolverBlock::new)
             .initialProperties(SharedProperties::softMetal)
             .properties(p -> p.mapColor(MapColor.PODZOL))
-            .blockstate(BlockStateGen.directionalBlockProvider(true))
+            // Faces of its model textured with block/computer/computer join the cabinet casing.
+            .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
+            // The current model was made for a 6-way block, front facing up; tipped
+            // forward 90° it faces north. Drop the x rotation once the model is
+            // redone facing north like the modules.
+            .blockstate((c, p) -> p.getVariantBuilder(c.get()).forAllStates(state -> ConfiguredModel.builder()
+                    .modelFile(p.models().getExistingFile(p.modLoc("block/fire_control_solver/block")))
+                    .rotationX(90)
+                    .rotationY(((int) state.getValue(FireControlSolverBlock.FACING).toYRot() + 180) % 360)
+                    .build()))
             .transform(axeOrPickaxe())
             // No shaft and no stress impact: a network interface facing it drives it.
             .item()
@@ -131,10 +142,12 @@ public class CDCBlocks {
                 .initialProperties(SharedProperties::softMetal)
                 .properties(p -> p.mapColor(MapColor.PODZOL))
                 .transform(axeOrPickaxe())
+                // Plain faces use the computer casing, which joins across the bank.
+                .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
                 .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientable(c.getName(),
-                        p.modLoc("block/computer/side"),
+                        p.modLoc("block/computer/computer"),
                         p.modLoc("block/computer/" + c.getName() + "_front"),
-                        p.modLoc("block/computer/top"))))
+                        p.modLoc("block/computer/computer"))))
                 .simpleItem()
                 .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
                         .requires(AllBlocks.BRASS_CASING)
@@ -266,6 +279,21 @@ public class CDCBlocks {
             .initialProperties(SharedProperties::softMetal)
             .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
             .transform(axeOrPickaxe())
+            // Wall-mounted: it moves with the block its plate is bolted to, and as a
+            // brittle block it is removed first and placed last, so it does not
+            // pop off while a contraption assembles or disassembles.
+            .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
+                if (!(state.getBlock() instanceof RangefinderEyepieceBlock))
+                    return BlockMovementChecks.CheckResult.PASS;
+                if (RangefinderEyepieceBlock.getSupportDirection(state) != direction)
+                    return BlockMovementChecks.CheckResult.PASS;
+                return BlockMovementChecks.CheckResult.SUCCESS;
+            }))
+            .onRegister(b -> BlockMovementChecks.registerBrittleCheck(state -> {
+                if (!(state.getBlock() instanceof RangefinderEyepieceBlock))
+                    return BlockMovementChecks.CheckResult.PASS;
+                return BlockMovementChecks.CheckResult.SUCCESS;
+            }))
             .blockstate((c, p) -> p.horizontalBlock(c.get(),
                     p.models().getExistingFile(p.modLoc("block/rangefinder_eyepiece/block"))))
             .item()

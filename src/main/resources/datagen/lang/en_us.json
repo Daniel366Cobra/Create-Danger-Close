@@ -237,11 +237,11 @@
         "behaviour3": "_Shows_ the ship's position and _sends_ the marked target to the _Fire Control Solver_."
       },
       "rangefinder_eyepiece.tooltip": {
-        "summary": "The operator's station on a _rangefinder_ tube. Place it _centred_ between the lenses, looking the same way.",
-        "condition1": "When right-clicked on an assembled tube:",
-        "behaviour1": "_Seats_ the player. The tube _follows_ where they look.",
-        "condition2": "When Wrenched on the top or bottom:",
-        "behaviour2": "_Turns_ the eyepiece to face the next direction."
+        "summary": "The operator's station on a _rangefinder_ tube. _Bolts_ onto the back of the tube, _centred_ between the lenses.",
+        "condition1": "When placed on the side of a block:",
+        "behaviour1": "_Mounts_ on that block, looking into it. It moves with the block, and _pops off_ if the block is removed.",
+        "condition2": "When right-clicked on an assembled tube:",
+        "behaviour2": "_Seats_ the player. The tube _follows_ where they look."
       }
     },
 

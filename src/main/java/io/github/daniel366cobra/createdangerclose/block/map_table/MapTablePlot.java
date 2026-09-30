@@ -25,6 +25,8 @@ public final class MapTablePlot {
     private static final float LINE_WIDTH = 1;
     private static final float DOT = 1, DOT_GAP = 2;
     private static final float DASH = 4, DASH_GAP = 3;
+    // Aim lines (a rangefinder's line of sight, a barrel's bearing): short, tight dashes.
+    private static final float AIM_DASH = 2, AIM_GAP = 2;
     // Beyond this, a circle is cut into longer pieces rather than more of them.
     private static final int MAX_PATTERNS = 4000;
 
@@ -52,15 +54,24 @@ public final class MapTablePlot {
 
         for (BattlePlot.GunRange gun : plot.guns()) {
             pen.color = GUN_COLOR;
-            pen.circle(sheet.pixelX(gun.x()) / sheet.sizeInPixels() * sheetSize,
-                    sheet.pixelY(gun.z()) / sheet.sizeInPixels() * sheetSize,
-                    gun.radius() * scale, pixel * DASH, pixel * DASH_GAP);
+            double x = sheet.pixelX(gun.x()) / sheet.sizeInPixels() * sheetSize;
+            double y = sheet.pixelY(gun.z()) / sheet.sizeInPixels() * sheetSize;
+            double radius = gun.radius() * scale;
+            pen.circle(x, y, radius, pixel * DASH, pixel * DASH_GAP);
+            // Where the barrel points, out to the edge of its reach.
+            if (gun.hasAim())
+                pen.line(x, y, x + gun.aimX() * radius, y + gun.aimZ() * radius,
+                        pixel * AIM_DASH, pixel * AIM_GAP);
         }
         for (BattlePlot.RangefinderFix fix : plot.fixes()) {
             pen.color = RANGEFINDER_COLOR;
             double x = sheet.pixelX(fix.x()) / sheet.sizeInPixels() * sheetSize;
             double y = sheet.pixelY(fix.z()) / sheet.sizeInPixels() * sheetSize;
             pen.circle(x, y, SIGMA_CIRCLE * fix.sigma() * scale, pixel * DOT, pixel * DOT_GAP);
+            // The rangefinder's line of sight, from where it stands to its aim point.
+            pen.line(sheet.pixelX(fix.originX()) / sheet.sizeInPixels() * sheetSize,
+                    sheet.pixelY(fix.originZ()) / sheet.sizeInPixels() * sheetSize,
+                    x, y, pixel * AIM_DASH, pixel * AIM_GAP);
         }
     }
 
@@ -98,6 +109,26 @@ public final class MapTablePlot {
                 double c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
                 quad(cx + c0 * inner, cy + s0 * inner, cx + c0 * outer, cy + s0 * outer,
                         cx + c1 * outer, cy + s1 * outer, cx + c1 * inner, cy + s1 * inner);
+            }
+        }
+
+        /** A straight line of dashes from (x0, y0) to (x1, y1), starting with a dash at (x0, y0). */
+        void line(double x0, double y0, double x1, double y1, float dash, float gap) {
+            double dx = x1 - x0, dy = y1 - y0;
+            double length = Math.sqrt(dx * dx + dy * dy);
+            if (length < dash)
+                return;
+            double ux = dx / length, uy = dy / length;
+            // Half the stroke width across the line.
+            double nx = -uy * width / 2, ny = ux * width / 2;
+            int patterns = (int) Math.min(MAX_PATTERNS, Math.ceil(length / (dash + gap)));
+            double step = length / Math.max(1, (int) Math.ceil(length / (dash + gap)));
+            for (int i = 0; i < patterns; i++) {
+                double t0 = i * step, t1 = Math.min(length, t0 + dash);
+                double ax = x0 + ux * t0, ay = y0 + uy * t0, bx = x0 + ux * t1, by = y0 + uy * t1;
+                if (!onSheet((ax + bx) / 2, (ay + by) / 2))
+                    continue;
+                quad(ax - nx, ay - ny, ax + nx, ay + ny, bx + nx, by + ny, bx - nx, by - ny);
             }
         }
 

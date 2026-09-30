@@ -18,6 +18,8 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
 import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
+import net.minecraft.world.phys.Vec3;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -321,9 +323,12 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         }
 
         List<BattlePlot.RangefinderFix> fixes = new ArrayList<>();
-        for (SensorReading.Rangefinder reading : rangefinderReadings.values()) {
-            Vector3d position = extrapolate(reading);
-            fixes.add(new BattlePlot.RangefinderFix(position.x, position.y, position.z, reading.rangeSigma()));
+        for (Map.Entry<BlockPos, SensorReading.Rangefinder> entry : rangefinderReadings.entrySet()) {
+            Vector3d position = extrapolate(entry.getValue());
+            // The line of sight starts at the rangefinder bearing, wherever its ship is.
+            Vec3 origin = RangefinderOptics.toWorld(level, Vec3.atCenterOf(entry.getKey()));
+            fixes.add(new BattlePlot.RangefinderFix(position.x, position.y, position.z,
+                    entry.getValue().rangeSigma(), origin.x, origin.z));
         }
         plotFixes = fixes;
 
@@ -488,7 +493,9 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         // and cache the result per mount. Yaw servos run afterwards so both axes
         // of a mount aim along the same 3D direction.
         List<SolverServo> yawServos = new ArrayList<>();
-        List<BattlePlot.GunRange> guns = new ArrayList<>();
+        // For the map table: the armed mounts, and the barrel yaw its yaw servo reads.
+        List<ServoStatus.MountSnapshot> pitchMounts = new ArrayList<>();
+        Map<BlockPos, Float> mountYaws = new java.util.HashMap<>();
 
         for (KineticBlockEntity member : network.members.keySet()) {
             if (!(member instanceof SolverServo servo)) continue;
@@ -501,11 +508,11 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
             if (status.axis() == PITCH) {
                 servo.receiveFiringSolution(withRates(status, solvePitch(status)));
-                BattlePlot.GunRange range = gunRange(status.mounts().get(0));
-                if (range != null)
-                    guns.add(range);
+                pitchMounts.add(status.mounts().get(0));
             } else if (status.axis() == YAW) {
                 yawServos.add(servo);
+                ServoStatus.MountSnapshot mount = status.mounts().get(0);
+                mountYaws.put(mount.mountPos(), mount.currentAngle());
             } else {
                 servo.receiveFiringSolution(null);
             }
@@ -516,6 +523,12 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
             servo.receiveFiringSolution(withRates(status, solveYaw(status)));
         }
 
+        List<BattlePlot.GunRange> guns = new ArrayList<>();
+        for (ServoStatus.MountSnapshot mount : pitchMounts) {
+            BattlePlot.GunRange range = gunRange(mount, mountYaws.get(mount.mountPos()));
+            if (range != null)
+                guns.add(range);
+        }
         plot = plotFixes.isEmpty() && guns.isEmpty() ? BattlePlot.EMPTY : new BattlePlot(plotFixes, guns);
     }
 
@@ -526,9 +539,12 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
      * pitch as the solver (45°, or less if the mount cannot elevate that far),
      * so it matches where solutions turn into "out of range". The ship's own
      * motion is left out.
+     *
+     * @param shipYawDeg the barrel's yaw in ship frame, as the mount's yaw servo
+     *                   reads it; null if the mount has no yaw servo
      */
     @Nullable
-    private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount) {
+    private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount, @Nullable Float shipYawDeg) {
         if (level == null || !mount.hasShell())
             return null;
         double charge = mount.totalChargePower() + mount.addedChargePower();
@@ -552,7 +568,24 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
         double radius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
                 Math.min(45, mount.maxElevation()), referenceY - muzzleWorld.y);
-        return radius > 0 ? new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius) : null;
+        if (radius <= 0)
+            return null;
+
+        // The barrel's bearing: its ship-frame yaw (same convention as the
+        // solutions) turned into the world, flattened onto the map.
+        double aimX = 0, aimZ = 0;
+        if (shipYawDeg != null) {
+            double yaw = Math.toRadians(shipYawDeg);
+            Vector3d barrel = new Vector3d(-Math.sin(yaw), 0, Math.cos(yaw));
+            if (mountSubLevel != null)
+                mountSubLevel.logicalPose().orientation().transform(barrel);
+            double horizontal = Math.sqrt(barrel.x * barrel.x + barrel.z * barrel.z);
+            if (horizontal > 1e-6) {
+                aimX = barrel.x / horizontal;
+                aimZ = barrel.z / horizontal;
+            }
+        }
+        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ);
     }
 
     /**

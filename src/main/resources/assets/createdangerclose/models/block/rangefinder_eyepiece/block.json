@@ -1,6 +1,7 @@
 {
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
+	"ambientocclusion": false,
 	"textures": {
 		"0": "createdangerclose:block/rangefinder_eyepiece/plate_back",
 		"1": "createdangerclose:block/rangefinder_eyepiece/plate_side",
@@ -82,7 +83,7 @@
 			"name": "seat_body",
 			"from": [3, 3, 7],
 			"to": [13, 5, 16],
-			"rotation": {"angle": 0, "axis": "y", "origin": [7, 3, 12]},
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 4, 11.5]},
 			"faces": {
 				"north": {"uv": [0, 11, 9, 13], "texture": "#5"},
 				"east": {"uv": [10, 9, 0, 11], "texture": "#5"},
