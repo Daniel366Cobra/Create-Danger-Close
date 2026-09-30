@@ -21,13 +21,20 @@ import io.github.daniel366cobra.createdangerclose.block.network_interface.Networ
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderEyepieceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensBlock;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensInteraction;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensItem;
+import net.minecraft.advancements.critereon.StatePropertiesPredicate;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.level.storage.loot.functions.CopyBlockState;
+import net.minecraft.world.level.storage.loot.predicates.LootItemBlockStatePropertyCondition;
+import net.neoforged.neoforge.client.model.generators.ModelFile;
 
 import java.util.ArrayList;
 
+import static com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour.interactionBehaviour;
 import static com.simibubi.create.foundation.data.CreateRegistrate.connectedTextures;
 import static com.simibubi.create.foundation.data.ModelGen.customItemModel;
 import static com.simibubi.create.foundation.data.TagGen.axeOrPickaxe;
@@ -170,10 +177,25 @@ public class CDCBlocks {
             .initialProperties(SharedProperties::softMetal)
             .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
             .transform(axeOrPickaxe())
-            .blockstate((c, p) -> p.horizontalBlock(c.get(),
-                    p.models().getExistingFile(p.modLoc("block/rangefinder_lens/block"))))
-            .item()
-            .model((c, p) -> p.withExistingParent(c.getName(), p.modLoc("block/rangefinder_lens/block")))
+            // A cracked lens is the same model with the lens glass texture ("5") swapped.
+            .blockstate((c, p) -> p.horizontalBlock(c.get(), state -> state.getValue(RangefinderLensBlock.CRACKED)
+                    ? p.models().withExistingParent("block/rangefinder_lens/block_cracked",
+                                    p.modLoc("block/rangefinder_lens/block"))
+                            .texture("5", p.modLoc("block/rangefinder_lens/lens_cracked"))
+                    : p.models().getExistingFile(p.modLoc("block/rangefinder_lens/block"))))
+            .onRegister(interactionBehaviour(new RangefinderLensInteraction()))
+            // A cracked lens drops cracked: the state rides on the stack and is put back when placed.
+            .loot((lt, block) -> lt.add(block, lt.createSingleItemTable(block)
+                    .apply(CopyBlockState.copyState(block).copy(RangefinderLensBlock.CRACKED)
+                            .when(LootItemBlockStatePropertyCondition.hasBlockStateProperties(block)
+                                    .setProperties(StatePropertiesPredicate.Builder.properties()
+                                            .hasProperty(RangefinderLensBlock.CRACKED, true))))))
+            .item(RangefinderLensItem::new)
+            .model((c, p) -> p.withExistingParent(c.getName(), p.modLoc("block/rangefinder_lens/block"))
+                    .override()
+                    .predicate(p.modLoc("cracked"), 1)
+                    .model(new ModelFile.UncheckedModelFile(p.modLoc("block/rangefinder_lens/block_cracked")))
+                    .end())
             .build()
             .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
                     .pattern(" S ")

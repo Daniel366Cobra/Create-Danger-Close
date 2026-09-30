@@ -121,7 +121,8 @@
         "lens_facing": "Both Rangefinder Lenses must face the same way.",
         "lens_abreast": "The Rangefinder Lenses must sit side by side on a horizontal bar, across their line of sight.",
         "lens_asymmetric": "The Rangefinder Lenses must be equally far from the bearing axis (%s and %s blocks).",
-        "eyepiece_count": "A rangefinder needs exactly one Rangefinder Eyepiece (found %s).",
+        "lens_obstructed": "Nothing on the tube may stand in front of a Rangefinder Lens (found a block %s ahead).",
+        "eyepiece_count":"A rangefinder needs exactly one Rangefinder Eyepiece (found %s).",
         "eyepiece_facing": "The Rangefinder Eyepiece must face the same way as the lenses.",
         "eyepiece_offcenter": "The Rangefinder Eyepiece must be centred on the bearing axis, midway between the lenses.",
         "operator": "Operator: %s",
@@ -161,12 +162,15 @@
         "condition2": "When powered by Redstone:",
         "behaviour2": "_Illuminates_ the eyepiece reticle. A stronger signal makes it _brighter_."
       },
+      "rangefinder_lens.cracked": "Cracked Rangefinder Lens",
       "rangefinder_lens.tooltip": {
         "summary": "An objective lens for a _rangefinder_ tube. Place _two_ at the ends of the tube, looking the same way.",
         "condition1": "Baseline:",
         "behaviour1": "The _further apart_ the lenses, the more _accurate_ the range reading.",
         "condition2": "When Wrenched on the top or bottom:",
-        "behaviour2": "_Turns_ the lens to face the next direction."
+        "behaviour2": "_Turns_ the lens to face the next direction.",
+        "condition3": "When cracked by blast or a hit:",
+        "behaviour3": "Range readings become _far less accurate_. Right-click the lens with a _Glass Pane_ to repair it."
       },
       "map_table.tooltip": {
         "summary": "A plotting table for _maps_. Joins with neighbouring tables into a square of up to _3×3_.",

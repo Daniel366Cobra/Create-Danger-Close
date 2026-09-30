@@ -1,5 +1,23 @@
 {
   "type": "minecraft:block",
+  "functions": [
+    {
+      "block": "createdangerclose:rangefinder_lens",
+      "conditions": [
+        {
+          "block": "createdangerclose:rangefinder_lens",
+          "condition": "minecraft:block_state_property",
+          "properties": {
+            "cracked": "true"
+          }
+        }
+      ],
+      "function": "minecraft:copy_state",
+      "properties": [
+        "cracked"
+      ]
+    }
+  ],
   "pools": [
     {
       "bonus_rolls": 0.0,

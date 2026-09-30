@@ -1,6 +1,9 @@
 package io.github.daniel366cobra.createdangerclose;
 
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensItem;
+import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import io.github.daniel366cobra.createdangerclose.registries.CDCPartialModels;
+import net.minecraft.client.renderer.item.ItemProperties;
 import io.github.daniel366cobra.createdangerclose.registries.CDCSpriteShifts;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
@@ -28,6 +31,11 @@ public class CreateDangerCloseClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
+        // Lets the lens item model switch to its cracked variant.
+        event.enqueueWork(() -> ItemProperties.register(CDCBlocks.RANGEFINDER_LENS.asItem(),
+                CreateDangerClose.asResource("cracked"),
+                (stack, level, entity, seed) -> RangefinderLensItem.isCracked(stack) ? 1 : 0));
+
         // Some client setup code
         CreateDangerClose.LOGGER.info("HELLO FROM CLIENT SETUP");
         CreateDangerClose.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());

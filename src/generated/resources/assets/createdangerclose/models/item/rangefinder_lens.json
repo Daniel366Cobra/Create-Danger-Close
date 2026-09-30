@@ -1,3 +1,11 @@
 {
-  "parent": "createdangerclose:block/rangefinder_lens/block"
+  "parent": "createdangerclose:block/rangefinder_lens/block",
+  "overrides": [
+    {
+      "model": "createdangerclose:block/rangefinder_lens/block_cracked",
+      "predicate": {
+        "createdangerclose:cracked": 1.0
+      }
+    }
+  ]
 }

@@ -35,6 +35,9 @@ public class MapTableBlock extends Block implements IWrenchable, IBE<MapTableBlo
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                               Player player, InteractionHand hand, BlockHitResult hitResult) {
+        // Holding another map table: let it be placed next to this one instead of opening the screen.
+        if (stack.is(asItem()))
+            return ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION;
         if (!stack.is(Items.FILLED_MAP))
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         if (level.isClientSide)

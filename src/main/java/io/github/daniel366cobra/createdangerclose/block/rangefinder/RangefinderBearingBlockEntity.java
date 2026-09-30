@@ -21,7 +21,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
@@ -84,6 +87,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private static final double SIGMA_THETA_RAD = 4.4e-4;
     // Error multiplier at the ranging threshold, falling to 1 when merged.
     private static final double UNMERGED_ERROR_FACTOR = 5;
+    // Error multiplier for each cracked lens (both cracked: squared).
+    private static final double CRACKED_LENS_ERROR_FACTOR = 4;
     private static final int MIN_VELOCITY_SAMPLES = 3;
 
     private final RangefinderSteadiness steadiness = new RangefinderSteadiness();
@@ -296,8 +301,42 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
         applyRotation();
 
-        if (!level.isClientSide)
+        if (!level.isClientSide) {
             tickRanging(operator);
+            if (movedContraption != null && movedContraption.getContraption() instanceof RangefinderContraption rc)
+                RangefinderDamage.checkProjectiles(this, movedContraption, rc);
+        }
+    }
+
+    // --- Damage ---
+
+    @Override
+    public void initialize() {
+        super.initialize();
+        if (level != null && !level.isClientSide)
+            RangefinderDamage.track(this);
+    }
+
+    @Override
+    public void invalidate() {
+        super.invalidate();
+        RangefinderDamage.untrack(this);
+    }
+
+    /** Cracks a lens of the assembled tube (local position), from blast or a hit. */
+    public void crackLens(BlockPos lens) {
+        if (level == null || level.isClientSide || movedContraption == null
+                || !(movedContraption.getContraption() instanceof RangefinderContraption tube)
+                || tube.isLensCracked(lens))
+            return;
+        StructureBlockInfo info = tube.getBlocks().get(lens);
+        if (info == null || !(info.state().getBlock() instanceof RangefinderLensBlock))
+            return;
+        // Create syncs the changed block to everyone tracking the tube.
+        movedContraption.setBlock(lens, new StructureBlockInfo(info.pos(),
+                info.state().setValue(RangefinderLensBlock.CRACKED, true), info.nbt()));
+        level.playSound(null, BlockPos.containing(movedContraption.toGlobalVector(lens.getCenter(), 1f)),
+                SoundEvents.GLASS_BREAK, SoundSource.BLOCKS, 1f, 0.8f);
     }
 
     /** Whether the tube has caught up with where it is being trained. */
@@ -371,7 +410,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         double trueRange = RangefinderOptics.toWorld(level, hit.getLocation()).distanceTo(sight.origin());
         double convergence = 1 + (UNMERGED_ERROR_FACTOR - 1)
                 * steadiness.getSeparation() / RangefinderSteadiness.RANGING_SEPARATION;
-        double sigma = trueRange * trueRange * SIGMA_THETA_RAD / tube.getBaseline() * convergence;
+        double sigma = trueRange * trueRange * SIGMA_THETA_RAD / tube.getBaseline() * convergence
+                * Math.pow(CRACKED_LENS_ERROR_FACTOR, tube.getCrackedLensCount());
         double measuredRange = Math.max(1, trueRange + level.random.nextGaussian() * sigma);
 
         tracker.update(sight.origin().add(sight.direction().scale(measuredRange)), level.getGameTime(), sigma);
@@ -673,6 +713,15 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                                 rc.getBaseline()))
                         .style(ChatFormatting.GRAY)
                         .forGoggles(tooltip);
+                if (rc.getCrackedLensCount() > 0) {
+                    // The message carries its own line break before the repair hint.
+                    for (String line : Component.translatable("createdangerclose.error.broken_lens")
+                            .getString().split("\n"))
+                        CDCLang.builder()
+                                .add(Component.literal(line.trim()))
+                                .style(ChatFormatting.RED)
+                                .forGoggles(tooltip);
+                }
             }
             Player operator = getOperator();
             CDCLang.builder()

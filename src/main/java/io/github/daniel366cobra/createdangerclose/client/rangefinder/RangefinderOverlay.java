@@ -5,6 +5,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderContraption;
+import net.minecraft.core.BlockPos;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -15,6 +17,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -35,7 +38,8 @@ import java.util.Locale;
 public final class RangefinderOverlay {
 
     private static final ResourceLocation MASK = CreateDangerClose.asResource("textures/gui/rangefinder/scope_overlay.png");
-    private static final ResourceLocation RETICLE = CreateDangerClose.asResource("textures/gui/rangefinder/scope_reticle.png");
+    private static final ResourceLocation CRACKS = CreateDangerClose.asResource("textures/gui/rangefinder/scope_overlay_cracks.png");
+    private static final ResourceLocation RETICLE =CreateDangerClose.asResource("textures/gui/rangefinder/scope_reticle.png");
     private static final ResourceLocation MARKER = CreateDangerClose.asResource("textures/gui/rangefinder/scope_marker.png");
     private static final ResourceLocation BRACKETS = CreateDangerClose.asResource("textures/gui/rangefinder/scope_brackets.png");
 
@@ -83,6 +87,17 @@ public final class RangefinderOverlay {
         pose.scale(size / MASK_PX, size / MASK_PX, 1);
 
         RenderSystem.enableBlend();
+        // Cracked lenses, under the mask so its rim covers them: one lens's
+        // cracks as drawn, the other's mirrored left to right.
+        RangefinderContraption tube = RangefinderSight.getOperatedTube();
+        List<BlockPos> lenses = tube != null ? tube.getLenses() : List.of();
+        for (int i = 0; i < lenses.size(); i++) {
+            if (!tube.isLensCracked(lenses.get(i)))
+                continue;
+            boolean mirrored = i == 1;
+            graphics.blit(CRACKS, 0, 0, MASK_PX, MASK_PX, mirrored ? MASK_PX : 0, 0,
+                    mirrored ? -MASK_PX : MASK_PX, MASK_PX, MASK_PX, MASK_PX);
+        }
         drawAt(graphics, MASK, 0, 0, MASK_PX, MASK_PX);
 
         float[] tint = markingTint();

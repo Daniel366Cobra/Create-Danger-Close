@@ -37,6 +37,9 @@ import java.util.Map;
  */
 public class RangefinderContraption extends BearingContraption {
 
+    // How far in front of each lens the tube itself must be clear, in blocks.
+    private static final int LENS_CLEARANCE = 16;
+
     private int baseline;
     @Nullable private Direction lensFacing;
     @Nullable private BlockPos lensA;
@@ -99,6 +102,14 @@ public class RangefinderContraption extends BearingContraption {
         if (shoulderA + shoulderB != 0)
             throw fail("lens_asymmetric", Math.abs(shoulderA), Math.abs(shoulderB));
 
+        // Nothing on the tube may stand in front of a lens. The sight line is
+        // traced through the world, which the tube's own blocks are not part
+        // of, so they would shield a lens without blocking its view.
+        for (BlockPos lens : lenses)
+            for (int distance = 1; distance <= LENS_CLEARANCE; distance++)
+                if (getBlocks().containsKey(lens.relative(facingA, distance)))
+                    throw fail("lens_obstructed", distance);
+
         baseline = Math.abs(shoulderA - shoulderB);
         lensFacing = facingA;
         lensA = a;
@@ -137,6 +148,25 @@ public class RangefinderContraption extends BearingContraption {
 
     private static AssemblyException fail(String key, Object... args) {
         return new AssemblyException(Component.translatable("createdangerclose.rangefinder_bearing." + key, args));
+    }
+
+    /** Local positions of the two lenses; empty for tubes assembled before they were stored. */
+    public List<BlockPos> getLenses() {
+        return lensA != null && lensB != null ? List.of(lensA, lensB) : List.of();
+    }
+
+    public boolean isLensCracked(BlockPos lens) {
+        StructureBlockInfo info = getBlocks().get(lens);
+        return info != null && info.state().getBlock() instanceof RangefinderLensBlock
+                && info.state().getValue(RangefinderLensBlock.CRACKED);
+    }
+
+    public int getCrackedLensCount() {
+        int cracked = 0;
+        for (BlockPos lens : getLenses())
+            if (isLensCracked(lens))
+                cracked++;
+        return cracked;
     }
 
     /** Distance between the two lenses, in blocks. */

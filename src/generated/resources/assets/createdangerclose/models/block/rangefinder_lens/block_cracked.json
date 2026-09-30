@@ -1,0 +1,6 @@
+{
+  "parent": "createdangerclose:block/rangefinder_lens/block",
+  "textures": {
+    "5": "createdangerclose:block/rangefinder_lens/lens_cracked"
+  }
+}
