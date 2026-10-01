@@ -2,7 +2,9 @@ package io.github.daniel366cobra.createdangerclose;
 
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensItem;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
+import io.github.daniel366cobra.createdangerclose.ponder.CDCPonderPlugin;
 import io.github.daniel366cobra.createdangerclose.registries.CDCPartialModels;
+import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.client.renderer.item.ItemProperties;
 import io.github.daniel366cobra.createdangerclose.registries.CDCSpriteShifts;
 import net.minecraft.client.Minecraft;
@@ -25,6 +27,8 @@ public class CreateDangerCloseClient {
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.
         CDCPartialModels.register();
+        // Ponder scenes and tags (Create's in-game tutorials).
+        PonderIndex.addPlugin(new CDCPonderPlugin());
         CDCSpriteShifts.init();
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
     }

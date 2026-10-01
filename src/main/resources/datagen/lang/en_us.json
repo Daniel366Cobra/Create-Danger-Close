@@ -153,7 +153,6 @@
         "target": "Trained to: %s°",
         "not_assembled": "Not assembled. Right-click to assemble.",
         "must_be_vertical": "The Rangefinder Bearing must face up or down.",
-        "manual_training": "Manual Training",
         "baseline": "Baseline: %s blocks",
         "lens_count": "A rangefinder needs exactly two Rangefinder Lenses (found %s).",
         "lens_facing": "Both Rangefinder Lenses must face the same way.",

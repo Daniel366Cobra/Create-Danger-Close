@@ -89,18 +89,6 @@ public class CannonServoOutputBlock extends DirectionalKineticBlock implements I
     }
 
     @Override
-    public InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
-                                            Player player, BlockHitResult hitResult) {
-        if (level.getBlockEntity(pos) instanceof CannonServoOutputBlockEntity be) {
-            if (!level.isClientSide()) {
-                be.logOrientationDebug();
-            }
-            return InteractionResult.SUCCESS;
-        }
-        return super.useWithoutItem(state, level, pos, player, hitResult);
-    }
-
-    @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
         if (stillValid(level, pos, state)) {
             BlockPos inputPos = getInput(pos, state);

@@ -8,8 +8,6 @@ import com.simibubi.create.content.contraptions.IDisplayAssemblyExceptions;
 import com.simibubi.create.content.contraptions.bearing.BearingBlock;
 import com.simibubi.create.content.contraptions.bearing.IBearingBlockEntity;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
-import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
 import com.simibubi.create.foundation.utility.ServerSpeedProvider;
 import dev.ryanhcode.sable.Sable;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
@@ -45,9 +43,9 @@ import java.util.List;
  * <p>Unlike a mechanical bearing, the tube does not spin with the shaft. The
  * bearing is a stress consumer on the battle network and turns the tube
  * towards a target angle, easing in and out, at most
- * {@link #DEG_PER_TICK_PER_RPM} per network RPM per tick. The target follows the operator seated at the eyepiece; with
- * nobody seated it holds their last heading, or comes from the manual
- * training value box (0..359°) once that is changed.
+ * {@link #DEG_PER_TICK_PER_RPM} per network RPM per tick. The target follows
+ * the operator seated at the eyepiece; with nobody seated it holds their last
+ * heading (or the heading it was assembled at).
  *
  * <p>Angles are the contraption's rotation about the vertical axis, in
  * degrees relative to the heading it was assembled at.
@@ -64,7 +62,6 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     // simulated motion is not snapped back on every sync.
     private static final float CLIENT_RESYNC_THRESHOLD_DEG = 2f;
 
-    protected ScrollValueBehaviour manualTraining;
     @Nullable protected ControlledContraptionEntity movedContraption;
     protected float angle;
     protected float prevAngle;
@@ -73,7 +70,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     protected boolean running;
     @Nullable protected AssemblyException lastException;
     // Last heading an operator trained to. Held after they dismount, until
-    // the manual training value is changed.
+    // the tube is disassembled.
     @Nullable protected Float operatorTarget;
     // Reticle lamp brightness: the strongest redstone signal into the bearing (0 = unlit).
     protected int illumination;
@@ -134,20 +131,6 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     public RangefinderBearingBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
         setLazyTickRate(3);
-    }
-
-    @Override
-    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
-        super.addBehaviours(behaviours);
-        // Create's value panel only covers 0..max, so train over a full circle
-        // with non-negative values; training still takes the shortest way round.
-        manualTraining = new ScrollValueBehaviour(
-                Component.translatable("createdangerclose.rangefinder_bearing.manual_training"),
-                this, getMovementModeSlot())
-                .between(0, 359)
-                .withFormatter(v -> v + "°")
-                .withCallback(v -> operatorTarget = null);
-        behaviours.add(manualTraining);
     }
 
     // --- Assembly ---
@@ -226,11 +209,11 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     // --- Training ---
 
     /**
-     * Where the tube should point, as a contraption angle: the operator's
-     * heading if one is (or was) seated, else the manual training value.
+     * Where the tube should point, as a contraption angle: the heading of the
+     * operator who is (or last was) seated; with no operator yet, it stays put.
      */
     public float getTargetAngle() {
-        return operatorTarget != null ? operatorTarget : manualTraining.getValue();
+        return operatorTarget != null ? operatorTarget : angle;
     }
 
     /** The player seated at the eyepiece, if any. */

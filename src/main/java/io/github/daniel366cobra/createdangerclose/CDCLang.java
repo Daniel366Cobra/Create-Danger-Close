@@ -8,6 +8,7 @@ import dev.simulated_team.simulated.data.SimLang;
 import net.createmod.catnip.lang.Lang;
 import net.createmod.catnip.lang.LangBuilder;
 import net.createmod.catnip.lang.LangNumberFormat;
+import io.github.daniel366cobra.createdangerclose.ponder.CDCPonderPlugin;
 import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -73,7 +74,8 @@ public class CDCLang {
         final Map<String, String> lang = getLangMap("en_us");
         lang.forEach(consumer);
 
-        //PonderIndex.addPlugin(new CDCPonderPlugin());
+        // Datagen does not run client setup: add the plugin here so its scene texts reach the lang file.
+        PonderIndex.addPlugin(new CDCPonderPlugin());
         PonderIndex.getLangAccess().provideLang(CreateDangerClose.MOD_ID, consumer);
     }
 
