@@ -12,7 +12,7 @@ public sealed interface SensorReading {
 
     enum Kind {
         // Saved by ordinal: add new kinds at the end.
-        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE, MAP_TARGET, COMPUTER, NAV_CONSOLE
+        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE, MAP_TARGET, COMPUTER, NAV_CONSOLE, FIRE_CONSOLE
     }
 
     interface Provider {
@@ -212,6 +212,12 @@ public sealed interface SensorReading {
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
     }
 
+    /** Not a sensor: the interface connects a fire mission console to the network. */
+    record FireConsole() implements SensorReading {
+        @Override public Kind kind() { return Kind.FIRE_CONSOLE; }
+        @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
+    }
+
     record None() implements SensorReading {
         @Override public Kind kind() { return Kind.NONE; }
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
@@ -240,6 +246,7 @@ public sealed interface SensorReading {
             case MAP_TARGET  -> MapTarget.fromNBT(tag);
             case COMPUTER    -> new Computer();
             case NAV_CONSOLE -> new NavConsole();
+            case FIRE_CONSOLE -> new FireConsole();
         };
     }
 }

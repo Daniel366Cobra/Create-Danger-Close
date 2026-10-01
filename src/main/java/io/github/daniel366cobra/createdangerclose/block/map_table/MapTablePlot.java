@@ -58,6 +58,9 @@ public final class MapTablePlot {
             double y = sheet.pixelY(gun.z()) / sheet.sizeInPixels() * sheetSize;
             double radius = gun.radius() * scale;
             pen.circle(x, y, radius, pixel * DASH, pixel * DASH_GAP);
+            // The dead zone inside: too close for the steepest (plunging) or lowest (direct) shot.
+            if (gun.minRadius() > 0)
+                pen.circle(x, y, gun.minRadius() * scale, pixel * AIM_DASH, pixel * AIM_GAP);
             // Where the barrel points, out to the edge of its reach.
             if (gun.hasAim())
                 pen.line(x, y, x + gun.aimX() * radius, y + gun.aimZ() * radius,

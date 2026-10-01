@@ -35,8 +35,11 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
      *
      * @param aimX, aimZ horizontal unit vector of the barrel's bearing; both 0 if unknown
      *                   (no yaw servo on the mount)
+     * @param minRadius  the edge of the dead zone around the gun, for a level ship: the closest
+     *                   the steep arc reaches (plunging fire) or the lowest barrel reaches
+     *                   (direct fire at a target below the gun); 0 if there is none
      */
-    public record GunRange(double x, double z, double radius, double aimX, double aimZ) {
+    public record GunRange(double x, double z, double radius, double aimX, double aimZ, double minRadius) {
         public boolean hasAim() {
             return aimX != 0 || aimZ != 0;
         }
@@ -68,6 +71,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
             t.putDouble("Radius", gun.radius());
             t.putDouble("AimX", gun.aimX());
             t.putDouble("AimZ", gun.aimZ());
+            t.putDouble("MinRadius", gun.minRadius());
             gunList.add(t);
         }
         tag.put("Guns", gunList);
@@ -85,7 +89,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
         for (Tag entry : tag.getList("Guns", Tag.TAG_COMPOUND)) {
             CompoundTag t = (CompoundTag) entry;
             guns.add(new GunRange(t.getDouble("X"), t.getDouble("Z"), t.getDouble("Radius"),
-                    t.getDouble("AimX"), t.getDouble("AimZ")));
+                    t.getDouble("AimX"), t.getDouble("AimZ"), t.getDouble("MinRadius")));
         }
         return fixes.isEmpty() && guns.isEmpty() ? EMPTY : new BattlePlot(fixes, guns);
     }

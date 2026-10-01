@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "bottom": "createdangerclose:block/computer/top",
+    "front": "createdangerclose:block/computer/fire_mission_console_front",
+    "side": "createdangerclose:block/computer/side",
+    "top": "createdangerclose:block/computer/fire_mission_console_top"
+  }
+}

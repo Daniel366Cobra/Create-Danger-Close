@@ -30,7 +30,20 @@
       "map_target": "Map target: %s",
       "map_no_target": "Map table: no target",
       "computer": "Fire control computer (driving)",
-      "nav_console": "Navigation console"
+      "nav_console": "Navigation console",
+      "fire_console": "Fire mission console"
+    },
+    "fire_mission_console": {
+      "title": "Fire Mission Console",
+      "not_connected": "Not connected. Needs a powered Battle Network Interface facing it.",
+      "no_computer": "No Ballistic Computer on this battle network",
+      "computer_unloaded": "The Ballistic Computer is too far away to show",
+      "mode": {
+        "direct": "Trajectory: Direct fire",
+        "plunging": "Trajectory: Plunging fire"
+      },
+      "no_guns": "No guns on the network",
+      "salvo": "Salvo: %s fired, %s held (no solution or not on target)"
     },
     "navigation_console": {
       "title": "Navigation Console",
@@ -83,7 +96,8 @@
         "no_shell": "No shell loaded",
         "no_orientation": "No ship orientation data",
         "insufficient_charge": "Insufficient propellant",
-        "degenerate": "Invalid geometry"
+        "degenerate": "Invalid geometry",
+        "too_close": "Too close for plunging fire"
       }
     },
       "cannon_servo": {
@@ -199,6 +213,15 @@
         "summary": "A module for the _Ballistic Computer_. Combines several rangefinders.",
         "condition1": "When part of a computer's bank:",
         "behaviour1": "Rangefinders ranging the _same target_ are _merged_ into one more accurate fix."
+      },
+      "fire_mission_console.tooltip": {
+        "summary": "The gunnery officer's station: shows the _fire mission_ and gives the _orders_.",
+        "condition1": "When a powered Battle Network Interface faces it:",
+        "behaviour1": "Shows the _target_, the _trajectory_ and each gun's _firing solution_ through Goggles.",
+        "condition2": "When the left half of its top is right-clicked:",
+        "behaviour2": "Switches between _direct_ and _plunging_ fire.",
+        "condition3": "When the right half of its top is right-clicked:",
+        "behaviour3": "_Fires_ every gun that has a solution and is _on target_. The others hold fire."
       },
       "navigation_console.tooltip": {
         "summary": "Shows the ship's own _attitude_, _speed_ and _altitude_ through Goggles.",

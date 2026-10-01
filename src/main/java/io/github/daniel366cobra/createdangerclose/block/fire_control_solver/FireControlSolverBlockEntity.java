@@ -16,7 +16,9 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
 import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
+import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
+import net.minecraft.server.level.ServerLevel;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
 import net.minecraft.world.phys.Vec3;
@@ -85,6 +87,20 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
     private final Set<ComputerModule> modules = EnumSet.noneOf(ComputerModule.class);
     // Another Ballistic Computer touches this one's modules: neither works.
     private boolean bankConflict = false;
+
+    // Trajectory: the flat arc (direct fire, default) or the steep arc
+    // (plunging fire). Set from Fire Mission Consoles; the last flip wins.
+    private boolean plungingFire = false;
+
+    // Per mount (server only): the barrel's current pitch and yaw in ship
+    // frame as its servos read them last poll, for the firing interlock.
+    private final Map<BlockPos, Float> mountPitches = new java.util.HashMap<>();
+    private final Map<BlockPos, Float> mountYawsNow = new java.util.HashMap<>();
+    // A gun is on target when both axes are this close to its solution.
+    private static final double ON_TARGET_DEG = 0.5;
+
+    /** What a salvo order did: guns fired, and guns held back (no solution, or not yet on target). */
+    public record SalvoResult(int fired, int held) {}
 
     // --- Sensor gates: what is present on the battle network ---
     private int gimbalCount = 0;
@@ -209,6 +225,47 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         bankConflict = scan.cores().size() > 1;
     }
 
+    // --- Fire mission (from Fire Mission Consoles) ---
+
+    public boolean isPlungingFire() {
+        return plungingFire;
+    }
+
+    /** Switches between direct (flat arc) and plunging (steep arc) fire; takes effect from the next poll. */
+    public void setPlungingFire(boolean plungingFire) {
+        if (this.plungingFire == plungingFire)
+            return;
+        this.plungingFire = plungingFire;
+        aimHistory.clear(); // the guns jump to the other arc: that is not motion to feed forward
+        setChanged();
+        notifyUpdate();
+    }
+
+    /**
+     * Fires every gun that is ready: it has a firing solution, and its barrel
+     * has settled on it (both axes within {@link #ON_TARGET_DEG}; a mount
+     * without a yaw servo is judged on elevation alone). The rest hold fire.
+     * Uses the last poll's solutions and barrel angles.
+     */
+    public SalvoResult fireSalvo() {
+        if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
+            return new SalvoResult(0, 0);
+        int fired = 0, held = 0;
+        for (Map.Entry<BlockPos, Float> entry : mountPitches.entrySet()) {
+            BlockPos mountPos = entry.getKey();
+            FireSolution solution = aimCache.get(mountPos);
+            Float yaw = mountYawsNow.get(mountPos);
+            boolean onTarget = solution != null && solution.valid()
+                    && Math.abs(entry.getValue() - solution.pitchDeg()) <= ON_TARGET_DEG
+                    && (yaw == null || Math.abs(wrapDeg(yaw - solution.yawDeg())) <= ON_TARGET_DEG);
+            if (onTarget && CannonFiring.fire(serverLevel, mountPos))
+                fired++;
+            else
+                held++;
+        }
+        return new SalvoResult(fired, held);
+    }
+
     /** Whether the bank has this module, i.e. the computer has its capability. */
     public boolean has(ComputerModule module) {
         return modules.contains(module);
@@ -309,6 +366,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
                 }
                 case SensorReading.Computer ignored -> { }
                 case SensorReading.NavConsole ignored -> { }
+                case SensorReading.FireConsole ignored -> { }
                 case SensorReading.None ignored -> { }
             }
         }
@@ -523,6 +581,13 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
             servo.receiveFiringSolution(withRates(status, solveYaw(status)));
         }
 
+        // Where each barrel points now, for the firing interlock.
+        mountPitches.clear();
+        for (ServoStatus.MountSnapshot mount : pitchMounts)
+            mountPitches.put(mount.mountPos(), mount.currentAngle());
+        mountYawsNow.clear();
+        mountYawsNow.putAll(mountYaws);
+
         List<BattlePlot.GunRange> guns = new ArrayList<>();
         for (ServoStatus.MountSnapshot mount : pitchMounts) {
             BattlePlot.GunRange range = gunRange(mount, mountYaws.get(mount.mountPos()));
@@ -585,7 +650,21 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
                 aimZ = barrel.z / horizontal;
             }
         }
-        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ);
+        // The dead zone around the gun, for a level ship (as a plotting officer
+        // would draw it from the range table). Plunging fire: the steepest shot
+        // comes down this far out. Direct fire, only with the target below the
+        // gun: the lowest the barrel depresses still lands this far out.
+        double minRadius = 0;
+        double relativeY = referenceY - muzzleWorld.y;
+        if (plungingFire) {
+            if (mount.maxElevation() > 45)
+                minRadius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
+                        BallisticSolver.steepestPlungingPitch(mount.maxElevation()), relativeY);
+        } else if (relativeY < 0) {
+            minRadius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
+                    mount.maxDepression(), relativeY);
+        }
+        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius);
     }
 
     /**
@@ -746,7 +825,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         BallisticSolver.Result result = BallisticSolver.solve(
                 muzzleWorld, targetWorld, targetVel, inheritedVelocity,
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
-                90.0, -90.0);
+                90.0, -90.0, plungingFire);
 
         if (!result.valid()) {
             lastPitchResults.put(servoPos, result);
@@ -869,6 +948,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         super.read(compound, registries, clientPacket);
         this.isPowered = compound.getBoolean("IsPowered");
         this.bankConflict = compound.getBoolean("BankConflict");
+        this.plungingFire = compound.getBoolean("PlungingFire");
         this.modules.clear();
         int moduleBits = compound.getInt("Modules");
         for (ComputerModule module : ComputerModule.values())
@@ -924,6 +1004,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         super.write(compound, registries, clientPacket);
         compound.putBoolean("IsPowered", isPowered);
         compound.putBoolean("BankConflict", bankConflict);
+        compound.putBoolean("PlungingFire", plungingFire);
         int moduleBits = 0;
         for (ComputerModule module : modules)
             moduleBits |= 1 << module.ordinal();
@@ -1035,7 +1116,40 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
                     .forGoggles(tooltip);
         }
 
-        // --- Target ---
+        // Target and firing solutions are shown on the Fire Mission Console.
+        if (!hasTarget) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.fire_control_solver.missing_target"))
+                    .style(ChatFormatting.DARK_RED)
+                    .forGoggles(tooltip);
+        }
+
+        // Debug counts
+        int velocityCount = velocityAxisCounts[0] + velocityAxisCounts[1] + velocityAxisCounts[2];
+        CDCLang.builder()
+                .add(Component.literal(String.format(
+                        "  [G:%d H:%d T:%d M:%d V:%d A:%d R:%d]",
+                        gimbalCount, navHeadingCount, navTargetCount, mapTableCount, velocityCount, altitudeCount,
+                        rangefinderCount)))
+                .style(ChatFormatting.DARK_GRAY)
+                .forGoggles(tooltip);
+
+        return true;
+    }
+
+    /**
+     * The fire mission: target, its source and speed, the trajectory mode and
+     * each gun's solution. Shown by Fire Mission Consoles, which read it from
+     * this computer (client side, from its synced data).
+     */
+    public void addFireMissionTooltip(List<Component> tooltip) {
+        CDCLang.builder()
+                .add(Component.translatable(plungingFire
+                        ? "createdangerclose.fire_mission_console.mode.plunging"
+                        : "createdangerclose.fire_mission_console.mode.direct"))
+                .style(ChatFormatting.AQUA)
+                .forGoggles(tooltip);
+
         if (hasTarget) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.fire_control_solver.target"))
@@ -1117,17 +1231,5 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
                 }
             }
         }
-
-        // Debug counts
-        int velocityCount = velocityAxisCounts[0] + velocityAxisCounts[1] + velocityAxisCounts[2];
-        CDCLang.builder()
-                .add(Component.literal(String.format(
-                        "  [G:%d H:%d T:%d M:%d V:%d A:%d R:%d]",
-                        gimbalCount, navHeadingCount, navTargetCount, mapTableCount, velocityCount, altitudeCount,
-                        rangefinderCount)))
-                .style(ChatFormatting.DARK_GRAY)
-                .forGoggles(tooltip);
-
-        return true;
     }
 }

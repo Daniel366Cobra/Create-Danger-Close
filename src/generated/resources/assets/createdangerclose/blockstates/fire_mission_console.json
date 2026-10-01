@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "createdangerclose:block/fire_mission_console",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/fire_mission_console"
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/fire_mission_console",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/fire_mission_console",
+      "y": 270
+    }
+  }
+}

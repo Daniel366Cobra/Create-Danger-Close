@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "createdangerclose:block/computer/fire_control_solver_front",
+    "side": "createdangerclose:block/computer/computer",
+    "top": "createdangerclose:block/computer/computer"
+  }
+}

@@ -20,6 +20,7 @@ import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.Comp
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlock;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableCTBehaviour;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlock;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlock;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
@@ -78,20 +79,16 @@ public class CDCBlocks {
     public static final BlockEntry<FireControlSolverBlock> FIRE_CONTROL_SOLVER = REGISTRATE.block("fire_control_solver", FireControlSolverBlock::new)
             .initialProperties(SharedProperties::softMetal)
             .properties(p -> p.mapColor(MapColor.PODZOL))
-            // Faces of its model textured with block/computer/computer join the cabinet casing.
+            // Like the modules: cabinet casing on the plain faces (joining the
+            // bank), its own texture on the face.
             .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
-            // The current model was made for a 6-way block, front facing up; tipped
-            // forward 90° it faces north. Drop the x rotation once the model is
-            // redone facing north like the modules.
-            .blockstate((c, p) -> p.getVariantBuilder(c.get()).forAllStates(state -> ConfiguredModel.builder()
-                    .modelFile(p.models().getExistingFile(p.modLoc("block/fire_control_solver/block")))
-                    .rotationX(90)
-                    .rotationY(((int) state.getValue(FireControlSolverBlock.FACING).toYRot() + 180) % 360)
-                    .build()))
+            .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientable(c.getName(),
+                    p.modLoc("block/computer/computer"),
+                    p.modLoc("block/computer/fire_control_solver_front"),
+                    p.modLoc("block/computer/computer"))))
             .transform(axeOrPickaxe())
             // No shaft and no stress impact: a network interface facing it drives it.
-            .item()
-            .transform(customItemModel())
+            .simpleItem()
             .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
                     .pattern("CEC")
                     .pattern("PPP")
@@ -132,6 +129,28 @@ public class CDCBlocks {
             .lang("Navigation Console")
             .register();
 
+    public static final BlockEntry<FireMissionConsoleBlock> FIRE_MISSION_CONSOLE = REGISTRATE
+            .block("fire_mission_console", FireMissionConsoleBlock::new)
+            .initialProperties(SharedProperties::softMetal)
+            .properties(p -> p.mapColor(MapColor.PODZOL))
+            .transform(axeOrPickaxe())
+            // Placeholder: the top shows the two controls (fire button, trajectory switch).
+            .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientableWithBottom(c.getName(),
+                    p.modLoc("block/computer/side"),
+                    p.modLoc("block/computer/fire_mission_console_front"),
+                    p.modLoc("block/computer/top"),
+                    p.modLoc("block/computer/fire_mission_console_top"))))
+            .simpleItem()
+            .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
+                    .requires(AllBlocks.BRASS_CASING)
+                    .requires(AllItems.PRECISION_MECHANISM)
+                    .requires(Items.STONE_BUTTON)
+                    .requires(Items.LEVER)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.PRECISION_MECHANISM))
+                    .save(p))
+            .lang("Fire Mission Console")
+            .register();
+
     /**
      * A computer module: a casing-sided block whose face turns in yaw. Crafted
      * from a brass casing, a precision mechanism and one part of its own.
@@ -161,7 +180,8 @@ public class CDCBlocks {
 
     public static final BlockEntry<CannonServoInputBlock> CANNON_SERVO_INPUT =REGISTRATE.block("cannon_servo_input", CannonServoInputBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            .properties(p -> p.mapColor(MapColor.PODZOL))
+            // Open model (inspection windows): must not hide neighbours or block light.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .blockstate(BlockStateGen.directionalBlockProvider(true))
             .transform(axeOrPickaxe())
             .onRegister(block -> {
@@ -198,7 +218,8 @@ public class CDCBlocks {
 
     public static final BlockEntry<CannonServoOutputBlock> CANNON_SERVO_OUTPUT = REGISTRATE.block("cannon_servo_output", CannonServoOutputBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            .properties(p -> p.mapColor(MapColor.PODZOL))
+            // Open model (inspection windows): must not hide neighbours or block light.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .blockstate(BlockStateGen.directionalBlockProvider(true))
             .transform(axeOrPickaxe())
             .onRegister(block -> {
@@ -340,6 +361,7 @@ public class CDCBlocks {
         BLOCKS.add(CORRELATOR);
         BLOCKS.add(FUZE_COMPUTER);
         BLOCKS.add(NAVIGATION_CONSOLE);
+        BLOCKS.add(FIRE_MISSION_CONSOLE);
         BLOCKS.add(CANNON_SERVO_INPUT);
         BLOCKS.add(CANNON_SERVO_OUTPUT);
         BLOCKS.add(RANGEFINDER_BEARING);

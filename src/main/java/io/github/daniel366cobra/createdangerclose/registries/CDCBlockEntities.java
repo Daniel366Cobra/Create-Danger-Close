@@ -9,6 +9,7 @@ import io.github.daniel366cobra.createdangerclose.block.cannon_servo.*;
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceRenderer;
@@ -66,6 +67,11 @@ public class CDCBlockEntities {
             .validBlocks(CDCBlocks.NAVIGATION_CONSOLE)
             .register();
 
+    public static final BlockEntityEntry<FireMissionConsoleBlockEntity> FIRE_MISSION_CONSOLE = REGISTRATE
+            .blockEntity("fire_mission_console", FireMissionConsoleBlockEntity::new)
+            .validBlocks(CDCBlocks.FIRE_MISSION_CONSOLE)
+            .register();
+
     public static void register() {
         BLOCK_ENTITIES.add(NETWORK_INTERFACE);
         BLOCK_ENTITIES.add(FIRE_CONTROL_SOLVER);
@@ -74,5 +80,6 @@ public class CDCBlockEntities {
         BLOCK_ENTITIES.add(RANGEFINDER_BEARING);
         BLOCK_ENTITIES.add(MAP_TABLE);
         BLOCK_ENTITIES.add(NAVIGATION_CONSOLE);
+        BLOCK_ENTITIES.add(FIRE_MISSION_CONSOLE);
     }
 }

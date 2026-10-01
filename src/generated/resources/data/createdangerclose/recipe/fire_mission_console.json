@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "create:brass_casing"
+    },
+    {
+      "item": "create:precision_mechanism"
+    },
+    {
+      "item": "minecraft:stone_button"
+    },
+    {
+      "item": "minecraft:lever"
+    }
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:fire_mission_console"
+  }
+}

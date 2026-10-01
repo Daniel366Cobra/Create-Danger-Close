@@ -6,6 +6,7 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
+import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
 import io.netty.buffer.ByteBuf;
@@ -14,9 +15,6 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
-import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
-import rbasamoyai.createbigcannons.cannon_control.contraption.AbstractMountedCannonContraption;
-import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -68,14 +66,8 @@ public record RangefinderFirePayload() implements CustomPacketPayload {
                 for (ServoStatus.MountSnapshot mount : status.mounts())
                     mounts.add(mount.mountPos());
             }
-            for (BlockPos mountPos : mounts) {
-                if (!(level.getBlockEntity(mountPos) instanceof CannonMountBlockEntity mount))
-                    continue;
-                PitchOrientedContraptionEntity cannonEntity = mount.getContraption();
-                if (cannonEntity != null
-                        && cannonEntity.getContraption() instanceof AbstractMountedCannonContraption cannon)
-                    cannon.fireShot(level, cannonEntity);
-            }
+            for (BlockPos mountPos : mounts)
+                CannonFiring.fire(level, mountPos);
         });
     }
 }

@@ -66,6 +66,15 @@ base {
     archivesName = mod_id
 }
 
+// Ship the license with the mod, renamed so it cannot clash with other mods'
+// license files when jars are merged (as Create does).
+tasks.named('jar') {
+    def licenseName = "LICENSE_${project.mod_id}.md"
+    from('LICENSE.md') {
+        rename { licenseName }
+    }
+}
+
 // Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 

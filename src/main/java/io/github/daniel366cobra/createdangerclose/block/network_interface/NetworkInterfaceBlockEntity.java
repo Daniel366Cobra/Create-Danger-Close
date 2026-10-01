@@ -21,6 +21,7 @@ import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.Fire
 import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
 import net.minecraft.world.level.block.Block;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -121,6 +122,11 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             console.pollFrom(this);
             return new SensorReading.NavConsole();
         }
+        if (be instanceof FireMissionConsoleBlockEntity console) {
+            // Not a sensor: the console reaches the fire control computer through this interface.
+            console.pollFrom(this);
+            return new SensorReading.FireConsole();
+        }
         return new SensorReading.None();
     }
 
@@ -195,23 +201,33 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
     /**
      * The plot of the fire control computer on this interface's network, or
-     * an empty one. The computer is not on the network itself; it is found
-     * through the interface that drives it.
+     * an empty one.
      */
     private BattlePlot findSolverPlot() {
+        FireControlSolverBlockEntity computer = findComputer();
+        return computer != null ? computer.getPlot() : BattlePlot.EMPTY;
+    }
+
+    /**
+     * The fire control computer on this interface's network, or null. The
+     * computer is not on the network itself; it is found through the
+     * interface that drives it.
+     */
+    @Nullable
+    public FireControlSolverBlockEntity findComputer() {
         KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
         if (network == null) {
-            return BattlePlot.EMPTY;
+            return null;
         }
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member instanceof NetworkInterfaceBlockEntity other) {
                 FireControlSolverBlockEntity computer = other.getLinkedComputer();
                 if (computer != null) {
-                    return computer.getPlot();
+                    return computer;
                 }
             }
         }
-        return BattlePlot.EMPTY;
+        return null;
     }
 
     private SensorReading buildVelocityReading(VelocitySensorBlockEntity velocity) {
@@ -319,6 +335,14 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 CDCLang.builder()
                         .add(Component.literal("  • "))
                         .add(Component.translatable("createdangerclose.network_interface.nav_console"))
+                        .style(ChatFormatting.GREEN)
+                        .forGoggles(tooltip);
+                yield true;
+            }
+            case SensorReading.FireConsole ignored -> {
+                CDCLang.builder()
+                        .add(Component.literal("  • "))
+                        .add(Component.translatable("createdangerclose.network_interface.fire_console"))
                         .style(ChatFormatting.GREEN)
                         .forGoggles(tooltip);
                 yield true;

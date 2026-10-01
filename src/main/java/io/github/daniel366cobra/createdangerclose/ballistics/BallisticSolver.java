@@ -45,6 +45,8 @@ public final class BallisticSolver {
     // If the aim correction does not converge, the best attempt is still
     // accepted when it lands this close.
     private static final double LAUNCH_OFFSET_ACCEPTABLE_MISS = 1.0; // blocks
+    // Steepest pitch searched for plunging fire: near-vertical shots are useless.
+    private static final double MAX_HIGH_ARC_DEG = 85;
 
     public record Result(
             boolean valid,
@@ -64,7 +66,9 @@ public final class BallisticSolver {
             NO_SHELL,
             NO_ORIENTATION,
             INSUFFICIENT_CHARGE,
-            DEGENERATE
+            DEGENERATE,
+            // Plunging fire: even the steepest shot lands beyond the target.
+            TOO_CLOSE
         }
 
         public static Result invalid(Reason reason) {
@@ -94,7 +98,8 @@ public final class BallisticSolver {
             double drag,
             boolean isQuadraticDrag,
             double maxElevationDeg,
-            double maxDepressionDeg
+            double maxDepressionDeg,
+            boolean highArc
     ) {
         if (muzzleVelocity <= 0 || gravity >= 0) {
             return Result.invalid(Result.Reason.DEGENERATE);
@@ -108,7 +113,7 @@ public final class BallisticSolver {
             lastResult = solveStatic(
                     muzzleWorld, predictedTarget,
                     muzzleVelocity, gravity, drag, isQuadraticDrag,
-                    maxElevationDeg, maxDepressionDeg);
+                    maxElevationDeg, maxDepressionDeg, highArc);
 
             if (!lastResult.valid()) return lastResult;
 
@@ -120,7 +125,7 @@ public final class BallisticSolver {
                 return solveStatic(
                         muzzleWorld, predictedTarget,
                         muzzleVelocity, gravity, drag, isQuadraticDrag,
-                        maxElevationDeg, maxDepressionDeg);
+                        maxElevationDeg, maxDepressionDeg, highArc);
             }
             prevTof = tof;
         }
@@ -159,12 +164,13 @@ public final class BallisticSolver {
             double drag,
             boolean isQuadraticDrag,
             double maxElevationDeg,
-            double maxDepressionDeg
+            double maxDepressionDeg,
+            boolean highArc
     ) {
         if (launchVelocityOffset.lengthSquared() < 1e-12) {
             return solve(muzzleWorld, targetWorld, targetVelocity,
                     muzzleVelocity, gravity, drag, isQuadraticDrag,
-                    maxElevationDeg, maxDepressionDeg);
+                    maxElevationDeg, maxDepressionDeg, highArc);
         }
 
         Vector3d aim = new Vector3d(targetWorld);
@@ -175,7 +181,7 @@ public final class BallisticSolver {
         for (int i = 0; i < LAUNCH_OFFSET_ITERATIONS; i++) {
             aimResult = solve(muzzleWorld, aim, targetVelocity,
                     muzzleVelocity, gravity, drag, isQuadraticDrag,
-                    maxElevationDeg, maxDepressionDeg);
+                    maxElevationDeg, maxDepressionDeg, highArc);
             if (!aimResult.valid()) return aimResult;
 
             // Where the target will be when the shell arrives.
@@ -247,7 +253,8 @@ public final class BallisticSolver {
             double drag,
             boolean isQuadraticDrag,
             double maxElevationDeg,
-            double maxDepressionDeg
+            double maxDepressionDeg,
+            boolean highArc
     ) {
         double dx = targetWorld.x - muzzleWorld.x;
         double dy = targetWorld.y - muzzleWorld.y;
@@ -270,9 +277,9 @@ public final class BallisticSolver {
 
         if (DEBUG_LOG) {
             System.out.printf("[BallisticSolver] range=%.2f dy=%.2f v0=%.3f g=%.5f drag=%.5f " +
-                            "maxElev=%.2f maxDep=%.2f%n",
+                            "maxElev=%.2f maxDep=%.2f highArc=%b%n",
                     horizontalRange, dy, muzzleVelocity, gravity, drag,
-                    maxElevationDeg, maxDepressionDeg);
+                    maxElevationDeg, maxDepressionDeg, highArc);
         }
 
         // Max-elevation reachability check.
@@ -290,8 +297,30 @@ public final class BallisticSolver {
             return Result.invalid(Result.Reason.OUT_OF_RANGE);
         }
 
-        double lo = maxDepRad;
-        double hi = maxElevRad;
+        // Direct fire: the flat arc, between the lowest pitch and 45°, where a
+        // steeper barrel lands further. Plunging fire: the steep arc, between
+        // 45° and the steepest pitch, where a steeper barrel lands shorter.
+        double lo, hi;
+        if (highArc) {
+            double steepestRad = Math.toRadians(steepestPlungingPitch(maxElevationDeg));
+            if (steepestRad <= maxElevRad) {
+                if (DEBUG_LOG) System.out.println("[BallisticSolver] OUT_OF_ARC: no room above 45° for plunging fire");
+                return Result.invalid(Result.Reason.OUT_OF_ARC);
+            }
+            IntegrationResult steepest = integrate(cosYaw, sinYaw, steepestRad,
+                    muzzleVelocity, gravity, drag, isQuadraticDrag,
+                    horizontalRange, dy);
+            if (steepest != null && steepest.vertical() >= dy) {
+                // Even the steepest shot comes down beyond the target.
+                if (DEBUG_LOG) System.out.println("[BallisticSolver] TOO_CLOSE for plunging fire");
+                return Result.invalid(Result.Reason.TOO_CLOSE);
+            }
+            lo = maxElevRad;
+            hi = steepestRad;
+        } else {
+            lo = maxDepRad;
+            hi = maxElevRad;
+        }
         double theta = hi;
         IntegrationResult finalTraj = highTraj;
 
@@ -312,7 +341,9 @@ public final class BallisticSolver {
                         traj.vertical() < dy ? "(under)" : "(over)");
             }
 
-            if (traj.vertical() < dy) {
+            // Short of the target: steepen the flat arc, flatten the steep one.
+            boolean under = traj.vertical() < dy;
+            if (under != highArc) {
                 lo = theta;
             } else {
                 hi = theta;
@@ -336,6 +367,11 @@ public final class BallisticSolver {
 
         return new Result(true, Result.Reason.OK,
                 pitchDeg, yawDeg, finalTraj.ticks(), horizontalRange, fuzeTicks);
+    }
+
+    /** The steepest pitch plunging fire uses, for a barrel that elevates this far (degrees). */
+    public static double steepestPlungingPitch(double maxElevationDeg) {
+        return Math.min(maxElevationDeg, MAX_HIGH_ARC_DEG);
     }
 
     /**
