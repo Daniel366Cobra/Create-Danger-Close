@@ -11,11 +11,11 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "createdangerclose:fire_control_solver"
+          "name": "createdangerclose:ballistic_computer"
         }
       ],
       "rolls": 1.0
     }
   ],
-  "random_sequence": "createdangerclose:blocks/fire_control_solver"
+  "random_sequence": "createdangerclose:blocks/ballistic_computer"
 }

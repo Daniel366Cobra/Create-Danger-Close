@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.block.fire_control_solver;
+package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
 import com.simibubi.create.foundation.block.connected.CTSpriteShiftEntry;
 import com.simibubi.create.foundation.block.connected.ConnectedTextureBehaviour;
@@ -61,7 +61,7 @@ public class ComputerCasingCTBehaviour extends ConnectedTextureBehaviour.Base {
 
     /** Whether a block is part of the computer cabinet, and this face of it is plain casing. */
     private static boolean isPlainCasing(BlockState state, Direction face) {
-        boolean cabinet = state.getBlock() instanceof FireControlSolverBlock
+        boolean cabinet = state.getBlock() instanceof BallisticComputerBlock
                 || state.getBlock() instanceof ComputerModuleBlock;
         return cabinet && state.getValue(BlockStateProperties.HORIZONTAL_FACING) != face;
     }

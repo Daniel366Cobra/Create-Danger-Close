@@ -1,28 +1,28 @@
 {
   "variants": {
     "facing=down": {
-      "model": "createdangerclose:block/rangefinder_bearing",
+      "model": "createdangerclose:block/rangefinder_bearing/block",
       "x": 180
     },
     "facing=east": {
-      "model": "createdangerclose:block/rangefinder_bearing",
+      "model": "createdangerclose:block/rangefinder_bearing/block",
       "x": 90,
       "y": 90
     },
     "facing=north": {
-      "model": "createdangerclose:block/rangefinder_bearing",
+      "model": "createdangerclose:block/rangefinder_bearing/block",
       "x": 90
     },
     "facing=south": {
-      "model": "createdangerclose:block/rangefinder_bearing",
+      "model": "createdangerclose:block/rangefinder_bearing/block",
       "x": 90,
       "y": 180
     },
     "facing=up": {
-      "model": "createdangerclose:block/rangefinder_bearing"
+      "model": "createdangerclose:block/rangefinder_bearing/block"
     },
     "facing=west": {
-      "model": "createdangerclose:block/rangefinder_bearing",
+      "model": "createdangerclose:block/rangefinder_bearing/block",
       "x": 90,
       "y": 270
     }

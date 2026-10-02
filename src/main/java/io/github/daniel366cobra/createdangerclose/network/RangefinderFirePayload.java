@@ -5,7 +5,7 @@ import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
-import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
@@ -58,7 +58,7 @@ public record RangefinderFirePayload() implements CustomPacketPayload {
             // A mount usually has a pitch and a yaw servo: fire it once.
             Set<BlockPos> mounts = new HashSet<>();
             for (KineticBlockEntity member : network.members.keySet()) {
-                if (!(member instanceof SolverServo servo))
+                if (!(member instanceof ComputerServo servo))
                     continue;
                 ServoStatus status = servo.getServoStatus();
                 if (status == null)

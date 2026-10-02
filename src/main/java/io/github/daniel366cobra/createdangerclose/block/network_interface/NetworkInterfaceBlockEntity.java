@@ -15,10 +15,10 @@ import dev.simulated_team.simulated.index.SimDataComponents;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerBank;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerModuleBlock;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerBank;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleBlock;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlock;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import net.minecraft.world.level.block.Block;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
@@ -90,8 +90,8 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         // computer to the network and drives it, one poll of the computer per
         // poll of its own.
         Block facing = level.getBlockState(checkPos).getBlock();
-        if (facing instanceof FireControlSolverBlock || facing instanceof ComputerModuleBlock) {
-            FireControlSolverBlockEntity computer = ComputerBank.findComputer(level, checkPos);
+        if (facing instanceof BallisticComputerBlock || facing instanceof ComputerModuleBlock) {
+            BallisticComputerBlockEntity computer = ComputerBank.findComputer(level, checkPos);
             setSensorReading(computer != null && computer.pollFrom(this)
                     ? new SensorReading.Computer() : new SensorReading.None());
             return;
@@ -132,7 +132,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
     /** The fire control computer this interface faces and drives, if any. */
     @Nullable
-    public FireControlSolverBlockEntity getLinkedComputer() {
+    public BallisticComputerBlockEntity getLinkedComputer() {
         if (level == null || !(reading instanceof SensorReading.Computer)) {
             return null;
         }
@@ -141,7 +141,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
     /**
      * Any block of a map table connects the whole table: it now shows the
-     * ship and the solver's plot, and its target (if any) goes onto the
+     * ship and the computer's plot, and its target (if any) goes onto the
      * network. This is the one place data flows back from the network.
      */
     private SensorReading buildMapReading(MapTableBlockEntity mapTable) {
@@ -149,7 +149,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         if (controller == null) {
             return new SensorReading.None();
         }
-        controller.markLinked(findSolverPlot());
+        controller.markLinked(findComputerPlot());
         return new SensorReading.MapTarget(controller.getTarget(), controller.getTargetTick());
     }
 
@@ -203,8 +203,8 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
      * The plot of the fire control computer on this interface's network, or
      * an empty one.
      */
-    private BattlePlot findSolverPlot() {
-        FireControlSolverBlockEntity computer = findComputer();
+    private BattlePlot findComputerPlot() {
+        BallisticComputerBlockEntity computer = findComputer();
         return computer != null ? computer.getPlot() : BattlePlot.EMPTY;
     }
 
@@ -214,14 +214,14 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
      * interface that drives it.
      */
     @Nullable
-    public FireControlSolverBlockEntity findComputer() {
+    public BallisticComputerBlockEntity findComputer() {
         KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
         if (network == null) {
             return null;
         }
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member instanceof NetworkInterfaceBlockEntity other) {
-                FireControlSolverBlockEntity computer = other.getLinkedComputer();
+                BallisticComputerBlockEntity computer = other.getLinkedComputer();
                 if (computer != null) {
                     return computer;
                 }

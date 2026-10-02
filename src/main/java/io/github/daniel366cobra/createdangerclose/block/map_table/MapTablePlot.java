@@ -8,7 +8,7 @@ import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
 
 /**
- * Draws the solver's plot lines on a map table's sheet: each rangefinder's
+ * Draws the computer's plot lines on a map table's sheet: each rangefinder's
  * uncertainty circle (blue, dotted; the aim point itself is a marker, see
  * {@link MapTableMarker}), and each gun's maximum range (red, dashed). Lines are thin quads, so they work the same on the
  * table top and in the screen, and are clipped to the sheet a dash at a time.

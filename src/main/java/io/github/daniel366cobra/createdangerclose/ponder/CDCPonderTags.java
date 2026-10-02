@@ -19,7 +19,7 @@ public final class CDCPonderTags {
 
         helper.registerTag(FIRE_CONTROL)
                 .addToIndex()
-                .item(CDCBlocks.FIRE_CONTROL_SOLVER.get(), true, false)
+                .item(CDCBlocks.BALLISTIC_COMPUTER.get(), true, false)
                 .title("Fire Control")
                 .description("Aiming cannons with sensors, rangefinders and a ballistic computer")
                 .register();
@@ -27,7 +27,7 @@ public final class CDCPonderTags {
         // Add each block here once it has a scene.
         HELPER.addToTag(FIRE_CONTROL)
                 .add(CDCBlocks.NETWORK_INTERFACE)
-                .add(CDCBlocks.FIRE_CONTROL_SOLVER)
+                .add(CDCBlocks.BALLISTIC_COMPUTER)
                 .add(CDCBlocks.DIFFERENTIATOR)
                 .add(CDCBlocks.INTEGRATOR)
                 .add(CDCBlocks.CORRELATOR)

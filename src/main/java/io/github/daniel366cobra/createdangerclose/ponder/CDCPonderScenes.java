@@ -33,7 +33,7 @@ public final class CDCPonderScenes {
 
         HELPER.forComponents(CDCBlocks.NETWORK_INTERFACE)
                 .addStoryBoard("network_interface", NetworkInterfaceScenes::networkInterface, CDCPonderTags.FIRE_CONTROL);
-        HELPER.forComponents(CDCBlocks.FIRE_CONTROL_SOLVER, CDCBlocks.DIFFERENTIATOR, CDCBlocks.INTEGRATOR,
+        HELPER.forComponents(CDCBlocks.BALLISTIC_COMPUTER, CDCBlocks.DIFFERENTIATOR, CDCBlocks.INTEGRATOR,
                         CDCBlocks.CORRELATOR, CDCBlocks.FUZE_COMPUTER)
                 .addStoryBoard("ballistic_computer", BallisticComputerScenes::ballisticComputer, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.CANNON_SERVO_INPUT)

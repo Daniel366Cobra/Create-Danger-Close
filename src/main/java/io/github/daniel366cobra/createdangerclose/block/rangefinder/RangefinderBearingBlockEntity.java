@@ -99,7 +99,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private boolean hasVelocity;
     private float rangeRate;      // blocks per second, positive = opening
     private float bearingRate;    // degrees per second, positive = clockwise
-    // Target solution for the fire control solver (server only). Outlives
+    // Target solution for the Ballistic Computer (server only). Outlives
     // the operator and the readouts: fire control keeps shooting on the last
     // good solution, extrapolated, until it goes stale.
     public static final long SOLUTION_LIFETIME_TICKS = 200;
@@ -110,9 +110,9 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private double solutionSigma;
     private boolean solutionOnShip;
 
-    /** This rangefinder's role in fire control, as decided by the solver. */
+    /** This rangefinder's role in fire control, as decided by the Ballistic Computer. */
     public enum FireControlStatus {
-        /** No fire control using rangefinder data (no solver, or nothing ranged). */
+        /** No fire control using rangefinder data (no Ballistic Computer, or nothing ranged). */
         NONE,
         /** In control: the guns follow this rangefinder. */
         DIRECTING,
@@ -122,7 +122,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         STANDBY
     }
 
-    // The solver refreshes this every poll (at most every 20 ticks); without
+    // The computer refreshes this every poll (at most every 20 ticks); without
     // refreshes the status lapses.
     private static final long STATUS_LIFETIME_TICKS = 40;
     private FireControlStatus fireControlStatus = FireControlStatus.NONE;
@@ -440,7 +440,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         range = rangeRate = bearingRate = 0;
     }
 
-    /** Called by the fire control solver on every poll. */
+    /** Called by the Ballistic Computer on every poll. */
     public void setFireControlStatus(FireControlStatus status) {
         fireControlStatusTick = level.getGameTime();
         if (status != fireControlStatus) {
@@ -455,7 +455,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     /**
      * The target solution as a battle network reading, while it is fresh.
-     * Rangefinder readings outrank navigation tables in the fire control solver.
+     * Rangefinder readings outrank navigation tables in the Ballistic Computer.
      */
     @Override
     public SensorReading getSensorReading() {

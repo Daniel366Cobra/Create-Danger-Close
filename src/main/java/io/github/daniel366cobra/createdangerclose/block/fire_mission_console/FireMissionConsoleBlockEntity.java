@@ -4,7 +4,7 @@ import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -52,7 +52,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         if (level == null || level.isClientSide())
             return;
         lastLinkTick = level.getGameTime();
-        FireControlSolverBlockEntity computer = networkInterface.findComputer();
+        BallisticComputerBlockEntity computer = networkInterface.findComputer();
         BlockPos found = computer != null ? computer.getBlockPos() : null;
         if (!linked || !java.util.Objects.equals(found, computerPos)) {
             linked = true;
@@ -80,10 +80,10 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     /** The Ballistic Computer this console gives orders to, if connected and loaded. */
     @Nullable
-    public FireControlSolverBlockEntity getComputer() {
+    public BallisticComputerBlockEntity getComputer() {
         if (level == null || !linked || computerPos == null)
             return null;
-        return level.getBlockEntity(computerPos) instanceof FireControlSolverBlockEntity computer ? computer : null;
+        return level.getBlockEntity(computerPos) instanceof BallisticComputerBlockEntity computer ? computer : null;
     }
 
     // --- NBT ---
@@ -122,7 +122,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
             line(tooltip, "no_computer", ChatFormatting.RED);
             return true;
         }
-        FireControlSolverBlockEntity computer = getComputer();
+        BallisticComputerBlockEntity computer = getComputer();
         if (computer == null) {
             line(tooltip, "computer_unloaded", ChatFormatting.DARK_GRAY);
             return true;

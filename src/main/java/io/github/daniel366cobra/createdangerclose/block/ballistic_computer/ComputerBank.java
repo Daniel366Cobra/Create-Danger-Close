@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.block.fire_control_solver;
+package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -48,7 +48,7 @@ public final class ComputerBank {
         while (!frontier.isEmpty()) {
             BlockPos pos = frontier.remove();
             BlockState state = level.getBlockState(pos);
-            boolean isCore = state.getBlock() instanceof FireControlSolverBlock;
+            boolean isCore = state.getBlock() instanceof BallisticComputerBlock;
             if (isCore) {
                 cores.add(pos);
                 if (!pos.equals(start))
@@ -75,9 +75,9 @@ public final class ComputerBank {
      * bank, or the bank has no computer.
      */
     @Nullable
-    public static FireControlSolverBlockEntity findComputer(Level level, BlockPos pos) {
+    public static BallisticComputerBlockEntity findComputer(Level level, BlockPos pos) {
         for (BlockPos core : scan(level, pos).cores())
-            if (level.getBlockEntity(core) instanceof FireControlSolverBlockEntity computer)
+            if (level.getBlockEntity(core) instanceof BallisticComputerBlockEntity computer)
                 return computer;
         return null;
     }

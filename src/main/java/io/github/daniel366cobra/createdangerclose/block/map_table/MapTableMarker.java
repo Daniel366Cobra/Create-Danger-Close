@@ -142,7 +142,7 @@ public final class MapTableMarker {
     }
 
     /**
-     * Rangefinder aim points from the solver's plot, as white X's. Only on the
+     * Rangefinder aim points from the computer's plot, as white X's. Only on the
      * sheet; the plot is empty unless the table is on a battle network.
      */
     public static List<Marker> computeFixes(MapTableBlockEntity controller) {

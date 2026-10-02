@@ -5,7 +5,6 @@ import com.simibubi.create.AllItems;
 import com.simibubi.create.api.contraption.BlockMovementChecks;
 import com.simibubi.create.api.stress.BlockStressValues;
 import com.simibubi.create.foundation.data.BlockStateGen;
-import com.simibubi.create.foundation.data.BuilderTransformers;
 import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.simibubi.create.foundation.data.SharedProperties;
 import com.tterrag.registrate.providers.RegistrateRecipeProvider;
@@ -14,10 +13,10 @@ import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoBlockItem;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoInputBlock;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlock;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerCasingCTBehaviour;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerModule;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.ComputerModuleBlock;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlock;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerCasingCTBehaviour;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModule;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleBlock;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlock;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlock;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableCTBehaviour;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlock;
@@ -76,7 +75,7 @@ public class CDCBlocks {
             .lang("Battle Network Interface")
             .register();
 
-    public static final BlockEntry<FireControlSolverBlock> FIRE_CONTROL_SOLVER = REGISTRATE.block("fire_control_solver", FireControlSolverBlock::new)
+    public static final BlockEntry<BallisticComputerBlock> BALLISTIC_COMPUTER = REGISTRATE.block("ballistic_computer", BallisticComputerBlock::new)
             .initialProperties(SharedProperties::softMetal)
             .properties(p -> p.mapColor(MapColor.PODZOL))
             // Like the modules: cabinet casing on the plain faces (joining the
@@ -84,7 +83,7 @@ public class CDCBlocks {
             .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
             .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientable(c.getName(),
                     p.modLoc("block/computer/computer"),
-                    p.modLoc("block/computer/fire_control_solver_front"),
+                    p.modLoc("block/computer/ballistic_computer_front"),
                     p.modLoc("block/computer/computer"))))
             .transform(axeOrPickaxe())
             // No shaft and no stress impact: a network interface facing it drives it.
@@ -242,10 +241,14 @@ public class CDCBlocks {
             .register();
 
     public static final BlockEntry<RangefinderBearingBlock> RANGEFINDER_BEARING = REGISTRATE.block("rangefinder_bearing", RangefinderBearingBlock::new)
-            .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
+            .initialProperties(SharedProperties::stone)
+            // Open top: the turning plate is Create's bearing top, drawn by the renderer.
+            .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN).noOcclusion())
             .transform(axeOrPickaxe())
-            // Placeholder look: Create's brass (clockwork) bearing textures.
-            .transform(BuilderTransformers.bearing("clockwork", "brass_gearbox"))
+            .blockstate((c, p) -> p.directionalBlock(c.get(),
+                    $ -> p.models().getExistingFile(p.modLoc("block/rangefinder_bearing/block"))))
+            .item()
+            .transform(customItemModel())
             .onRegister(block -> {
                 BlockStressValues.IMPACTS.register(block, () -> 4.0);
             })
@@ -355,7 +358,7 @@ public class CDCBlocks {
 
     public static void register() {
         BLOCKS.add(NETWORK_INTERFACE);
-        BLOCKS.add(FIRE_CONTROL_SOLVER);
+        BLOCKS.add(BALLISTIC_COMPUTER);
         BLOCKS.add(DIFFERENTIATOR);
         BLOCKS.add(INTEGRATOR);
         BLOCKS.add(CORRELATOR);

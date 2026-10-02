@@ -60,7 +60,7 @@
       "no_velocity": "Velocity: no Velocity Sensor on the network",
       "no_altitude": "Altitude: no Altitude Sensor on the network"
     },
-    "fire_control_solver": {
+    "ballistic_computer": {
       "title": "Ballistic Computer",
       "not_connected": "Not connected. Needs a powered Battle Network Interface facing it.",
       "bank_conflict": "Two Ballistic Computers share modules. Move them apart.",
@@ -91,7 +91,7 @@
         "ok": "OK",
         "out_of_range": "Target out of range",
         "out_of_arc": "Target out of arc",
-        "no_convergence": "Solver did not converge",
+        "no_convergence": "Calculation did not converge",
         "no_target": "No target designated",
         "no_shell": "No shell loaded",
         "no_orientation": "No ship orientation data",
@@ -191,7 +191,7 @@
         "condition3": "When facing a Map Table:",
         "behaviour3": "_Connects_ the table: it shows the ship and the computer's plot, and its target goes to the computer."
       },
-      "fire_control_solver.tooltip": {
+      "ballistic_computer.tooltip": {
         "summary": "The core of the fire control computer: _computes_ firing solutions for Cannon Mounts.",
         "condition1": "When a powered Battle Network Interface faces it:",
         "behaviour1": "_Joins_ that interface's Battle Network, reads its sensors and _sends_ firing solutions to its servos.",

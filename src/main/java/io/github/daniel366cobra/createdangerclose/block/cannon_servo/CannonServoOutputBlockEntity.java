@@ -241,7 +241,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     private void driveToTarget(FireSolution command, long commandAge) {
         boolean pitch = detectedAxis == ServoAxis.PITCH;
         float rate = (float) (pitch ? command.pitchRateDegPerTick() : command.yawRateDegPerTick());
-        // Extrapolate the command to now: the solver only updates every poll.
+        // Extrapolate the command to now: the computer only updates every poll.
         float target = (float) (pitch ? command.pitchDeg() : command.yawDeg()) + rate * commandAge;
 
         if (detectedAxis == ServoAxis.PITCH && command.fuzeTicks() > 0) {

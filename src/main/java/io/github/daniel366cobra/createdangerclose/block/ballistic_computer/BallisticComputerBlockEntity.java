@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.block.fire_control_solver;
+package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
 import com.simibubi.create.Create;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
@@ -14,7 +14,7 @@ import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
-import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
 import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
@@ -62,13 +62,13 @@ import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YA
  * lapses and the computer goes idle.
  *
  * <p>Sensors on the battle network act as <em>gates</em>: they decide which
- * capabilities the solver has, but their readings are not fed into the math.
+ * capabilities the computer has, but their readings are not fed into the math.
  * The actual orientation, position and velocity come straight from the Sable
  * sublevel pose of each mount, which is what the sensors derive their own
  * readings from anyway. The only sensor value that is used is the target
  * position from a navigation table, which the pose cannot provide.
  */
-public class FireControlSolverBlockEntity extends SmartBlockEntity
+public class BallisticComputerBlockEntity extends SmartBlockEntity
         implements IHaveGoggleInformation {
 
     // The link to the interface lapses this long after its last poll
@@ -166,7 +166,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
     private boolean isPowered = false;
 
-    public FireControlSolverBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
+    public BallisticComputerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
     }
 
@@ -275,7 +275,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         KineticNetwork network = battleNetwork();
         if (network == null) return;
         for (KineticBlockEntity member : network.members.keySet())
-            if (member instanceof SolverServo servo)
+            if (member instanceof ComputerServo servo)
                 servo.receiveFiringSolution(null);
     }
 
@@ -528,7 +528,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Ship-frame mask for the velocity the solver may compensate for: 1 on
+     * Ship-frame mask for the velocity the computer may compensate for: 1 on
      * axes covered by a velocity sensor, 0 elsewhere.
      */
     public Vector3d velocityAxisMask() {
@@ -550,13 +550,13 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         // Pitch servos run the ballistic solve (they know the shell and charge)
         // and cache the result per mount. Yaw servos run afterwards so both axes
         // of a mount aim along the same 3D direction.
-        List<SolverServo> yawServos = new ArrayList<>();
+        List<ComputerServo> yawServos = new ArrayList<>();
         // For the map table: the armed mounts, and the barrel yaw its yaw servo reads.
         List<ServoStatus.MountSnapshot> pitchMounts = new ArrayList<>();
         Map<BlockPos, Float> mountYaws = new java.util.HashMap<>();
 
         for (KineticBlockEntity member : network.members.keySet()) {
-            if (!(member instanceof SolverServo servo)) continue;
+            if (!(member instanceof ComputerServo servo)) continue;
 
             var status = servo.getServoStatus();
             if (status == null || status.mounts().isEmpty() || !status.powered()) {
@@ -576,7 +576,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
             }
         }
 
-        for (SolverServo servo : yawServos) {
+        for (ComputerServo servo : yawServos) {
             ServoStatus status = servo.getServoStatus();
             servo.receiveFiringSolution(withRates(status, solveYaw(status)));
         }
@@ -601,7 +601,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
      * How far a mount can reach with its current shell and charge, for the
      * map table: down to the target's height, or without a target to the
      * ground (or sea level, if unloaded) under the mount. Uses the same top
-     * pitch as the solver (45°, or less if the mount cannot elevate that far),
+     * pitch as the ballistic solver (45°, or less if the mount cannot elevate that far),
      * so it matches where solutions turn into "out of range". The ship's own
      * motion is left out.
      *
@@ -757,7 +757,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
                           @Nullable Vector3d inherited) {
         if (!DEBUG_SOLVER_LOG || level == null) return;
         CreateDangerClose.LOGGER.info(String.format(
-                "[Solver %s] t=%d %-5s %-14s wPitch=%8.3f wYaw=%8.3f tof=%6.1f sPitch=%8.3f sYaw=%8.3f " +
+                "[Computer %s] t=%d %-5s %-14s wPitch=%8.3f wYaw=%8.3f tof=%6.1f sPitch=%8.3f sYaw=%8.3f " +
                         "u=(%7.4f %7.4f %7.4f) axes=%d",
                 mount.mountPos().toShortString(), level.getGameTime(), axis, outcome,
                 result != null ? result.pitchDeg() : Double.NaN,
@@ -820,7 +820,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
         Vector3d inheritedVelocity = inheritedLaunchVelocity(mountSubLevel, mount.mountPos());
 
-        // The mount's elevation limits apply in ship frame, so let the solver
+        // The mount's elevation limits apply in ship frame, so let the ballistic solver
         // search the whole world-frame arc and check the limits afterwards.
         BallisticSolver.Result result = BallisticSolver.solve(
                 muzzleWorld, targetWorld, targetVel, inheritedVelocity,
@@ -871,7 +871,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
      * <p>When CBC's Sable compat launches a shell out of a sub-level, it adds
      * the sub-level's velocity at the shell's position (see CBC's
      * {@code EntitySubLevelUtilMixin}), unless the server config disables it.
-     * The solver only compensates along ship axes it has velocity sensors for.
+     * The computer only compensates along ship axes it has velocity sensors for.
      */
     private Vector3d inheritedLaunchVelocity(SubLevel mountSubLevel, BlockPos mountPos) {
         // Compensating for own-ship speed takes an Integrator (and velocity sensors).
@@ -897,7 +897,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * The sublevel the mount itself sits on. Usually the solver's own, but a
+     * The sublevel the mount itself sits on. Usually the computer's own, but a
      * mount on a separately simulated body must use that body's pose.
      */
     @Nullable
@@ -1054,12 +1054,12 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
         CDCLang.builder()
-                .add(Component.translatable("createdangerclose.fire_control_solver.title"))
+                .add(Component.translatable("createdangerclose.ballistic_computer.title"))
                 .forGoggles(tooltip);
 
         if (!isPowered) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.not_connected"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.not_connected"))
                     .style(ChatFormatting.RED)
                     .forGoggles(tooltip);
             return true;
@@ -1067,7 +1067,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
         if (bankConflict) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.bank_conflict"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.bank_conflict"))
                     .style(ChatFormatting.RED)
                     .forGoggles(tooltip);
             return true;
@@ -1075,7 +1075,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
         // --- Modules: installed ones, then what each missing one costs ---
         CDCLang.builder()
-                .add(Component.translatable("createdangerclose.fire_control_solver.modules"))
+                .add(Component.translatable("createdangerclose.ballistic_computer.modules"))
                 .style(ChatFormatting.GRAY)
                 .forGoggles(tooltip);
         for (ComputerModule module : ComputerModule.values()) {
@@ -1084,14 +1084,14 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
                     .add(Component.literal(installed ? "  ✔ " : "  ✖ "))
                     .add(Component.translatable("block.createdangerclose." + module.id()))
                     .add(installed ? Component.empty() : Component.literal(": ").append(Component.translatable(
-                            "createdangerclose.fire_control_solver.module_missing." + module.id())))
+                            "createdangerclose.ballistic_computer.module_missing." + module.id())))
                     .style(installed ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
                     .forGoggles(tooltip);
         }
 
         if (!hasPose) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.no_sublevel"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.no_sublevel"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
@@ -1099,19 +1099,19 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         // --- Missing sensors (the ship's own readings are on the Navigation Console) ---
         if (!hasOrientationSensors()) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.missing_orientation"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.missing_orientation"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
         if (!hasFullVelocity()) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.missing_velocity"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.missing_velocity"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
         if (!hasAltitudeSensor()) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.missing_altitude"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.missing_altitude"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
@@ -1119,7 +1119,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
         // Target and firing solutions are shown on the Fire Mission Console.
         if (!hasTarget) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.missing_target"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.missing_target"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
@@ -1152,7 +1152,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
         if (hasTarget) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.target"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.target"))
                     .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
                     .add(Component.literal(String.format("%.0f", targetX)).withStyle(ChatFormatting.GOLD))
                     .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
@@ -1163,14 +1163,14 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
 
             Component source;
             if (targetSource == TargetSource.MAP_TABLE) {
-                source = Component.translatable("createdangerclose.fire_control_solver.target_source.map_table");
+                source = Component.translatable("createdangerclose.ballistic_computer.target_source.map_table");
             } else if (targetSource != TargetSource.RANGEFINDER) {
-                source = Component.translatable("createdangerclose.fire_control_solver.target_source.nav_table");
+                source = Component.translatable("createdangerclose.ballistic_computer.target_source.nav_table");
             } else if (mergedRangefinders > 1) {
-                source = Component.translatable("createdangerclose.fire_control_solver.target_source.rangefinders_merged",
+                source = Component.translatable("createdangerclose.ballistic_computer.target_source.rangefinders_merged",
                         mergedRangefinders, String.format("%.1f", targetAgeTicks / 20.0), String.format("%.0f", targetSigma));
             } else {
-                source = Component.translatable("createdangerclose.fire_control_solver.target_source.rangefinder",
+                source = Component.translatable("createdangerclose.ballistic_computer.target_source.rangefinder",
                         String.format("%.1f", targetAgeTicks / 20.0), String.format("%.0f", targetSigma));
             }
             CDCLang.builder()
@@ -1181,34 +1181,34 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
             if (hasTargetVelocity) {
                 double speed = Math.sqrt(targetVelX * targetVelX + targetVelY * targetVelY + targetVelZ * targetVelZ) * 20;
                 CDCLang.builder()
-                        .add(Component.translatable("createdangerclose.fire_control_solver.target_speed"))
+                        .add(Component.translatable("createdangerclose.ballistic_computer.target_speed"))
                         .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
                         .add(CDCLang.numberWithUnit(speed, "createdangerclose.unit.velocity").withStyle(ChatFormatting.GOLD))
                         .forGoggles(tooltip);
             }
         } else {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.missing_target"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.missing_target"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
 
         if (!lastPitchResults.isEmpty()) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.fire_control_solver.solutions"))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.solutions"))
                     .style(ChatFormatting.GRAY)
                     .forGoggles(tooltip);
 
             for (Map.Entry<BlockPos, BallisticSolver.Result> entry : lastPitchResults.entrySet()) {
                 BallisticSolver.Result r = entry.getValue();
-                String reasonKey = "createdangerclose.fire_control_solver.reason."
+                String reasonKey = "createdangerclose.ballistic_computer.reason."
                         + r.reason().name().toLowerCase();
 
                 if (r.valid()) {
                     CDCLang.builder()
                             .add(Component.literal("  "))
                             .add(Component.translatable(
-                                    "createdangerclose.fire_control_solver.solution_ok",
+                                    "createdangerclose.ballistic_computer.solution_ok",
                                     Component.translatable(reasonKey)))
                             .style(ChatFormatting.GREEN)
                             .forGoggles(tooltip);
@@ -1224,7 +1224,7 @@ public class FireControlSolverBlockEntity extends SmartBlockEntity
                     CDCLang.builder()
                             .add(Component.literal("  "))
                             .add(Component.translatable(
-                                    "createdangerclose.fire_control_solver.solution_failed",
+                                    "createdangerclose.ballistic_computer.solution_failed",
                                     Component.translatable(reasonKey)))
                             .style(ChatFormatting.RED)
                             .forGoggles(tooltip);

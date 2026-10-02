@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.block.fire_control_solver;
+package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
 import com.mojang.serialization.MapCodec;
 import io.github.daniel366cobra.createdangerclose.block.HorizontalFacedBlock;

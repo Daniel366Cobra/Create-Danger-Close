@@ -85,7 +85,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
     // Controller only: whether a battle network interface is reading this table.
     protected boolean linked;
     protected long lastLinkTick;
-    // Controller only: the solver's plot, as last carried over by a network interface.
+    // Controller only: the computer's plot, as last carried over by a network interface.
     protected BattlePlot plot = BattlePlot.EMPTY;
     // Controller, server only: per player, a hash of the map pixels last sent to them.
     private Map<UUID, Map<MapId, Integer>> sentPixels = new HashMap<>();
@@ -296,7 +296,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     // --- Battle network link (controller only) ---
 
-    /** Called by a network interface each time it reads this table, with the solver's latest plot. */
+    /** Called by a network interface each time it reads this table, with the computer's latest plot. */
     public void markLinked(BattlePlot plot) {
         if (level == null)
             return;
@@ -308,7 +308,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         }
     }
 
-    /** Rangefinder fixes and gun ranges to draw; empty unless on a battle network with a solver. */
+    /** Rangefinder fixes and gun ranges to draw; empty unless on a battle network with a Ballistic Computer. */
     public BattlePlot getPlot() {
         return plot;
     }

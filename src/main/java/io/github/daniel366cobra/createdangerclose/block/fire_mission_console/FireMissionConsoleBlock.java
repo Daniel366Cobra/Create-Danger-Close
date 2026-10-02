@@ -3,7 +3,7 @@ package io.github.daniel366cobra.createdangerclose.block.fire_mission_console;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.foundation.block.IBE;
 import io.github.daniel366cobra.createdangerclose.block.HorizontalFacedBlock;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -44,7 +44,7 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
 
         boolean fireButton = isOnFireButtonSide(state, pos, hitResult.getLocation());
         FireMissionConsoleBlockEntity console = getBlockEntity(level, pos);
-        FireControlSolverBlockEntity computer = console != null ? console.getComputer() : null;
+        BallisticComputerBlockEntity computer = console != null ? console.getComputer() : null;
         if (console == null || !console.isLinked()) {
             status(player, "not_connected");
             return InteractionResult.SUCCESS;
@@ -55,7 +55,7 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
         }
 
         if (fireButton) {
-            FireControlSolverBlockEntity.SalvoResult salvo = computer.fireSalvo();
+            BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo();
             level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
             if (salvo.fired() + salvo.held() == 0)
                 status(player, "no_guns");

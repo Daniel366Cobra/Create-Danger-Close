@@ -3,7 +3,7 @@ package io.github.daniel366cobra.createdangerclose.block.cannon_servo;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
-import io.github.daniel366cobra.createdangerclose.api.sensor.SolverServo;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
 
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 
-public class CannonServoInputBlockEntity extends KineticBlockEntity implements SolverServo {
+public class CannonServoInputBlockEntity extends KineticBlockEntity implements ComputerServo {
     private static final long COMMAND_TIMEOUT = 40;
     @Nullable private ServoStatus cachedStatus;
     @Nullable private FireSolution currentCommand;

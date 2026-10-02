@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "createdangerclose:fire_control_solver"
+        "recipe": "createdangerclose:ballistic_computer"
       },
       "trigger": "minecraft:recipe_unlocked"
     }
@@ -26,7 +26,7 @@
   ],
   "rewards": {
     "recipes": [
-      "createdangerclose:fire_control_solver"
+      "createdangerclose:ballistic_computer"
     ]
   }
 }

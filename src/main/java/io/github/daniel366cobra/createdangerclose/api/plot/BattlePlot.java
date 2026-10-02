@@ -8,8 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * What the fire control solver knows, for plotting on a map table. World
- * space, blocks. Built by the solver each poll and carried to connected map
+ * What the Ballistic Computer knows, for plotting on a map table. World
+ * space, blocks. Built by the computer each poll and carried to connected map
  * tables by network interfaces.
  *
  * @param fixes rangefinder solutions: where each one puts the target

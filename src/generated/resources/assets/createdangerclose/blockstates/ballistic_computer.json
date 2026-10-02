@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "createdangerclose:block/ballistic_computer",
+      "y": 90
+    },
+    "facing=north": {
+      "model": "createdangerclose:block/ballistic_computer"
+    },
+    "facing=south": {
+      "model": "createdangerclose:block/ballistic_computer",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createdangerclose:block/ballistic_computer",
+      "y": 270
+    }
+  }
+}

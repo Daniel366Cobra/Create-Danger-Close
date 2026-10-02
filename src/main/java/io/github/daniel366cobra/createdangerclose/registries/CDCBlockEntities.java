@@ -6,7 +6,7 @@ import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.tterrag.registrate.util.entry.BlockEntityEntry;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.*;
-import io.github.daniel366cobra.createdangerclose.block.fire_control_solver.FireControlSolverBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
@@ -30,9 +30,9 @@ public class CDCBlockEntities {
             .renderer(() -> NetworkInterfaceRenderer::new)
             .register();
 
-    public static final BlockEntityEntry<FireControlSolverBlockEntity> FIRE_CONTROL_SOLVER = REGISTRATE
-            .blockEntity("fire_control_solver", FireControlSolverBlockEntity::new)
-            .validBlocks(CDCBlocks.FIRE_CONTROL_SOLVER)
+    public static final BlockEntityEntry<BallisticComputerBlockEntity> BALLISTIC_COMPUTER = REGISTRATE
+            .blockEntity("ballistic_computer", BallisticComputerBlockEntity::new)
+            .validBlocks(CDCBlocks.BALLISTIC_COMPUTER)
             .register();
 
     public static final BlockEntityEntry<CannonServoInputBlockEntity> CANNON_SERVO_INPUT =
@@ -74,7 +74,7 @@ public class CDCBlockEntities {
 
     public static void register() {
         BLOCK_ENTITIES.add(NETWORK_INTERFACE);
-        BLOCK_ENTITIES.add(FIRE_CONTROL_SOLVER);
+        BLOCK_ENTITIES.add(BALLISTIC_COMPUTER);
         BLOCK_ENTITIES.add(CANNON_SERVO_INPUT);
         BLOCK_ENTITIES.add(CANNON_SERVO_OUTPUT);
         BLOCK_ENTITIES.add(RANGEFINDER_BEARING);

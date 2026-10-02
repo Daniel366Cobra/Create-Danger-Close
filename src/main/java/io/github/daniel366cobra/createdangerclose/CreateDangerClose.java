@@ -15,6 +15,7 @@ import io.github.daniel366cobra.createdangerclose.registries.CDCMenuTypes;
 import io.github.daniel366cobra.createdangerclose.registries.CDCCreativeTabs;
 import io.github.daniel366cobra.createdangerclose.registries.CDCItems;
 import net.createmod.catnip.lang.FontHelper;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;

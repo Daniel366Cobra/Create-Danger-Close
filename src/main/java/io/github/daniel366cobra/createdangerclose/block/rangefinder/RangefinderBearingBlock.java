@@ -4,11 +4,13 @@ import com.simibubi.create.content.contraptions.bearing.BearingBlock;
 import com.simibubi.create.foundation.block.IBE;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -24,6 +26,24 @@ public class RangefinderBearingBlock extends BearingBlock implements IBE<Rangefi
 
     public RangefinderBearingBlock(Properties properties) {
         super(properties);
+    }
+
+    /**
+     * Yaw only, so it is placed vertically: plate up when set on a deck, plate
+     * down when set under a block (hanging from a hull). Sneaking flips it.
+     */
+    @Override
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
+        Direction facing = context.getClickedFace() == Direction.DOWN ? Direction.DOWN : Direction.UP;
+        if (context.getPlayer() != null && context.getPlayer().isShiftKeyDown())
+            facing = facing.getOpposite();
+        return defaultBlockState().setValue(FACING, facing);
+    }
+
+    /** The wrench flips it between up and down, never sideways. */
+    @Override
+    public BlockState getRotatedBlockState(BlockState originalState, Direction targetedFace) {
+        return originalState.setValue(FACING, originalState.getValue(FACING).getOpposite());
     }
 
     @Override

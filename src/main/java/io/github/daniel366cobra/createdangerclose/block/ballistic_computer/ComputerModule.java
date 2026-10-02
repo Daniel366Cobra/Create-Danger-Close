@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.block.fire_control_solver;
+package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
 /**
  * The modules of a fire control computer. Each one placed in the bank around
