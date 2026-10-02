@@ -256,7 +256,7 @@
         "condition2": "When right-clicked with an empty hand:",
         "behaviour2": "_Opens_ the table, showing all its maps stitched together. _Right-click_ the maps to mark a _target_.",
         "condition3": "When a Battle Network Interface faces it:",
-        "behaviour3": "_Shows_ the ship's position and _sends_ the marked target to the _Fire Control Solver_."
+        "behaviour3": "_Shows_ the ship's position and _sends_ the marked target to the _Ballistic Computer_."
       },
       "rangefinder_eyepiece.tooltip": {
         "summary": "The operator's station on a _rangefinder_ tube. _Bolts_ onto the back of the tube, _centred_ between the lenses.",

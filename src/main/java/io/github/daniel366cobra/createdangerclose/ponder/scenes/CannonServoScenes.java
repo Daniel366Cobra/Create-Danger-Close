@@ -134,11 +134,10 @@ public final class CannonServoScenes {
                 .text("When the computer has a firing solution, the servos train the gun onto it");
         scene.idle(30);
         scene.world().multiplyKineticSpeed(cannonNetworks, TRAINING_SPEED_FACTOR);
-        scene.world().rotateSection(cannon, 0, TRAVERSE_DEG, ELEVATION_DEG, TRAINING_TICKS);
         // CBC's mount yaw grows the other way round to Ponder's rotation (east is 270, north 180).
         scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountYaw(mount, -TRAVERSE_DEG, TRAINING_TICKS));
         scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountPitch(mount, ELEVATION_DEG, TRAINING_TICKS));
-        scene.idle(TRAINING_TICKS);
+        new CannonAim(scene, cannon).turn(TRAVERSE_DEG, ELEVATION_DEG, TRAINING_TICKS);
         scene.world().multiplyKineticSpeed(cannonNetworks, 1 / TRAINING_SPEED_FACTOR);
         scene.idle(40);
 

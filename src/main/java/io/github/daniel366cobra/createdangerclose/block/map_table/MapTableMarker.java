@@ -67,7 +67,7 @@ public final class MapTableMarker {
         BlockPos origin = controller.getBlockPos();
         Vec3 position = new Vec3(origin.getX() + width / 2.0, origin.getY() + 1, origin.getZ() + width / 2.0);
         Vec3 north = new Vec3(0, 0, -1);
-        SubLevel ship = Sable.HELPER.getContaining(level, position);
+        SubLevel ship = controller.getPonderChart() != null ? null : Sable.HELPER.getContaining(level, position);
         if (ship != null) {
             position = ship.logicalPose().transformPosition(position);
             north = ship.logicalPose().transformNormal(north);
@@ -115,6 +115,8 @@ public final class MapTableMarker {
         Level level = controller.getLevel();
         if (level == null || !controller.isLinked())
             return List.of();
+        if (controller.getPonderChart() != null)
+            return controller.getPonderChart().spotters();
         int width = controller.getWidth();
         float sheetPixels = 128f * width;
         List<Marker> spotters = new ArrayList<>();

@@ -19,7 +19,7 @@ import java.util.List;
 public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity> {
 
     // Frame trim left visible around the sheet, in blocks (one texture pixel).
-    private static final float BORDER = 1 / 16f;
+    public static final float BORDER = 1 / 16f;
     // Lift above the top face, against z-fighting.
     private static final float LIFT = 0.001f;
     // Further lift for the position marker, above the maps.
@@ -53,18 +53,25 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
                 // Map x → east, map y (down the page) → south, facing up.
                 pose.mulPose(Axis.XP.rotationDegrees(90));
                 pose.scale(texel, texel, texel);
-                MapTableMaps.render(pose, buffers, map,
-                        LevelRenderer.getLightColor(table.getLevel(), part.getBlockPos().above()));
+                int mapLight = LevelRenderer.getLightColor(table.getLevel(), part.getBlockPos().above());
+                MapTableBlockEntity.PonderChart chart = table.getPonderChart();
+                if (chart != null)
+                    MapTableMaps.renderPonderChart(pose, buffers, chart.texture(), dx, dz, width, mapLight);
+                else
+                    MapTableMaps.render(pose, buffers, map, mapLight);
                 pose.popPose();
             }
         }
 
         int light = LevelRenderer.getLightColor(table.getLevel(), table.getBlockPos().above());
+        // A Ponder chart draws its lines and markers bolder, to read in the small view.
+        MapTableBlockEntity.PonderChart chart = table.getPonderChart();
+        float bold = chart != null ? chart.boldness() : 1;
         pose.pushPose();
         pose.translate(BORDER, 1 + LIFT, BORDER);
         pose.mulPose(Axis.XP.rotationDegrees(90));
         // Plot lines between the maps and the markers; 1/64 block per line pixel.
-        MapTablePlot.render(pose, buffers, table, width * cell, PLOT_PIXEL, -MARKER_LIFT / 2, light);
+        MapTablePlot.render(pose, buffers, table, width * cell, PLOT_PIXEL * bold, -MARKER_LIFT / 2, light);
         pose.popPose();
 
         List<MapTableMarker.Marker> markers = MapTableMarker.computeAll(table);
@@ -75,7 +82,7 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
             // Vanilla size: 8 map pixels. The pose's -Z is up, so a negative lift clears the maps;
             // each later marker sits a little higher, over the earlier ones.
             for (int i = 0; i < markers.size(); i++)
-                MapTableMarker.render(pose, buffers, markers.get(i), width * cell, 8 * texel,
+                MapTableMarker.render(pose, buffers, markers.get(i), width * cell, 8 * texel * bold,
                         -MARKER_LIFT * (i + 1), light);
             pose.popPose();
         }

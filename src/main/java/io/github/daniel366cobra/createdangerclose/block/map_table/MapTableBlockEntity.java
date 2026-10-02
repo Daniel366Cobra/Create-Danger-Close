@@ -91,6 +91,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
     private Map<UUID, Map<MapId, Integer>> sentPixels = new HashMap<>();
     // Client only: where this block's map lies, as sent by the server.
     @Nullable protected MapPlacement clientMapPlacement;
+    // Ponder scenes only: a made-up chart, since a scene has neither real maps
+    // nor a network. While set, it stands in for the maps and the link.
+    @Nullable protected PonderChart ponderChart;
 
     /**
      * Where the stitched sheet lies in the world: its north-west corner, how
@@ -119,6 +122,15 @@ public class MapTableBlockEntity extends SmartBlockEntity
             return (z - northZ) / blocksPerPixel;
         }
     }
+
+    /**
+     * A chart for a Ponder scene: where the sheet lies, the picture drawn on
+     * every part that holds a map (one image across the whole table), and the
+     * spotters to mark, which in a real game come from players carrying copies.
+     * Markers and plot lines are drawn {@code boldness} times their usual size.
+     */
+    public record PonderChart(Sheet sheet, ResourceLocation texture, List<MapTableMarker.Marker> spotters,
+                              float boldness) {}
 
     public MapTableBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -222,6 +234,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
      */
     @Nullable
     public Sheet getSheet() {
+        if (ponderChart != null)
+            return ponderChart.sheet();
         if (level == null)
             return null;
         for (int dx = 0; dx < width; dx++) {
@@ -304,6 +318,29 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return linked;
     }
 
+    // --- Ponder (controller only) ---
+
+    @Nullable
+    public PonderChart getPonderChart() {
+        return ponderChart;
+    }
+
+    /** Lays a made-up chart on the table, for a Ponder scene. */
+    public void setPonderChart(@Nullable PonderChart chart) {
+        ponderChart = chart;
+    }
+
+    /** Marks a target on the Ponder chart, as a player would on the screen. */
+    public void setPonderTarget(@Nullable Vec3 target) {
+        this.target = target;
+    }
+
+    /** Connects the Ponder table to a made-up battle plot; it stays connected. */
+    public void setPonderPlot(BattlePlot plot) {
+        linked = true;
+        this.plot = plot;
+    }
+
     /** The table block at an offset from this controller, or null. */
     @Nullable
     public MapTableBlockEntity partAt(int dx, int dz) {
@@ -369,6 +406,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
     @Override
     public void tick() {
         super.tick();
+        // A Ponder chart has no real maps, players or network to keep up with.
+        if (ponderChart != null)
+            return;
 
         if (lastKnownPos == null)
             lastKnownPos = getBlockPos();

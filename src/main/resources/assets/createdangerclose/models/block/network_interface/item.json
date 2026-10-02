@@ -4,8 +4,8 @@
   "parent": "block/block",
   "textures": {
     "6": "createdangerclose:block/network_interface",
-    "shaft": "create:block/axis",
-    "shaft_top": "create:block/axis_top"
+    "axis": "create:block/axis",
+    "axis_top": "create:block/axis_top"
   },
   "elements": [
     {

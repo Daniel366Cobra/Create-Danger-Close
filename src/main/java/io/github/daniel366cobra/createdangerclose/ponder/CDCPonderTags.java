@@ -35,6 +35,9 @@ public final class CDCPonderTags {
                 .add(CDCBlocks.CANNON_SERVO_INPUT)
                 .add(CDCBlocks.RANGEFINDER_BEARING)
                 .add(CDCBlocks.RANGEFINDER_LENS)
-                .add(CDCBlocks.RANGEFINDER_EYEPIECE);
+                .add(CDCBlocks.RANGEFINDER_EYEPIECE)
+                .add(CDCBlocks.NAVIGATION_CONSOLE)
+                .add(CDCBlocks.FIRE_MISSION_CONSOLE)
+                .add(CDCBlocks.MAP_TABLE);
     }
 }

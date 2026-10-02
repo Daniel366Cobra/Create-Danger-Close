@@ -4,6 +4,9 @@ import com.tterrag.registrate.util.entry.ItemProviderEntry;
 import com.tterrag.registrate.util.entry.RegistryEntry;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.BallisticComputerScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.CannonServoScenes;
+import io.github.daniel366cobra.createdangerclose.ponder.scenes.FireMissionConsoleScenes;
+import io.github.daniel366cobra.createdangerclose.ponder.scenes.MapTableScenes;
+import io.github.daniel366cobra.createdangerclose.ponder.scenes.NavigationConsoleScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.NetworkInterfaceScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.RangefinderScenes;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
@@ -37,5 +40,11 @@ public final class CDCPonderScenes {
                 .addStoryBoard("cannon_servo", CannonServoScenes::cannonServo, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.RANGEFINDER_BEARING, CDCBlocks.RANGEFINDER_LENS, CDCBlocks.RANGEFINDER_EYEPIECE)
                 .addStoryBoard("rangefinder", RangefinderScenes::rangefinder, CDCPonderTags.FIRE_CONTROL);
+        HELPER.forComponents(CDCBlocks.NAVIGATION_CONSOLE)
+                .addStoryBoard("navigation_console", NavigationConsoleScenes::navigationConsole, CDCPonderTags.FIRE_CONTROL);
+        HELPER.forComponents(CDCBlocks.FIRE_MISSION_CONSOLE)
+                .addStoryBoard("fire_mission_console", FireMissionConsoleScenes::fireMissionConsole, CDCPonderTags.FIRE_CONTROL);
+        HELPER.forComponents(CDCBlocks.MAP_TABLE)
+                .addStoryBoard("map_table", MapTableScenes::mapTable, CDCPonderTags.FIRE_CONTROL);
     }
 }
