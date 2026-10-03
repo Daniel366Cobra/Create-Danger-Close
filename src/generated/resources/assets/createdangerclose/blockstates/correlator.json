@@ -1,18 +1,18 @@
 {
   "variants": {
     "facing=east": {
-      "model": "createdangerclose:block/correlator",
+      "model": "createdangerclose:block/computer/correlator/block",
       "y": 90
     },
     "facing=north": {
-      "model": "createdangerclose:block/correlator"
+      "model": "createdangerclose:block/computer/correlator/block"
     },
     "facing=south": {
-      "model": "createdangerclose:block/correlator",
+      "model": "createdangerclose:block/computer/correlator/block",
       "y": 180
     },
     "facing=west": {
-      "model": "createdangerclose:block/correlator",
+      "model": "createdangerclose:block/computer/correlator/block",
       "y": 270
     }
   }

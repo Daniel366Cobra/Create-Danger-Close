@@ -155,7 +155,10 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return new SensorReading.None();
         }
         controller.markLinked(findComputerPlot());
-        return new SensorReading.MapTarget(controller.getTarget(), controller.getTargetTick());
+        // Placed on a pixel: off by up to half of one, a standard deviation of a pixel over √12.
+        MapTableBlockEntity.Sheet sheet = controller.getSheet();
+        double sigma = sheet != null ? sheet.blocksPerPixel() / Math.sqrt(12) : 0;
+        return new SensorReading.MapTarget(controller.getTarget(), controller.getTargetTick(), sigma);
     }
 
     private SensorReading buildGimbalReading(GimbalSensorBlockEntity gimbal) {

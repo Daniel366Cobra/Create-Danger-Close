@@ -1,18 +1,18 @@
 {
   "variants": {
     "facing=east": {
-      "model": "createdangerclose:block/integrator",
+      "model": "createdangerclose:block/computer/integrator/block",
       "y": 90
     },
     "facing=north": {
-      "model": "createdangerclose:block/integrator"
+      "model": "createdangerclose:block/computer/integrator/block"
     },
     "facing=south": {
-      "model": "createdangerclose:block/integrator",
+      "model": "createdangerclose:block/computer/integrator/block",
       "y": 180
     },
     "facing=west": {
-      "model": "createdangerclose:block/integrator",
+      "model": "createdangerclose:block/computer/integrator/block",
       "y": 270
     }
   }

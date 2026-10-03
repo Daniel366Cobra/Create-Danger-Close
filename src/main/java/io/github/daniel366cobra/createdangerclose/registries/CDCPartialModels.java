@@ -17,6 +17,19 @@ public class CDCPartialModels {
     public static final PartialModel COMPUTER_DIFFERENTIAL = block("computer/differentiator/differential");
     public static final PartialModel COMPUTER_TRACKING_FLAG = block("computer/differentiator/tracking_flag");
 
+    // Integrator.
+    public static final PartialModel COMPUTER_INTEGRATOR_DISK = block("computer/integrator/integrator_disk");
+    public static final PartialModel COMPUTER_INTEGRATOR_CARRIAGE = block("computer/integrator/integrator_carriage_body");
+    public static final PartialModel COMPUTER_INTEGRATOR_BALL = block("computer/integrator/integrator_ball");
+    public static final PartialModel COMPUTER_INTEGRATOR_OUTPUT_SHAFT = block("computer/integrator/integrator_output_shaft");
+    public static final PartialModel COMPUTER_INTEGRATOR_HOLD_NEEDLE = block("computer/integrator/countdown_needle");
+
+    // Correlator.
+    public static final PartialModel COMPUTER_COINCIDENCE_NEEDLE = block("computer/correlator/coincidence_needle");
+
+    // Fuze Computer.
+    public static final PartialModel COMPUTER_FUZE_SETTING_RING = block("computer/fuze_computer/setting_ring");
+
     private static PartialModel block(String path) {
         return PartialModel.of(CreateDangerClose.asResource("block/" + path));
     }

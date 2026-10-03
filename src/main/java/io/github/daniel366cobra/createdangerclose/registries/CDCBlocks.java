@@ -96,13 +96,13 @@ public class CDCBlocks {
 
     // Fire control computer modules: each adds one capability to the Ballistic Computer it touches.
     public static final BlockEntry<ComputerModuleBlock> DIFFERENTIATOR =
-            computerModule(ComputerModule.DIFFERENTIATOR, "Differentiator", AllBlocks.LARGE_COGWHEEL, true);
+            computerModule(ComputerModule.DIFFERENTIATOR, "Differentiator", AllBlocks.LARGE_COGWHEEL);
     public static final BlockEntry<ComputerModuleBlock> INTEGRATOR =
-            computerModule(ComputerModule.INTEGRATOR, "Integrator", AllBlocks.TURNTABLE, false);
+            computerModule(ComputerModule.INTEGRATOR, "Integrator", AllBlocks.TURNTABLE);
     public static final BlockEntry<ComputerModuleBlock> CORRELATOR =
-            computerModule(ComputerModule.CORRELATOR, "Correlator", Items.COMPARATOR, false);
+            computerModule(ComputerModule.CORRELATOR, "Correlator", Items.COMPARATOR);
     public static final BlockEntry<ComputerModuleBlock> FUZE_COMPUTER =
-            computerModule(ComputerModule.FUZE_COMPUTER, "Fuze Computer", Items.CLOCK, false);
+            computerModule(ComputerModule.FUZE_COMPUTER, "Fuze Computer", Items.CLOCK);
 
     public static final BlockEntry<NavigationConsoleBlock> NAVIGATION_CONSOLE = REGISTRATE
             .block("navigation_console", NavigationConsoleBlock::new)
@@ -149,33 +149,20 @@ public class CDCBlocks {
      * A computer module: a casing-sided block whose face turns in yaw. Crafted
      * from a brass casing, a precision mechanism and one part of its own.
      */
-    /**
-     * @param modelled whether the module has its own models (in
-     *                 {@code models/block/computer/<id>/}: block, item, moving parts), or
-     *                 is still a generated cube with a front texture
-     */
+    /** A module, with its own models in {@code models/block/computer/<id>/}: block, item, moving parts. */
     private static BlockEntry<ComputerModuleBlock> computerModule(ComputerModule module, String name,
-                                                                  ItemLike signaturePart, boolean modelled) {
+                                                                  ItemLike signaturePart) {
         return REGISTRATE.block(module.id(), p -> new ComputerModuleBlock(p, module))
                 .initialProperties(SharedProperties::softMetal)
-                // A modelled front has windows onto the parts inside: it must not block light into them.
-                .properties(p -> modelled ? p.mapColor(MapColor.PODZOL).noOcclusion() : p.mapColor(MapColor.PODZOL))
+                // The front has windows onto the parts inside: it must not block light into them.
+                .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
                 .transform(axeOrPickaxe())
                 // Plain faces use the computer casing, which joins across the bank.
                 .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
-                .blockstate((c, p) -> p.horizontalBlock(c.get(), modelled
-                        ? p.models().getExistingFile(p.modLoc("block/computer/" + c.getName() + "/block"))
-                        : p.models().orientable(c.getName(),
-                                p.modLoc("block/computer/computer"),
-                                p.modLoc("block/computer/" + c.getName() + "_front"),
-                                p.modLoc("block/computer/computer"))))
+                .blockstate((c, p) -> p.horizontalBlock(c.get(),
+                        p.models().getExistingFile(p.modLoc("block/computer/" + c.getName() + "/block"))))
                 .item()
-                .model((c, p) -> {
-                    if (modelled)
-                        p.withExistingParent(c.getName(), p.modLoc("block/computer/" + c.getName() + "/item"));
-                    else
-                        p.blockItem(c);
-                })
+                .model((c, p) -> p.withExistingParent(c.getName(), p.modLoc("block/computer/" + c.getName() + "/item")))
                 .build()
                 .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
                         .requires(AllBlocks.BRASS_CASING)

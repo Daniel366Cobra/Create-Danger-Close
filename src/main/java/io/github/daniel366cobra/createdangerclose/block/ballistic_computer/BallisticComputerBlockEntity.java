@@ -146,6 +146,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Solutions within this many combined standard deviations of the
     // directing one are the same target and get merged...
     private static final double MERGE_SIGMAS = 3;
+    // A navigation table's target is a block position: within half a block, a
+    // standard deviation of 1 / √12 blocks.
+    private static final double NAV_TARGET_SIGMA = 1 / Math.sqrt(12);
     // ...with at least this much tolerance, blocks.
     private static final double MIN_MERGE_DISTANCE = 4;
 
@@ -178,6 +181,18 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private float panelRange;
     private float panelRangeFraction;
     private float panelElevationDeg;
+    // ...and its time of flight, ticks, which the Fuze Computer sets timed fuzes to.
+    private int panelFuzeTicks;
+    // Also synced, for the modules: the battle network's speed (RPM, 0 unpowered); the
+    // ship's own speed as the velocity sensors see it (blocks per second, 0 without an
+    // Integrator); and how long the target is still held (ticks left, out of a lifetime,
+    // as of a game time), which the client counts down between syncs if the target ages.
+    private float panelNetworkRpm;
+    private float panelOwnSpeed;
+    private long panelHoldLeftTicks;
+    private long panelHoldLifetimeTicks = 1;
+    private long panelHoldStampTick;
+    private boolean panelHoldAges;
     // Client only: the panel's needle, counter, cam and follower ease towards the readings.
     private final LerpedFloat bearingNeedle = LerpedFloat.angular().startWithValue(0);
     private final LerpedFloat rangeCounter = LerpedFloat.linear().startWithValue(0);
@@ -351,14 +366,34 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     /** Works out what the front panel shows from the last poll (server). */
     private void updatePanel() {
+        panelNetworkRpm = isPowered && linkedInterface != null
+                && level.getBlockEntity(linkedInterface) instanceof NetworkInterfaceBlockEntity networkInterface
+                ? Math.abs(networkInterface.getSpeed()) : 0;
+        SubLevel ship = Sable.HELPER.getContaining(level, worldPosition);
+        panelOwnSpeed = 0;
+        if (isPowered && ship != null && has(ComputerModule.INTEGRATOR) && velocityAxesCovered() > 0) {
+            Quaterniondc shipToWorld = ship.logicalPose().orientation();
+            Vector3d worldVel = Sable.HELPER.getVelocity(level, ship, blockCenter(worldPosition), new Vector3d());
+            panelOwnSpeed = (float) shipToWorld.transformInverse(worldVel).mul(velocityAxisMask()).length();
+        }
+
+        panelHoldStampTick = level.getGameTime();
+        panelHoldLifetimeTicks = solutionLifetimeTicks();
         if (!isPowered || bankConflict || !hasTarget) {
             panelBearingDeg = panelRange = panelRangeFraction = panelElevationDeg = 0;
+            panelFuzeTicks = 0;
+            panelHoldLeftTicks = 0;
+            panelHoldAges = false;
             return;
         }
+        // Map and navigation table targets stand until changed: always fully held.
+        panelHoldAges = targetSource == TargetSource.RANGEFINDER;
+        panelHoldLeftTicks = panelHoldAges
+                ? Math.max(0, panelHoldLifetimeTicks - targetAgeTicks) : panelHoldLifetimeTicks;
+
         Vec3 here = RangefinderOptics.toWorld(level, Vec3.atCenterOf(worldPosition));
         // Bearing in the ship's frame, so it stays put while the ship turns with the target.
         Vector3d toTarget = new Vector3d(targetX - here.x, targetY - here.y, targetZ - here.z);
-        SubLevel ship = Sable.HELPER.getContaining(level, worldPosition);
         if (ship != null)
             ship.logicalPose().orientation().transformInverse(toTarget);
         float targetYaw = (float) Math.toDegrees(Math.atan2(-toTarget.x, toTarget.z));
@@ -368,11 +403,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         panelRange = (float) Math.hypot(targetX - here.x, targetZ - here.z);
         double reach = plot.guns().isEmpty() ? 0 : plot.guns().get(0).radius();
         panelRangeFraction = reach > 0 ? (float) Mth.clamp(panelRange / reach, 0, 1) : 0;
-        panelElevationDeg = lastPitchResults.values().stream()
+        BallisticSolver.Result firstSolution = lastPitchResults.values().stream()
                 .filter(BallisticSolver.Result::valid)
                 .findFirst()
-                .map(result -> (float) result.pitchDeg())
-                .orElse(0f);
+                .orElse(null);
+        panelElevationDeg = firstSolution != null ? (float) firstSolution.pitchDeg() : 0;
+        panelFuzeTicks = firstSolution != null ? firstSolution.fuzeTicks() : 0;
     }
 
     /** Eases the panel's moving parts towards the synced readings (client). */
@@ -400,6 +436,34 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /** Ballistic cam turn: the first gun's elevation, degrees (client). */
     public float getCamAngle(float partialTicks) {
         return camAngle.getValue(partialTicks);
+    }
+
+    /** The first gun's time of flight, seconds; 0 without a solution (client). */
+    public float getFuzeSeconds() {
+        return panelFuzeTicks / 20f;
+    }
+
+    /** The battle network's speed, RPM; 0 while unpowered (client). */
+    public float getNetworkRpm() {
+        return panelNetworkRpm;
+    }
+
+    /** The ship's own speed as the velocity sensors see it, blocks per second; 0 without an Integrator (client). */
+    public float getOwnSpeed() {
+        return panelOwnSpeed;
+    }
+
+    /**
+     * How much of the target's hold is left, 1 (fresh, or a target that
+     * does not age) to 0 (expired, or no target), counted down between syncs (client).
+     */
+    public float getHoldLeft(float partialTicks) {
+        if (level == null)
+            return 0;
+        if (!panelHoldAges)
+            return panelHoldLeftTicks > 0 ? 1 : 0;
+        float elapsed = level.getGameTime() + partialTicks - panelHoldStampTick;
+        return Mth.clamp((panelHoldLeftTicks - Math.max(0, elapsed)) / panelHoldLifetimeTicks, 0, 1);
     }
 
     /** Cam follower travel: the range as a fraction of the first gun's reach (client). */
@@ -433,6 +497,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                         targetZ = t.worldPos().z;
                         hasTarget = true;
                         targetSource = TargetSource.NAV_TABLE;
+                        targetSigma = NAV_TARGET_SIGMA;
                     }
                 }
                 case SensorReading.Velocity v -> velocityAxisCounts[v.dominantAxis()]++;
@@ -463,6 +528,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             targetZ = mapTarget.worldPos().z;
             hasTarget = true;
             targetSource = TargetSource.MAP_TABLE;
+            targetSigma = mapTarget.sigma();
         }
 
         List<BattlePlot.RangefinderFix> fixes = new ArrayList<>();
@@ -489,10 +555,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     private boolean isFresh(SensorReading.Rangefinder reading) {
         long age = level.getGameTime() - reading.sampleTick();
-        // Without an Integrator nothing holds the solution between readings.
-        long lifetime = has(ComputerModule.INTEGRATOR)
+        return age >= 0 && age <= solutionLifetimeTicks();
+    }
+
+    /** How long a rangefinder solution stays usable: without an Integrator nothing holds it between readings. */
+    private long solutionLifetimeTicks() {
+        return has(ComputerModule.INTEGRATOR)
                 ? RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS : UNHELD_SOLUTION_LIFETIME_TICKS;
-        return age >= 0 && age <= lifetime;
     }
 
     /**
@@ -977,6 +1046,15 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return isPowered && !bankConflict && hasTarget && hasTargetVelocity;
     }
 
+    /**
+     * How precisely the guns' target is known, blocks: the rangefinder fix's
+     * uncertainty, or how finely a map or navigation table placed it; NaN
+     * without a target (client).
+     */
+    public double getFixSigma() {
+        return isPowered && !bankConflict && hasTarget ? targetSigma : Double.NaN;
+    }
+
     /** The tracked target's speed, blocks per tick; 0 while not tracking. */
     public double getTargetSpeed() {
         return isTrackingTarget() ? Math.sqrt(targetVelX * targetVelX + targetVelY * targetVelY + targetVelZ * targetVelZ) : 0;
@@ -996,6 +1074,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         this.panelRange = compound.getFloat("PanelRange");
         this.panelRangeFraction = compound.getFloat("PanelRangeFraction");
         this.panelElevationDeg = compound.getFloat("PanelElevation");
+        this.panelFuzeTicks = compound.getInt("PanelFuze");
+        this.panelNetworkRpm = compound.getFloat("PanelNetworkRpm");
+        this.panelOwnSpeed = compound.getFloat("PanelOwnSpeed");
+        this.panelHoldLeftTicks = compound.getLong("PanelHoldLeft");
+        this.panelHoldLifetimeTicks = Math.max(1, compound.getLong("PanelHoldLifetime"));
+        this.panelHoldStampTick = compound.getLong("PanelHoldStamp");
+        this.panelHoldAges = compound.getBoolean("PanelHoldAges");
         this.modules.clear();
         int moduleBits = compound.getInt("Modules");
         for (ComputerModule module : ComputerModule.values())
@@ -1056,6 +1141,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         compound.putFloat("PanelRange", panelRange);
         compound.putFloat("PanelRangeFraction", panelRangeFraction);
         compound.putFloat("PanelElevation", panelElevationDeg);
+        compound.putInt("PanelFuze", panelFuzeTicks);
+        compound.putFloat("PanelNetworkRpm", panelNetworkRpm);
+        compound.putFloat("PanelOwnSpeed", panelOwnSpeed);
+        compound.putLong("PanelHoldLeft", panelHoldLeftTicks);
+        compound.putLong("PanelHoldLifetime", panelHoldLifetimeTicks);
+        compound.putLong("PanelHoldStamp", panelHoldStampTick);
+        compound.putBoolean("PanelHoldAges", panelHoldAges);
         int moduleBits = 0;
         for (ComputerModule module : modules)
             moduleBits |= 1 << module.ordinal();

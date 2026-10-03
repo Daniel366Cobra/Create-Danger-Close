@@ -34,8 +34,10 @@ public final class BallisticSolver {
 
     private static final double DENSITY = 1.0;
     private static final int MAX_TICKS = 1200;          // 60 seconds
-    private static final int BISECTION_ITERATIONS = 40; // ~1e-8 precision
-    private static final double BISECTION_TOLERANCE = 1e-6;
+    // Elevation search: 1e-4 rad (0.006°) is still far finer than a servo holds a gun
+    // (0.2°); the cap only matters if the bracket starts unusually wide.
+    private static final int BISECTION_ITERATIONS = 20;
+    private static final double BISECTION_TOLERANCE = 1e-4;
     private static final double MOVING_TARGET_ITERATIONS = 10;
     private static final double MOVING_TARGET_TOLERANCE_TICKS = 0.5;
     private static final int LAUNCH_OFFSET_ITERATIONS = 10;

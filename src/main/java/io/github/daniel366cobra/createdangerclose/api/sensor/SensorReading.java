@@ -181,7 +181,11 @@ public sealed interface SensorReading {
      * @param worldPos       the target, or null if none is designated
      * @param designatedTick game time it was designated, so the newest of several tables wins
      */
-    record MapTarget(@Nullable Vec3 worldPos, long designatedTick) implements SensorReading {
+    /**
+     * @param sigma how precisely the target was placed, blocks: a map pixel is
+     *              this coarse, so the point is off by up to half a pixel
+     */
+    record MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma) implements SensorReading {
         @Override public Kind kind() { return Kind.MAP_TARGET; }
 
         @Override
@@ -193,6 +197,7 @@ public sealed interface SensorReading {
                 tag.putDouble("pz", worldPos.z);
             }
             tag.putLong("tick", designatedTick);
+            tag.putDouble("sigma", sigma);
             return tag;
         }
 
@@ -200,7 +205,7 @@ public sealed interface SensorReading {
             Vec3 pos = tag.contains("px")
                     ? new Vec3(tag.getDouble("px"), tag.getDouble("py"), tag.getDouble("pz"))
                     : null;
-            return new MapTarget(pos, tag.getLong("tick"));
+            return new MapTarget(pos, tag.getLong("tick"), tag.getDouble("sigma"));
         }
     }
 
