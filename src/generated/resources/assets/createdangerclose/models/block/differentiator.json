@@ -1,8 +1,0 @@
-{
-  "parent": "minecraft:block/orientable",
-  "textures": {
-    "front": "createdangerclose:block/computer/differentiator_front",
-    "side": "createdangerclose:block/computer/computer",
-    "top": "createdangerclose:block/computer/computer"
-  }
-}

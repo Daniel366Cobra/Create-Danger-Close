@@ -36,10 +36,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.storage.loot.functions.CopyBlockState;
 import net.minecraft.world.level.storage.loot.predicates.LootItemBlockStatePropertyCondition;
-import net.neoforged.neoforge.client.model.generators.ConfiguredModel;
 import net.neoforged.neoforge.client.model.generators.ModelFile;
 
-import java.util.ArrayList;
 
 import static com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour.interactionBehaviour;
 import static com.simibubi.create.foundation.data.CreateRegistrate.connectedTextures;
@@ -49,8 +47,6 @@ import static com.simibubi.create.foundation.data.TagGen.axeOrPickaxe;
 public class CDCBlocks {
 
     private static final CreateRegistrate REGISTRATE = CreateDangerClose.getRegistrate();
-
-    public static final ArrayList<BlockEntry> BLOCKS = new ArrayList<>();
 
     public static final BlockEntry<NetworkInterfaceBlock> NETWORK_INTERFACE = REGISTRATE.block("network_interface", NetworkInterfaceBlock::new)
             .initialProperties(SharedProperties::softMetal)
@@ -77,17 +73,16 @@ public class CDCBlocks {
 
     public static final BlockEntry<BallisticComputerBlock> BALLISTIC_COMPUTER = REGISTRATE.block("ballistic_computer", BallisticComputerBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            .properties(p -> p.mapColor(MapColor.PODZOL))
-            // Like the modules: cabinet casing on the plain faces (joining the
-            // bank), its own texture on the face.
+            // Open front (gauge windows, cam bay): must not block light into them.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
+            // Like the modules: cabinet casing on the plain faces (joining the bank).
             .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
-            .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientable(c.getName(),
-                    p.modLoc("block/computer/computer"),
-                    p.modLoc("block/computer/ballistic_computer_front"),
-                    p.modLoc("block/computer/computer"))))
+            .blockstate((c, p) -> p.horizontalBlock(c.get(),
+                    p.models().getExistingFile(p.modLoc("block/computer/ballistic_computer/block"))))
             .transform(axeOrPickaxe())
             // No shaft and no stress impact: a network interface facing it drives it.
-            .simpleItem()
+            .item()
+            .transform(customItemModel("computer/ballistic_computer/item"))
             .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
                     .pattern("CEC")
                     .pattern("PPP")
@@ -101,13 +96,13 @@ public class CDCBlocks {
 
     // Fire control computer modules: each adds one capability to the Ballistic Computer it touches.
     public static final BlockEntry<ComputerModuleBlock> DIFFERENTIATOR =
-            computerModule(ComputerModule.DIFFERENTIATOR, "Differentiator", AllBlocks.LARGE_COGWHEEL);
+            computerModule(ComputerModule.DIFFERENTIATOR, "Differentiator", AllBlocks.LARGE_COGWHEEL, true);
     public static final BlockEntry<ComputerModuleBlock> INTEGRATOR =
-            computerModule(ComputerModule.INTEGRATOR, "Integrator", AllBlocks.TURNTABLE);
+            computerModule(ComputerModule.INTEGRATOR, "Integrator", AllBlocks.TURNTABLE, false);
     public static final BlockEntry<ComputerModuleBlock> CORRELATOR =
-            computerModule(ComputerModule.CORRELATOR, "Correlator", Items.COMPARATOR);
+            computerModule(ComputerModule.CORRELATOR, "Correlator", Items.COMPARATOR, false);
     public static final BlockEntry<ComputerModuleBlock> FUZE_COMPUTER =
-            computerModule(ComputerModule.FUZE_COMPUTER, "Fuze Computer", Items.CLOCK);
+            computerModule(ComputerModule.FUZE_COMPUTER, "Fuze Computer", Items.CLOCK, false);
 
     public static final BlockEntry<NavigationConsoleBlock> NAVIGATION_CONSOLE = REGISTRATE
             .block("navigation_console", NavigationConsoleBlock::new)
@@ -154,19 +149,34 @@ public class CDCBlocks {
      * A computer module: a casing-sided block whose face turns in yaw. Crafted
      * from a brass casing, a precision mechanism and one part of its own.
      */
+    /**
+     * @param modelled whether the module has its own models (in
+     *                 {@code models/block/computer/<id>/}: block, item, moving parts), or
+     *                 is still a generated cube with a front texture
+     */
     private static BlockEntry<ComputerModuleBlock> computerModule(ComputerModule module, String name,
-                                                                  ItemLike signaturePart) {
+                                                                  ItemLike signaturePart, boolean modelled) {
         return REGISTRATE.block(module.id(), p -> new ComputerModuleBlock(p, module))
                 .initialProperties(SharedProperties::softMetal)
-                .properties(p -> p.mapColor(MapColor.PODZOL))
+                // A modelled front has windows onto the parts inside: it must not block light into them.
+                .properties(p -> modelled ? p.mapColor(MapColor.PODZOL).noOcclusion() : p.mapColor(MapColor.PODZOL))
                 .transform(axeOrPickaxe())
                 // Plain faces use the computer casing, which joins across the bank.
                 .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
-                .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientable(c.getName(),
-                        p.modLoc("block/computer/computer"),
-                        p.modLoc("block/computer/" + c.getName() + "_front"),
-                        p.modLoc("block/computer/computer"))))
-                .simpleItem()
+                .blockstate((c, p) -> p.horizontalBlock(c.get(), modelled
+                        ? p.models().getExistingFile(p.modLoc("block/computer/" + c.getName() + "/block"))
+                        : p.models().orientable(c.getName(),
+                                p.modLoc("block/computer/computer"),
+                                p.modLoc("block/computer/" + c.getName() + "_front"),
+                                p.modLoc("block/computer/computer"))))
+                .item()
+                .model((c, p) -> {
+                    if (modelled)
+                        p.withExistingParent(c.getName(), p.modLoc("block/computer/" + c.getName() + "/item"));
+                    else
+                        p.blockItem(c);
+                })
+                .build()
                 .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
                         .requires(AllBlocks.BRASS_CASING)
                         .requires(AllItems.PRECISION_MECHANISM)
@@ -356,20 +366,6 @@ public class CDCBlocks {
             .lang("Map Table")
             .register();
 
-    public static void register() {
-        BLOCKS.add(NETWORK_INTERFACE);
-        BLOCKS.add(BALLISTIC_COMPUTER);
-        BLOCKS.add(DIFFERENTIATOR);
-        BLOCKS.add(INTEGRATOR);
-        BLOCKS.add(CORRELATOR);
-        BLOCKS.add(FUZE_COMPUTER);
-        BLOCKS.add(NAVIGATION_CONSOLE);
-        BLOCKS.add(FIRE_MISSION_CONSOLE);
-        BLOCKS.add(CANNON_SERVO_INPUT);
-        BLOCKS.add(CANNON_SERVO_OUTPUT);
-        BLOCKS.add(RANGEFINDER_BEARING);
-        BLOCKS.add(RANGEFINDER_LENS);
-        BLOCKS.add(RANGEFINDER_EYEPIECE);
-        BLOCKS.add(MAP_TABLE);
-    }
+    /** Loads this class, which registers its entries. */
+    public static void register() {}
 }

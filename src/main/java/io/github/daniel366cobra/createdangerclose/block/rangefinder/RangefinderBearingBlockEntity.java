@@ -491,10 +491,6 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     @Nullable
     public Vec3 getTargetPosition() { return targetPosition; }
 
-    /** Tracked target velocity, world space, blocks per tick (server only). */
-    @Nullable
-    public Vec3 getTargetVelocity() { return targetVelocity; }
-
     /**
      * Trapezoidal motion towards the target: accelerate at a fixed rate up to
      * the top speed, but never faster than we can still brake to a stop at
@@ -601,10 +597,6 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     @Nullable
     public AssemblyException getLastAssemblyException() {
         return lastException;
-    }
-
-    public boolean isRunning() {
-        return running;
     }
 
     @Nullable

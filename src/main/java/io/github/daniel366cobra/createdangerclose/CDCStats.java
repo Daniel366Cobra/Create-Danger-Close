@@ -8,6 +8,8 @@ import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Supplier;
 
 public class CDCStats {
@@ -15,7 +17,7 @@ public class CDCStats {
             DeferredRegister.create(BuiltInRegistries.CUSTOM_STAT, CreateDangerClose.MOD_ID);
 
     // Track stats for bootstrapping (so they appear in the menu)
-    private static final java.util.ArrayList<Stat> STATS_TO_BOOTSTRAP = new java.util.ArrayList<>();
+    private static final List<Stat> STATS_TO_BOOTSTRAP = new ArrayList<>();
 
     // --- Stat Definitions ---
     public static final Stat LENSES_CLEANED = makeStat("lenses_cleaned", StatFormatter.DEFAULT);

@@ -1,6 +1,8 @@
 package io.github.daniel366cobra.createdangerclose.block.network_interface;
 
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
@@ -62,7 +64,10 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         }
 
         float currentSpeed = Math.abs(getSpeed());
+        boolean wasPowered = isPowered;
         isPowered = currentSpeed >= MIN_OPERATING_RPM;
+        if (isPowered != wasPowered)
+            notifyUpdate();
 
         if (!isPowered) {
             if (reading.kind() != SensorReading.Kind.NONE) {
@@ -101,7 +106,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         setSensorReading(classify(be));
     }
 
-    private SensorReading classify(net.minecraft.world.level.block.entity.BlockEntity be) {
+    private SensorReading classify(BlockEntity be) {
         if (be instanceof GimbalSensorBlockEntity gimbal) {
             return buildGimbalReading(gimbal);
         }
@@ -168,15 +173,14 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         }
 
         // Distinguish magnet (heading) from lodestone/map (target).
-        // Replace SimulatedItems.MAGNET with the actual registry reference.
         if (isMagnetItem(held)) {
             float rawAngle = navTable.getRelativeAngle();
             // Apply UP/DOWN constant correction per mount orientation
             var facing = navTable.getBlockState().getValue(NavTableBlock.FACING);
             double headingDeg;
-            if (facing == net.minecraft.core.Direction.UP) {
+            if (facing == Direction.UP) {
                 headingDeg = 270.0 - rawAngle;
-            } else if (facing == net.minecraft.core.Direction.DOWN) {
+            } else if (facing == Direction.DOWN) {
                 headingDeg = rawAngle - 90.0;
             } else {
                 return new SensorReading.None(); // misaligned mount
@@ -253,7 +257,10 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return map != null && map.getInformation(trackerId) != null;
     }
 
+    /** Clients only need the reading for goggles, so it is sent when it changes. */
     private void setSensorReading(SensorReading newReading) {
+        if (newReading.equals(reading))
+            return;
         reading = newReading;
         notifyUpdate();
     }

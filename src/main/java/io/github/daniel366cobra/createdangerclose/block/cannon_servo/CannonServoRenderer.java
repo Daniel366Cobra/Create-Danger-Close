@@ -16,7 +16,6 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import rbasamoyai.createbigcannons.munitions.big_cannon.config.BigCannonCommonShellPropertiesHandler;
 
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 

@@ -3,6 +3,10 @@ package io.github.daniel366cobra.createdangerclose.ponder.scenes;
 import com.simibubi.create.foundation.ponder.CreateSceneBuilder;
 import net.createmod.ponder.api.element.ElementLink;
 import net.createmod.ponder.api.element.WorldSectionElement;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
 
 /**
@@ -71,5 +75,17 @@ final class CannonAim {
         double c = Math.asin(-r01);
         double b = Math.atan2(r02, r00);
         return new double[] {Math.toDegrees(a), Math.toDegrees(b), Math.toDegrees(c)};
+    }
+
+    /** A barrel's direction: elevated, then turned to the left (towards -z) from east. */
+    static Vec3 barrelDirection(double traverseDeg, double elevationDeg) {
+        double pitch = Math.toRadians(elevationDeg), yaw = Math.toRadians(traverseDeg);
+        return new Vec3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), -Math.cos(pitch) * Math.sin(yaw));
+    }
+
+    /** Assembles a CBC cannon mount by setting its block state, as its lever would. */
+    static BlockState assembled(BlockState mount) {
+        Property<?> property = mount.getBlock().getStateDefinition().getProperty("assembly_powered");
+        return property instanceof BooleanProperty powered ? mount.setValue(powered, true) : mount;
     }
 }

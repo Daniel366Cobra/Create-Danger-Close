@@ -7,6 +7,9 @@ import com.tterrag.registrate.util.entry.BlockEntityEntry;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.*;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerRenderer;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
@@ -16,12 +19,9 @@ import io.github.daniel366cobra.createdangerclose.block.network_interface.Networ
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceVisual;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 
-import java.util.ArrayList;
 
 public class CDCBlockEntities {
     private static final CreateRegistrate REGISTRATE = CreateDangerClose.getRegistrate();
-
-    public static final ArrayList<BlockEntityEntry> BLOCK_ENTITIES = new ArrayList<>();
 
     public static final BlockEntityEntry<NetworkInterfaceBlockEntity> NETWORK_INTERFACE = REGISTRATE
             .blockEntity("network_interface", NetworkInterfaceBlockEntity::new)
@@ -33,6 +33,13 @@ public class CDCBlockEntities {
     public static final BlockEntityEntry<BallisticComputerBlockEntity> BALLISTIC_COMPUTER = REGISTRATE
             .blockEntity("ballistic_computer", BallisticComputerBlockEntity::new)
             .validBlocks(CDCBlocks.BALLISTIC_COMPUTER)
+            .renderer(() -> BallisticComputerRenderer::new)
+            .register();
+
+    public static final BlockEntityEntry<ComputerModuleBlockEntity> COMPUTER_MODULE = REGISTRATE
+            .blockEntity("computer_module", ComputerModuleBlockEntity::new)
+            .validBlocks(CDCBlocks.DIFFERENTIATOR, CDCBlocks.INTEGRATOR, CDCBlocks.CORRELATOR, CDCBlocks.FUZE_COMPUTER)
+            .renderer(() -> ComputerModuleRenderer::new)
             .register();
 
     public static final BlockEntityEntry<CannonServoInputBlockEntity> CANNON_SERVO_INPUT =
@@ -72,14 +79,6 @@ public class CDCBlockEntities {
             .validBlocks(CDCBlocks.FIRE_MISSION_CONSOLE)
             .register();
 
-    public static void register() {
-        BLOCK_ENTITIES.add(NETWORK_INTERFACE);
-        BLOCK_ENTITIES.add(BALLISTIC_COMPUTER);
-        BLOCK_ENTITIES.add(CANNON_SERVO_INPUT);
-        BLOCK_ENTITIES.add(CANNON_SERVO_OUTPUT);
-        BLOCK_ENTITIES.add(RANGEFINDER_BEARING);
-        BLOCK_ENTITIES.add(MAP_TABLE);
-        BLOCK_ENTITIES.add(NAVIGATION_CONSOLE);
-        BLOCK_ENTITIES.add(FIRE_MISSION_CONSOLE);
-    }
+    /** Loads this class, which registers its entries. */
+    public static void register() {}
 }

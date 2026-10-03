@@ -1,18 +1,18 @@
 {
   "variants": {
     "facing=east": {
-      "model": "createdangerclose:block/differentiator",
+      "model": "createdangerclose:block/computer/differentiator/block",
       "y": 90
     },
     "facing=north": {
-      "model": "createdangerclose:block/differentiator"
+      "model": "createdangerclose:block/computer/differentiator/block"
     },
     "facing=south": {
-      "model": "createdangerclose:block/differentiator",
+      "model": "createdangerclose:block/computer/differentiator/block",
       "y": 180
     },
     "facing=west": {
-      "model": "createdangerclose:block/differentiator",
+      "model": "createdangerclose:block/computer/differentiator/block",
       "y": 270
     }
   }

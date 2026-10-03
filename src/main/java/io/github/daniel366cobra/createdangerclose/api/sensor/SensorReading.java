@@ -78,6 +78,13 @@ public sealed interface SensorReading {
     record Velocity(Vector3d localVelocity, Vector3d normal) implements SensorReading {
         @Override public Kind kind() { return Kind.VELOCITY; }
 
+        /** The ship axis (0 = X, 1 = Y, 2 = Z) this sensor measures along, as mounted. */
+        public int dominantAxis() {
+            double ax = Math.abs(normal.x), ay = Math.abs(normal.y), az = Math.abs(normal.z);
+            if (ax >= ay && ax >= az) return 0;
+            return ay >= az ? 1 : 2;
+        }
+
         @Override
         public CompoundTag serializeNBT(HolderLookup.Provider registries) {
             CompoundTag tag = new CompoundTag();

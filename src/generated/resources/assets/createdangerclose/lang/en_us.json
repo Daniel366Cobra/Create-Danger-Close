@@ -269,7 +269,6 @@
   "createdangerclose.rangefinder_bearing.target": "Trained to: %s°",
   "createdangerclose.rangefinder_bearing.title": "Rangefinder Bearing",
   "createdangerclose.rangefinder_bearing.unlit": "Reticle lamp: off",
-  "createdangerclose.scroll_option.behavior": "Scroll Option Behavior",
   "createdangerclose.unit.angle": "°",
   "createdangerclose.unit.distance": " blocks",
   "createdangerclose.unit.velocity": " m/s",

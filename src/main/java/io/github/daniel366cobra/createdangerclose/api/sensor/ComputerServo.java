@@ -1,6 +1,5 @@
 package io.github.daniel366cobra.createdangerclose.api.sensor;
 
-import net.minecraft.core.BlockPos;
 import org.jetbrains.annotations.Nullable;
 
 public interface ComputerServo {

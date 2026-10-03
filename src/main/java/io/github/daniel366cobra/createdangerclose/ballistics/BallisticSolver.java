@@ -32,8 +32,6 @@ public final class BallisticSolver {
 
     private BallisticSolver() {}
 
-    public static boolean DEBUG_LOG = false;
-
     private static final double DENSITY = 1.0;
     private static final int MAX_TICKS = 1200;          // 60 seconds
     private static final int BISECTION_ITERATIONS = 40; // ~1e-8 precision
@@ -212,11 +210,6 @@ public final class BallisticSolver {
 
             Vector3d miss = impact.relativePos().sub(toTarget, new Vector3d());
 
-            if (DEBUG_LOG) {
-                System.out.printf("[BallisticSolver] offset iter %d: miss=(%.2f, %.2f, %.2f)%n",
-                        i, miss.x, miss.y, miss.z);
-            }
-
             Result attempt = new Result(true, Result.Reason.OK,
                     aimResult.pitchDeg(), aimResult.yawDeg(),
                     impact.ticks(), horizontalRange, (int) Math.round(impact.ticks()));
@@ -275,25 +268,12 @@ public final class BallisticSolver {
         double maxElevRad = Math.min(Math.toRadians(maxElevationDeg), Math.toRadians(45));
         double maxDepRad = Math.toRadians(maxDepressionDeg);
 
-        if (DEBUG_LOG) {
-            System.out.printf("[BallisticSolver] range=%.2f dy=%.2f v0=%.3f g=%.5f drag=%.5f " +
-                            "maxElev=%.2f maxDep=%.2f highArc=%b%n",
-                    horizontalRange, dy, muzzleVelocity, gravity, drag,
-                    maxElevationDeg, maxDepressionDeg, highArc);
-        }
-
         // Max-elevation reachability check.
         IntegrationResult highTraj = integrate(cosYaw, sinYaw, maxElevRad,
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
                 horizontalRange, dy);
 
-        if (DEBUG_LOG && highTraj != null) {
-            System.out.printf("[BallisticSolver] high traj: landingRange=%.2f vertical=%.2f ticks=%.0f%n",
-                    highTraj.horizontalRange(), highTraj.vertical(), highTraj.ticks());
-        }
-
         if (highTraj == null || highTraj.vertical() < dy - 1.0) {
-            if (DEBUG_LOG) System.out.println("[BallisticSolver] OUT_OF_RANGE at max elevation");
             return Result.invalid(Result.Reason.OUT_OF_RANGE);
         }
 
@@ -304,7 +284,6 @@ public final class BallisticSolver {
         if (highArc) {
             double steepestRad = Math.toRadians(steepestPlungingPitch(maxElevationDeg));
             if (steepestRad <= maxElevRad) {
-                if (DEBUG_LOG) System.out.println("[BallisticSolver] OUT_OF_ARC: no room above 45° for plunging fire");
                 return Result.invalid(Result.Reason.OUT_OF_ARC);
             }
             IntegrationResult steepest = integrate(cosYaw, sinYaw, steepestRad,
@@ -312,7 +291,6 @@ public final class BallisticSolver {
                     horizontalRange, dy);
             if (steepest != null && steepest.vertical() >= dy) {
                 // Even the steepest shot comes down beyond the target.
-                if (DEBUG_LOG) System.out.println("[BallisticSolver] TOO_CLOSE for plunging fire");
                 return Result.invalid(Result.Reason.TOO_CLOSE);
             }
             lo = maxElevRad;
@@ -333,14 +311,6 @@ public final class BallisticSolver {
                 return Result.invalid(Result.Reason.NO_CONVERGENCE);
             }
 
-            if (DEBUG_LOG) {
-                System.out.printf("[BallisticSolver] iter %2d: theta=%.4f° " +
-                                "landing=%.2f vertical=%.2f targetY=%.2f %s%n",
-                        i, Math.toDegrees(theta),
-                        traj.horizontalRange(), traj.vertical(), dy,
-                        traj.vertical() < dy ? "(under)" : "(over)");
-            }
-
             // Short of the target: steepen the flat arc, flatten the steep one.
             boolean under = traj.vertical() < dy;
             if (under != highArc) {
@@ -354,16 +324,10 @@ public final class BallisticSolver {
 
         double pitchDeg = Math.toDegrees(theta);
         if (pitchDeg > maxElevationDeg || pitchDeg < maxDepressionDeg) {
-            if (DEBUG_LOG) System.out.printf("[BallisticSolver] OUT_OF_ARC pitch=%.2f%n", pitchDeg);
             return Result.invalid(Result.Reason.OUT_OF_ARC);
         }
 
         int fuzeTicks = (int) Math.round(finalTraj.ticks);
-
-        if (DEBUG_LOG) {
-            System.out.printf("[BallisticSolver] OK pitch=%.2f° yaw=%.2f° tof=%d t%n",
-                    pitchDeg, yawDeg, fuzeTicks);
-        }
 
         return new Result(true, Result.Reason.OK,
                 pitchDeg, yawDeg, finalTraj.ticks(), horizontalRange, fuzeTicks);

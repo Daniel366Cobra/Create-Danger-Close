@@ -12,10 +12,6 @@
       "dusty_lens": "This equipment has a dusty lens. Accuracy is reduced. \nRMB with Water Bucket to clean."
     },
 
-    "scroll_option": {
-      "behavior": "Scroll Option Behavior"
-    },
-
     "network_interface": {
       "title": "Battle Network Interface",
       "attached_sensor": "Attached Sensor Data:",

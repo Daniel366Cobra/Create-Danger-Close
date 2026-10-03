@@ -4,20 +4,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.simibubi.create.foundation.utility.FilesHelper;
 import com.tterrag.registrate.providers.RegistrateLangProvider;
-import dev.simulated_team.simulated.data.SimLang;
 import net.createmod.catnip.lang.Lang;
 import net.createmod.catnip.lang.LangBuilder;
-import net.createmod.catnip.lang.LangNumberFormat;
 import io.github.daniel366cobra.createdangerclose.ponder.CDCPonderPlugin;
 import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.world.level.block.state.BlockState;
-import org.checkerframework.checker.units.qual.C;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -27,16 +21,8 @@ public class CDCLang {
         return Lang.builder(CreateDangerClose.MOD_ID);
     }
 
-    public static LangBuilder text(final String text) {
-        return builder().text(text);
-    }
-
     public static LangBuilder translate(final String key, final Object... args) {
         return builder().translate(key, args);
-    }
-
-    public static LangBuilder number(final double number) {
-        return builder().text(LangNumberFormat.format(number));
     }
 
     public static MutableComponent numberWithUnit(double value, String unitKey) {
@@ -45,31 +31,8 @@ public class CDCLang {
                 .component();
     }
 
-    public static LangBuilder space() {
-        return builder().space();
-    }
-
-    public static void emptyLine(final List<Component> tooltip) {
-        builder().text("").forGoggles(tooltip);
-    }
-
-    public static LangBuilder blockName(final BlockState blockState) {
-        return builder().add(blockState.getBlock().getName());
-    }
-
-    public static List<Component> translatedOptions(final String prefix, final String... keys) {
-        final List<Component> result = new ArrayList<>(keys.length);
-        for (final String key : keys)
-            result.add(translate((prefix != null ? prefix + "." : "") + key).component());
-        return result;
-    }
-
-
     public static void registrateLang(final RegistrateLangProvider provider) {
         final BiConsumer<String, String> consumer = provider::add;
-        //CDCKeys.provideLang(consumer);
-        //CDCAdvancements.provideLang(consumer);
-        //CDCSoundEvents.REGISTRY.provideLang(consumer);
 
         final Map<String, String> lang = getLangMap("en_us");
         lang.forEach(consumer);

@@ -21,7 +21,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Quaterniondc;
 import org.joml.Vector3d;
-import org.joml.Vector3dc;
 
 import java.util.Arrays;
 import java.util.List;
@@ -105,17 +104,11 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
             switch (provider.getSensorReading()) {
                 case SensorReading.Gimbal ignored -> gimbalCount++;
                 case SensorReading.NavHeading ignored -> navHeadingCount++;
-                case SensorReading.Velocity v -> velocityAxisCounts[dominantAxis(v.normal())]++;
+                case SensorReading.Velocity v -> velocityAxisCounts[v.dominantAxis()]++;
                 case SensorReading.Altitude ignored -> altitudeCount++;
                 default -> { }
             }
         }
-    }
-
-    private static int dominantAxis(Vector3dc n) {
-        double ax = Math.abs(n.x()), ay = Math.abs(n.y()), az = Math.abs(n.z());
-        if (ax >= ay && ax >= az) return 0;
-        return ay >= az ? 1 : 2;
     }
 
     /** Samples the pose of the ship the console stands on. */

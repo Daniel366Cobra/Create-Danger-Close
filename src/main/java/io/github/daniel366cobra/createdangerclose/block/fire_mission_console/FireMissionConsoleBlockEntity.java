@@ -1,6 +1,7 @@
 package io.github.daniel366cobra.createdangerclose.block.fire_mission_console;
 
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
+import java.util.Objects;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
@@ -54,7 +55,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         lastLinkTick = level.getGameTime();
         BallisticComputerBlockEntity computer = networkInterface.findComputer();
         BlockPos found = computer != null ? computer.getBlockPos() : null;
-        if (!linked || !java.util.Objects.equals(found, computerPos)) {
+        if (!linked || !Objects.equals(found, computerPos)) {
             linked = true;
             computerPos = found;
             notifyUpdate();

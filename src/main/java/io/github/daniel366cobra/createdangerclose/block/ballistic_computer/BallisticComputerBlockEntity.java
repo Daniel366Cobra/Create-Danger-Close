@@ -1,6 +1,10 @@
 package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
 import com.simibubi.create.Create;
+import java.util.Comparator;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.HashMap;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
@@ -9,7 +13,6 @@ import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
-import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
@@ -19,6 +22,8 @@ import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.Direction;
+import net.createmod.catnip.animation.LerpedFloat;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
 import net.minecraft.world.phys.Vec3;
@@ -33,13 +38,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaterniondc;
 import org.joml.Vector3d;
-import org.joml.Vector3dc;
 import rbasamoyai.createbigcannons.config.CBCConfigs;
 
 import java.util.ArrayList;
@@ -94,8 +97,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     // Per mount (server only): the barrel's current pitch and yaw in ship
     // frame as its servos read them last poll, for the firing interlock.
-    private final Map<BlockPos, Float> mountPitches = new java.util.HashMap<>();
-    private final Map<BlockPos, Float> mountYawsNow = new java.util.HashMap<>();
+    private final Map<BlockPos, Float> mountPitches = new HashMap<>();
+    private final Map<BlockPos, Float> mountYawsNow = new HashMap<>();
     // A gun is on target when both axes are this close to its solution.
     private static final double ON_TARGET_DEG = 0.5;
 
@@ -150,14 +153,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private BattlePlot plot = BattlePlot.EMPTY;
     private List<BattlePlot.RangefinderFix> plotFixes = List.of();
 
-    private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new java.util.HashMap<>();
+    private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new HashMap<>();
 
     // Ship-frame solution per mount position, shared by its pitch and yaw servos.
-    private final Map<BlockPos, FireSolution> aimCache = new java.util.HashMap<>();
+    private final Map<BlockPos, FireSolution> aimCache = new HashMap<>();
 
     // Last commanded angles per mount, for estimating how fast they change.
     private record AimSample(double pitchDeg, double yawDeg, long tick, double pitchRate, double yawRate) {}
-    private final Map<BlockPos, AimSample> aimHistory = new java.util.HashMap<>();
+    private final Map<BlockPos, AimSample> aimHistory = new HashMap<>();
     // Longest poll gap to still estimate a rate over (poll interval is at most 20 ticks).
     private static final long MAX_RATE_SAMPLE_GAP = 40;
     // Faster apparent motion than this is a jump between solutions, not tracking.
@@ -165,6 +168,22 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private static final double RATE_SMOOTHING = 0.5;
 
     private boolean isPowered = false;
+
+    // --- Front panel ---
+    // Server-computed readings, synced (all zero without a target): the target's
+    // bearing clockwise from the computer's front (degrees); its horizontal range
+    // (blocks), and that range as a fraction of the first gun's reach; the first
+    // gun's elevation solution (degrees).
+    private float panelBearingDeg;
+    private float panelRange;
+    private float panelRangeFraction;
+    private float panelElevationDeg;
+    // Client only: the panel's needle, counter, cam and follower ease towards the readings.
+    private final LerpedFloat bearingNeedle = LerpedFloat.angular().startWithValue(0);
+    private final LerpedFloat rangeCounter = LerpedFloat.linear().startWithValue(0);
+    private final LerpedFloat camAngle = LerpedFloat.angular().startWithValue(0);
+    private final LerpedFloat camFollower = LerpedFloat.linear().startWithValue(0);
+    private static final float PANEL_CHASE_SPEED = 0.2f;
 
     public BallisticComputerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -213,6 +232,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             pollNetwork();
             pollAndPushServos();
         }
+        updatePanel();
         notifyUpdate();
         return true;
     }
@@ -257,7 +277,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             Float yaw = mountYawsNow.get(mountPos);
             boolean onTarget = solution != null && solution.valid()
                     && Math.abs(entry.getValue() - solution.pitchDeg()) <= ON_TARGET_DEG
-                    && (yaw == null || Math.abs(wrapDeg(yaw - solution.yawDeg())) <= ON_TARGET_DEG);
+                    && (yaw == null || Math.abs(Mth.wrapDegrees(yaw - solution.yawDeg())) <= ON_TARGET_DEG);
             if (onTarget && CannonFiring.fire(serverLevel, mountPos))
                 fired++;
             else
@@ -287,20 +307,25 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public void tick() {
         super.tick();
 
-        if (level == null || level.isClientSide()) return;
+        if (level != null && level.isClientSide()) {
+            tickPanel();
+            return;
+        }
+        if (level == null) return;
 
         // The interface stopped polling (unpowered, turned away, removed): go idle.
         if (isPowered && !isLinkFresh()) {
             isPowered = false;
             linkedInterface = null;
             invalidateData();
+            updatePanel();
             notifyUpdate();
         }
     }
 
     private void invalidateData() {
         gimbalCount = navHeadingCount = navTargetCount = mapTableCount = altitudeCount = rangefinderCount = 0;
-        java.util.Arrays.fill(velocityAxisCounts, 0);
+        Arrays.fill(velocityAxisCounts, 0);
 
         hasPose = false;
 
@@ -322,13 +347,73 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return plot;
     }
 
+    // --- Front panel ---
+
+    /** Works out what the front panel shows from the last poll (server). */
+    private void updatePanel() {
+        if (!isPowered || bankConflict || !hasTarget) {
+            panelBearingDeg = panelRange = panelRangeFraction = panelElevationDeg = 0;
+            return;
+        }
+        Vec3 here = RangefinderOptics.toWorld(level, Vec3.atCenterOf(worldPosition));
+        // Bearing in the ship's frame, so it stays put while the ship turns with the target.
+        Vector3d toTarget = new Vector3d(targetX - here.x, targetY - here.y, targetZ - here.z);
+        SubLevel ship = Sable.HELPER.getContaining(level, worldPosition);
+        if (ship != null)
+            ship.logicalPose().orientation().transformInverse(toTarget);
+        float targetYaw = (float) Math.toDegrees(Math.atan2(-toTarget.x, toTarget.z));
+        Direction front = getBlockState().getValue(BallisticComputerBlock.FACING);
+        panelBearingDeg = Mth.wrapDegrees(targetYaw - front.toYRot());
+
+        panelRange = (float) Math.hypot(targetX - here.x, targetZ - here.z);
+        double reach = plot.guns().isEmpty() ? 0 : plot.guns().get(0).radius();
+        panelRangeFraction = reach > 0 ? (float) Mth.clamp(panelRange / reach, 0, 1) : 0;
+        panelElevationDeg = lastPitchResults.values().stream()
+                .filter(BallisticSolver.Result::valid)
+                .findFirst()
+                .map(result -> (float) result.pitchDeg())
+                .orElse(0f);
+    }
+
+    /** Eases the panel's moving parts towards the synced readings (client). */
+    private void tickPanel() {
+        bearingNeedle.chase(panelBearingDeg, PANEL_CHASE_SPEED, LerpedFloat.Chaser.EXP);
+        rangeCounter.chase(panelRange, PANEL_CHASE_SPEED, LerpedFloat.Chaser.EXP);
+        camAngle.chase(panelElevationDeg, PANEL_CHASE_SPEED, LerpedFloat.Chaser.EXP);
+        camFollower.chase(panelRangeFraction, PANEL_CHASE_SPEED, LerpedFloat.Chaser.EXP);
+        bearingNeedle.tickChaser();
+        rangeCounter.tickChaser();
+        camAngle.tickChaser();
+        camFollower.tickChaser();
+    }
+
+    /** Target bearing on the dial, degrees clockwise from the computer's front (client). */
+    public float getBearingNeedle(float partialTicks) {
+        return bearingNeedle.getValue(partialTicks);
+    }
+
+    /** Horizontal range to the target shown on the counter, blocks (client). */
+    public float getRangeCounter(float partialTicks) {
+        return rangeCounter.getValue(partialTicks);
+    }
+
+    /** Ballistic cam turn: the first gun's elevation, degrees (client). */
+    public float getCamAngle(float partialTicks) {
+        return camAngle.getValue(partialTicks);
+    }
+
+    /** Cam follower travel: the range as a fraction of the first gun's reach (client). */
+    public float getCamFollower(float partialTicks) {
+        return camFollower.getValue(partialTicks);
+    }
+
     void pollNetwork() {
         invalidateData();
 
         KineticNetwork network = battleNetwork();
         if (network == null) return;
 
-        Map<BlockPos, SensorReading.Rangefinder> rangefinderReadings = new java.util.HashMap<>();
+        Map<BlockPos, SensorReading.Rangefinder> rangefinderReadings = new HashMap<>();
         List<RangefinderBearingBlockEntity> rangefinders = new ArrayList<>();
         SensorReading.MapTarget mapTarget = null;
 
@@ -350,7 +435,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                         targetSource = TargetSource.NAV_TABLE;
                     }
                 }
-                case SensorReading.Velocity v -> velocityAxisCounts[dominantAxis(v.normal())]++;
+                case SensorReading.Velocity v -> velocityAxisCounts[v.dominantAxis()]++;
                 case SensorReading.Altitude ignored -> altitudeCount++;
                 case SensorReading.Rangefinder r -> {
                     rangefinderCount++;
@@ -441,7 +526,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private Set<BlockPos> useRangefinderTargets(Map<BlockPos, SensorReading.Rangefinder> readings) {
         if (directingRangefinder == null || !readings.containsKey(directingRangefinder)) {
             directingRangefinder = readings.entrySet().stream()
-                    .max(java.util.Comparator.comparingLong(e -> e.getValue().sampleTick()))
+                    .max(Comparator.comparingLong(e -> e.getValue().sampleTick()))
                     .map(Map.Entry::getKey)
                     .orElse(null);
         }
@@ -455,7 +540,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         Vector3d weightedVelocity = new Vector3d();
         double positionWeight = 0;
         double velocityWeight = 0;
-        Set<BlockPos> merged = new java.util.HashSet<>();
+        Set<BlockPos> merged = new HashSet<>();
 
         for (Map.Entry<BlockPos, SensorReading.Rangefinder> entry : readings.entrySet()) {
             SensorReading.Rangefinder reading = entry.getValue();
@@ -553,7 +638,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         List<ComputerServo> yawServos = new ArrayList<>();
         // For the map table: the armed mounts, and the barrel yaw its yaw servo reads.
         List<ServoStatus.MountSnapshot> pitchMounts = new ArrayList<>();
-        Map<BlockPos, Float> mountYaws = new java.util.HashMap<>();
+        Map<BlockPos, Float> mountYaws = new HashMap<>();
 
         for (KineticBlockEntity member : network.members.keySet()) {
             if (!(member instanceof ComputerServo servo)) continue;
@@ -693,7 +778,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             long dt = now - prev.tick();
             if (dt > 0 && dt <= MAX_RATE_SAMPLE_GAP) {
                 double rawPitch = (solution.pitchDeg() - prev.pitchDeg()) / dt;
-                double rawYaw = wrapDeg(solution.yawDeg() - prev.yawDeg()) / dt;
+                double rawYaw = Mth.wrapDegrees(solution.yawDeg() - prev.yawDeg()) / dt;
                 // A jump (e.g. rest -> tracking, new target) is not motion.
                 if (Math.abs(rawPitch) <= MAX_RATE_DEG_PER_TICK && Math.abs(rawYaw) <= MAX_RATE_DEG_PER_TICK) {
                     // Light smoothing against solver jitter.
@@ -707,13 +792,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return solution.withRates(pitchRate, yawRate);
     }
 
-    private static double wrapDeg(double deg) {
-        deg %= 360.0;
-        if (deg > 180.0) deg -= 360.0;
-        if (deg < -180.0) deg += 360.0;
-        return deg;
-    }
-
     private FireSolution solveYaw(ServoStatus status) {
         ServoStatus.MountSnapshot mount = status.mounts().get(0);
 
@@ -721,7 +799,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         FireSolution cached = aimCache.get(mount.mountPos());
         if (cached != null) {
-            logSolve(mount, "YAW", "BALLISTIC", null, cached.pitchDeg(), cached.yawDeg(), null);
             return new FireSolution(cached.pitchDeg(), cached.yawDeg(), 0, true);
         }
 
@@ -739,35 +816,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         Vector3d shipDir = mountSubLevel.logicalPose().orientation()
                 .transformInverse(toTargetWorld.normalize(), new Vector3d());
-        logSolve(mount, "YAW", "LINE_OF_SIGHT", null, pitchOf(shipDir), yawOf(shipDir), null);
         return new FireSolution(pitchOf(shipDir), yawOf(shipDir), 0, true);
-    }
-
-    // --- Debug logging (one line per servo per poll) ---
-    private static final boolean DEBUG_SOLVER_LOG = false;
-
-    /**
-     * Columns: servo axis; outcome (pitch solve reason, or where the yaw
-     * command came from); world pitch/yaw and time of flight from the
-     * ballistic solver; ship-frame pitch/yaw sent; inherited launch velocity
-     * (blocks/tick, world) and the number of velocity sensor axes.
-     */
-    private void logSolve(ServoStatus.MountSnapshot mount, String axis, String outcome,
-                          @Nullable BallisticSolver.Result result, double shipPitch, double shipYaw,
-                          @Nullable Vector3d inherited) {
-        if (!DEBUG_SOLVER_LOG || level == null) return;
-        CreateDangerClose.LOGGER.info(String.format(
-                "[Computer %s] t=%d %-5s %-14s wPitch=%8.3f wYaw=%8.3f tof=%6.1f sPitch=%8.3f sYaw=%8.3f " +
-                        "u=(%7.4f %7.4f %7.4f) axes=%d",
-                mount.mountPos().toShortString(), level.getGameTime(), axis, outcome,
-                result != null ? result.pitchDeg() : Double.NaN,
-                result != null ? result.yawDeg() : Double.NaN,
-                result != null ? result.timeOfFlightTicks() : Double.NaN,
-                shipPitch, shipYaw,
-                inherited != null ? inherited.x : Double.NaN,
-                inherited != null ? inherited.y : Double.NaN,
-                inherited != null ? inherited.z : Double.NaN,
-                velocityAxesCovered()));
     }
 
     private FireSolution solvePitch(ServoStatus status) {
@@ -829,7 +878,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         if (!result.valid()) {
             lastPitchResults.put(servoPos, result);
-            logSolve(mount, "PITCH", result.reason().name(), result, Double.NaN, Double.NaN, inheritedVelocity);
             return null;
         }
 
@@ -850,12 +898,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.OUT_OF_ARC));
-            logSolve(mount, "PITCH", "OUT_OF_ARC", result, shipPitchDeg, shipYawDeg, inheritedVelocity);
             return null;
         }
 
         lastPitchResults.put(servoPos, result);
-        logSolve(mount, "PITCH", "OK", result, shipPitchDeg, shipYawDeg, inheritedVelocity);
 
         // A fuze time of 0 leaves the fuze as loaded; setting it takes a Fuze Computer.
         FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg,
@@ -910,12 +956,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new Vector3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
     }
 
-    private static int dominantAxis(Vector3dc n) {
-        double ax = Math.abs(n.x()), ay = Math.abs(n.y()), az = Math.abs(n.z());
-        if (ax >= ay && ax >= az) return 0;
-        return ay >= az ? 1 : 2;
-    }
-
     private static double pitchOf(Vector3d dir) {
         return Math.toDegrees(Math.asin(Math.clamp(dir.y, -1.0, 1.0)));
     }
@@ -930,14 +970,17 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public boolean hasPose() { return hasPose; }
     public boolean hasTarget() { return hasTarget; }
 
-
-
-
-    public double getTargetX() { return targetX; }
-    public double getTargetY() { return targetY; }
-    public double getTargetZ() { return targetZ; }
-
     public boolean isPowered() { return isPowered; }
+
+    /** Whether the computer is leading a tracked, moving target (a velocity estimate exists). */
+    public boolean isTrackingTarget() {
+        return isPowered && !bankConflict && hasTarget && hasTargetVelocity;
+    }
+
+    /** The tracked target's speed, blocks per tick; 0 while not tracking. */
+    public double getTargetSpeed() {
+        return isTrackingTarget() ? Math.sqrt(targetVelX * targetVelX + targetVelY * targetVelY + targetVelZ * targetVelZ) : 0;
+    }
 
     // --- NBT ---
     // The state is re-derived from the network and pose each poll, so it is
@@ -949,6 +992,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         this.isPowered = compound.getBoolean("IsPowered");
         this.bankConflict = compound.getBoolean("BankConflict");
         this.plungingFire = compound.getBoolean("PlungingFire");
+        this.panelBearingDeg = compound.getFloat("PanelBearing");
+        this.panelRange = compound.getFloat("PanelRange");
+        this.panelRangeFraction = compound.getFloat("PanelRangeFraction");
+        this.panelElevationDeg = compound.getFloat("PanelElevation");
         this.modules.clear();
         int moduleBits = compound.getInt("Modules");
         for (ComputerModule module : ComputerModule.values())
@@ -1005,6 +1052,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         compound.putBoolean("IsPowered", isPowered);
         compound.putBoolean("BankConflict", bankConflict);
         compound.putBoolean("PlungingFire", plungingFire);
+        compound.putFloat("PanelBearing", panelBearingDeg);
+        compound.putFloat("PanelRange", panelRange);
+        compound.putFloat("PanelRangeFraction", panelRangeFraction);
+        compound.putFloat("PanelElevation", panelElevationDeg);
         int moduleBits = 0;
         for (ComputerModule module : modules)
             moduleBits |= 1 << module.ordinal();

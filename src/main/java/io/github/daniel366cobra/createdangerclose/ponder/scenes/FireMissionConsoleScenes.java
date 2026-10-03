@@ -10,10 +10,7 @@ import net.createmod.ponder.api.scene.SceneBuildingUtil;
 import net.createmod.ponder.api.scene.Selection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.Vec3;
 import rbasamoyai.createbigcannons.effects.particles.plumes.BigCannonPlumeParticleData;
 import rbasamoyai.createbigcannons.ponder.CBCAnimateBlockEntityInstruction;
@@ -79,7 +76,7 @@ public final class FireMissionConsoleScenes {
 
         // The gun comes already assembled.
         scene.world().modifyBlock(lever, state -> state.setValue(BlockStateProperties.POWERED, true), false);
-        scene.world().modifyBlock(mount, state -> withBoolean(state, "assembly_powered", true), false);
+        scene.world().modifyBlock(mount, CannonAim::assembled, false);
 
         scene.world().showSection(floor, Direction.UP);
         scene.idle(10);
@@ -212,25 +209,13 @@ public final class FireMissionConsoleScenes {
     }
 
     private static void fire(CreateSceneBuilder scene, SceneBuildingUtil util, float traverseDeg, float elevationDeg) {
-        Vec3 barrel = barrelDirection(traverseDeg, elevationDeg);
+        Vec3 barrel = CannonAim.barrelDirection(traverseDeg, elevationDeg);
         scene.effects().emitParticles(muzzle(util, traverseDeg, elevationDeg),
                 scene.effects().particleEmitterWithinBlockSpace(new BigCannonPlumeParticleData(4f), barrel.scale(0.5)),
                 1, 1);
     }
 
     private static Vec3 muzzle(SceneBuildingUtil util, float traverseDeg, float elevationDeg) {
-        return util.vector().centerOf(4, 3, 0).add(barrelDirection(traverseDeg, elevationDeg).scale(2.5));
-    }
-
-    /** The barrel's direction: elevated, then turned to the left (towards -z). */
-    private static Vec3 barrelDirection(float traverseDeg, float elevationDeg) {
-        double pitch = Math.toRadians(elevationDeg), yaw = Math.toRadians(traverseDeg);
-        return new Vec3(Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), -Math.cos(pitch) * Math.sin(yaw));
-    }
-
-    /** Sets a boolean block state property by name, if the block has it. */
-    private static BlockState withBoolean(BlockState state, String name, boolean value) {
-        Property<?> property = state.getBlock().getStateDefinition().getProperty(name);
-        return property instanceof BooleanProperty bool ? state.setValue(bool, value) : state;
+        return util.vector().centerOf(4, 3, 0).add(CannonAim.barrelDirection(traverseDeg, elevationDeg).scale(2.5));
     }
 }

@@ -128,7 +128,7 @@ public final class MapTableMarker {
                 if (data == null)
                     continue;
                 for (MapDecoration decoration : data.getDecorations()) {
-                    if (!decoration.type().is(MapDecorationTypes.PLAYER))
+                    if (decoration.type().value() != MapDecorationTypes.PLAYER.value())
                         continue;
                     // Decoration positions are in half pixels from the map's centre; rotation in 16ths of a turn.
                     float px = dx * 128 + decoration.x() / 2f + 64;

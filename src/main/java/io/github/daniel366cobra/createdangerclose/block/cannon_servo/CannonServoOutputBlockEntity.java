@@ -5,10 +5,7 @@ import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
-import dev.ryanhcode.sable.Sable;
-import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
-import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
@@ -28,7 +25,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import org.jetbrains.annotations.Nullable;
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
@@ -47,7 +43,6 @@ import rbasamoyai.createbigcannons.munitions.big_cannon.propellant.BigCannonProp
 import rbasamoyai.createbigcannons.munitions.config.components.BallisticPropertiesComponent;
 import rbasamoyai.createbigcannons.munitions.fuzes.TimedFuzeItem;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,6 +55,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
     public static final float MIN_OPERATING_RPM = 32.0f;
     private static final float KEEP_ALIVE_RPM = 1.0f;
+    private static final int CLIENT_SYNC_INTERVAL_TICKS = 10;
 
     private float desiredGeneratedSpeed = KEEP_ALIVE_RPM;
     private boolean initialSpeedApplied = false;
@@ -85,17 +81,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     private float transmissionRatio = Float.NaN;
     private float lastError = 0f;
 
-    // --- Debug logging (yaw servo, one line per server tick) ---
-    private static final boolean DEBUG_YAW_LOG = false;
-    private float debugOwnSpeed = 0f;
-    private float debugMountSpeed = 0f;
-    private float debugPrevAngle = Float.NaN;
-
     public static final class SlavedMount {
         public final BlockPos mountPos;
         public final @Nullable CannonMountBlockEntity mount;
         public final @Nullable CannonMountInterfaceBlockEntity iface;
-        public final ServoAxis ServoAxis;
+        public final ServoAxis axis;
 
         public float currentAngle;
         public boolean hasShell;
@@ -113,11 +103,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         public SlavedMount(BlockPos mountPos,
                            @Nullable CannonMountBlockEntity mount,
                            @Nullable CannonMountInterfaceBlockEntity iface,
-                           ServoAxis ServoAxis) {
+                           ServoAxis axis) {
             this.mountPos = mountPos;
             this.mount = mount;
             this.iface = iface;
-            this.ServoAxis = ServoAxis;
+            this.axis = axis;
         }
     }
 
@@ -125,18 +115,8 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     private ServoAxis detectedAxis = ServoAxis.NONE;
     private boolean isPowered = false;
 
-    private WeakReference<SubLevel> subLevelReference;
-
     public CannonServoOutputBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
-        this.subLevelReference = new WeakReference<>(null);
-    }
-
-    @Override
-    public void initialize() {
-        super.initialize();
-        this.subLevelReference = new WeakReference<>(
-                Sable.HELPER.getContaining(this.getLevel(), this.worldPosition));
     }
 
     @Override
@@ -165,7 +145,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         measureTransmission();
         applyControl();
 
-        notifyUpdate();
+        // Clients only use this block's data for goggles.
+        if (level.getGameTime() % CLIENT_SYNC_INTERVAL_TICKS == 0)
+            notifyUpdate();
     }
 
     /**
@@ -177,8 +159,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         if (slavedMounts.isEmpty() || slavedMounts.get(0).iface == null) return;
         float own = getSpeed();
         float atMount = slavedMounts.get(0).iface.getSpeed();
-        debugOwnSpeed = own;
-        debugMountSpeed = atMount;
         if (Math.abs(own) > 1e-3f && Math.abs(atMount) > 1e-3f) {
             transmissionRatio = atMount / own;
         }
@@ -199,7 +179,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         if (command == null || !command.valid() || !isPowered || detectedAxis == ServoAxis.NONE || detectedAxis == ServoAxis.INVALID) {
             applyIdleControl();
-            logYaw("IDLE", command, 0, Float.NaN, Float.NaN);
             return;
         }
 
@@ -207,7 +186,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         for (SlavedMount sm : slavedMounts) {
             if (sm.mount == null || sm.mount.getContraption() == null) {
                 applyIdleControl();
-                logYaw("UNASSEMBLED", command, 0, Float.NaN, Float.NaN);
                 return;
             }
         }
@@ -258,14 +236,13 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             return;
         }
 
-        float error = wrapAngle(target - sm.currentAngle);
+        float error = Mth.wrapDegrees(target - sm.currentAngle);
         lastError = error;
 
         // On target and not tracking: lock the mount.
         if (Math.abs(error) < SNAP_THRESHOLD_DEG && Math.abs(rate) < HOLD_RATE_DEG_PER_TICK) {
             sm.iface.setSequencedAngleLimit(0);
             applyGeneratedSpeed(KEEP_ALIVE_RPM);
-            logYaw("LOCK", command, commandAge, target, error);
             return;
         }
 
@@ -273,7 +250,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         // the first measurement), or the drivetrain is disengaged.
         if (Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f) {
             applyIdleControl();
-            logYaw("NO_RATIO", command, commandAge, target, error);
             return;
         }
 
@@ -286,32 +262,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         float mountRpm = angleRate / (MOUNT_DEG_PER_TICK_PER_RPM * axisSign);
         float generated = Mth.clamp(mountRpm / transmissionRatio, -MAX_DRIVE_RPM, MAX_DRIVE_RPM);
         applyGeneratedSpeed(generated);
-        logYaw("DRIVE", command, commandAge, target, error);
-    }
-
-    /**
-     * One line per tick for the yaw servo. Columns:
-     * cmd/rate/age = command angle, its rate (°/tick) and age (ticks);
-     * target = extrapolated command; angle/moved = mount yaw now and its
-     * change since last tick; own/mount = speeds (RPM) at this block and at
-     * the mount interface as read this tick, before this tick's new output;
-     * ratio = transmission used; gen = speed generated for the next tick.
-     */
-    private void logYaw(String state, @Nullable FireSolution command, long commandAge, float target, float error) {
-        if (!DEBUG_YAW_LOG || detectedAxis != ServoAxis.YAW || level == null) return;
-
-        float angle = slavedMounts.isEmpty() ? Float.NaN : slavedMounts.get(0).currentAngle;
-        float moved = Float.isNaN(debugPrevAngle) || Float.isNaN(angle) ? Float.NaN : wrapAngle(angle - debugPrevAngle);
-        debugPrevAngle = angle;
-
-        CreateDangerClose.LOGGER.info(String.format(
-                "[YawServo %s] t=%d %-11s cmd=%8.3f rate=%7.4f age=%2d target=%8.3f angle=%8.3f moved=%7.4f " +
-                        "err=%7.3f own=%7.3f mount=%7.3f ratio=%6.3f gen=%7.3f",
-                worldPosition.toShortString(), level.getGameTime(), state,
-                command != null ? command.yawDeg() : Double.NaN,
-                command != null ? command.yawRateDegPerTick() : Double.NaN,
-                commandAge, target, angle, moved, error,
-                debugOwnSpeed, debugMountSpeed, transmissionRatio, desiredGeneratedSpeed));
     }
 
     // ------------------------------------------------------------------
@@ -376,9 +326,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             sm.currentAngle = 0;
             return;
         }
-        sm.currentAngle = (sm.ServoAxis == PITCH) ? entity.pitch : entity.yaw;
+        sm.currentAngle = (sm.axis == PITCH) ? entity.pitch : entity.yaw;
 
-        if (sm.ServoAxis == PITCH) {
+        if (sm.axis == PITCH) {
             readShellData(sm);
         }
     }
@@ -557,7 +507,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         for (SlavedMount sm : slavedMounts) {
             CompoundTag tag = new CompoundTag();
             tag.putLong("MountPos", sm.mountPos.asLong());
-            tag.putInt("ServoAxis", sm.ServoAxis.ordinal());
+            tag.putInt("ServoAxis", sm.axis.ordinal());
             tag.putFloat("CurrentAngle", sm.currentAngle);
             tag.putBoolean("HasShell", sm.hasShell);
             if (sm.shellType != null) {
@@ -664,23 +614,16 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
     private static final float SNAP_THRESHOLD_DEG = 0.2f;
 
-    private static float wrapAngle(float deg) {
-        deg = deg % 360f;
-        if (deg > 180f) deg -= 360f;
-        if (deg < -180f) deg += 360f;
-        return deg;
-    }
-
     /**
-     * Test helper: sets the loaded shell's timed fuze to the given number of ticks.
-     * Returns true if a timed fuze was found and updated.
+     * Sets the loaded shell's timed fuze to this many ticks (the Fuze Computer's
+     * time of flight). Returns true if a timed fuze was found and updated.
      */
     public boolean setLoadedFuzeTime(int ticks) {
         if (level == null || level.isClientSide()) return false;
         if (slavedMounts.isEmpty()) return false;
 
         SlavedMount sm = slavedMounts.get(0);
-        if (sm.ServoAxis != PITCH) return false;
+        if (sm.axis != PITCH) return false;
         if (sm.mount == null) return false;
 
         PitchOrientedContraptionEntity entity = sm.mount.getContraption();
@@ -796,7 +739,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 .style(ChatFormatting.YELLOW)
                 .forGoggles(tooltip);
 
-        String angleKey = (sm.ServoAxis == PITCH)
+        String angleKey = (sm.axis == PITCH)
                 ? "createdangerclose.cannon_servo_output.mount_angle_pitch"
                 : "createdangerclose.cannon_servo_output.mount_angle_yaw";
         CDCLang.builder()
@@ -804,7 +747,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 .style(ChatFormatting.AQUA)
                 .forGoggles(tooltip);
 
-        if (sm.ServoAxis != PITCH) return;
+        if (sm.axis != PITCH) return;
 
         if (sm.hasShell && sm.shellType != null) {
             Component shellName = Component.translatable(
