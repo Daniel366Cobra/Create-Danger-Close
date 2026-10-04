@@ -68,7 +68,10 @@ public final class BallisticSolver {
             INSUFFICIENT_CHARGE,
             DEGENERATE,
             // Plunging fire: even the steepest shot lands beyond the target.
-            TOO_CLOSE
+            TOO_CLOSE,
+            // A gun on a ship without an Altitude Sensor, at an absolute target (map or
+            // navigation table) well above or below it: its own height is unknown.
+            NO_ALTITUDE
         }
 
         public static Result invalid(Reason reason) {

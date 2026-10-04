@@ -87,6 +87,12 @@ public class MapTableBlockEntity extends SmartBlockEntity
     protected long lastLinkTick;
     // Controller only: the computer's plot, as last carried over by a network interface.
     protected BattlePlot plot = BattlePlot.EMPTY;
+    // Client: the plot as shown when the current one arrived, and when that was. The
+    // renderers glide from one to the other, as the interface only polls every so often.
+    private BattlePlot plotShownBefore = BattlePlot.EMPTY;
+    private long plotArrivalTick;
+    // About one poll at a typical network speed.
+    private static final int PLOT_GLIDE_TICKS = 10;
     // Controller, server only: per player, a hash of the map pixels last sent to them.
     private Map<UUID, Map<MapId, Integer>> sentPixels = new HashMap<>();
     // Client only: where this block's map lies, as sent by the server.
@@ -311,6 +317,17 @@ public class MapTableBlockEntity extends SmartBlockEntity
     /** Rangefinder fixes and gun ranges to draw; empty unless on a battle network with a Ballistic Computer. */
     public BattlePlot getPlot() {
         return plot;
+    }
+
+    /**
+     * The plot as drawn now (client): gliding from the previous plot to the
+     * latest over a moment, so aim lines turn and fixes move instead of jumping.
+     */
+    public BattlePlot getShownPlot(float partialTicks) {
+        if (level == null)
+            return plot;
+        double t = (level.getGameTime() + partialTicks - plotArrivalTick) / PLOT_GLIDE_TICKS;
+        return t >= 1 ? plot : plotShownBefore.blendTowards(plot, Math.max(0, t));
     }
 
     /** Whether the table is on a battle network, which shows the ship and the plot. */
@@ -598,7 +615,13 @@ public class MapTableBlockEntity extends SmartBlockEntity
         targetTick = compound.getLong("TargetTick");
         if (clientPacket) {
             linked = compound.getBoolean("Linked");
-            plot = compound.contains("Plot") ? BattlePlot.read(compound.getCompound("Plot")) : BattlePlot.EMPTY;
+            BattlePlot arrived = compound.contains("Plot") ? BattlePlot.read(compound.getCompound("Plot")) : BattlePlot.EMPTY;
+            if (!arrived.equals(plot)) {
+                // Glide on from wherever the drawing is now (it may be mid-glide).
+                plotShownBefore = getShownPlot(0);
+                plotArrivalTick = level != null ? level.getGameTime() : 0;
+                plot = arrived;
+            }
             CompoundTag placement = compound.getCompound("MapPlacement");
             ResourceLocation dimension = ResourceLocation.tryParse(placement.getString("Dimension"));
             clientMapPlacement = compound.contains("MapPlacement") && dimension != null

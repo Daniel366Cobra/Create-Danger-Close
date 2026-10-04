@@ -6,6 +6,7 @@ import com.mojang.math.Axis;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
+import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -51,8 +52,10 @@ public final class MapTableMarker {
     private MapTableMarker() {}
 
     /**
-     * The table's own position marker, or null if the table is not on a
-     * battle network, none of its maps are loaded, or they show another dimension.
+     * The table's own position marker: on a ship an arrow showing the ship's
+     * heading, in the world a blue banner. Off the sheet, either becomes a large or
+     * small circle at its edge. Null if the table is not on a battle network, none
+     * of its maps are loaded, or they show another dimension.
      */
     @Nullable
     public static Marker computeOwn(MapTableBlockEntity controller) {
@@ -76,6 +79,10 @@ public final class MapTableMarker {
         float px = (float) sheet.pixelX(position.x);
         float py = (float) sheet.pixelY(position.z);
         if (px >= 0 && py >= 0 && px <= sheetPixels && py <= sheetPixels) {
+            // A table in the world (a fort's plotting room) has no heading to show: a pin.
+            // The Ponder chart keeps the ship's arrow, as its scene describes a ship.
+            if (ship == null && controller.getPonderChart() == null)
+                return new Marker(MapDecorationTypes.BLUE_BANNER, px / sheetPixels, py / sheetPixels, 0);
             float yaw = (float) Math.toDegrees(Math.atan2(-north.x, north.z));
             return new Marker(MapDecorationTypes.PLAYER, px / sheetPixels, py / sheetPixels, yaw);
         }
@@ -150,7 +157,7 @@ public final class MapTableMarker {
         if (sheet == null)
             return List.of();
         List<Marker> fixes = new ArrayList<>();
-        for (BattlePlot.RangefinderFix fix : controller.getPlot().fixes()) {
+        for (BattlePlot.RangefinderFix fix : controller.getShownPlot(AnimationTickHolder.getPartialTicks()).fixes()) {
             double u = sheet.pixelX(fix.x()) / sheet.sizeInPixels();
             double v = sheet.pixelY(fix.z()) / sheet.sizeInPixels();
             if (u >= 0 && v >= 0 && u <= 1 && v <= 1)

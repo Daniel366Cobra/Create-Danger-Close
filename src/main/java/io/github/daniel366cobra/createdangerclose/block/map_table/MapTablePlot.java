@@ -3,6 +3,7 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
+import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
@@ -41,7 +42,7 @@ public final class MapTablePlot {
      */
     public static void render(PoseStack pose, MultiBufferSource buffers, MapTableBlockEntity controller,
                               float sheetSize, float pixel, float lift, int packedLight) {
-        BattlePlot plot = controller.getPlot();
+        BattlePlot plot = controller.getShownPlot(AnimationTickHolder.getPartialTicks());
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         if (plot.isEmpty() || sheet == null || controller.getLevel() == null
                 || !sheet.dimension().equals(controller.getLevel().dimension()))

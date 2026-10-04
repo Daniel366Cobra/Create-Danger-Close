@@ -3,9 +3,11 @@ package io.github.daniel366cobra.createdangerclose.api.plot;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ToDoubleFunction;
 
 /**
  * What the Ballistic Computer knows, for plotting on a map table. World
@@ -47,6 +49,76 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
 
     public boolean isEmpty() {
         return fixes.isEmpty() && guns.isEmpty();
+    }
+
+    // A gun or fix in two plots is the same one if it moved less than this between them, blocks
+    // (a ship can cover a fair distance between polls).
+    private static final double SAME_ITEM_DISTANCE = 24;
+
+    /**
+     * This plot partway to another, {@code t} from 0 (this) to 1 ({@code to}),
+     * for drawing it moving smoothly between updates. Guns are paired by where
+     * they stand and fixes by the rangefinder they came from; anything without a
+     * partner is shown as in {@code to}.
+     */
+    public BattlePlot blendTowards(BattlePlot to, double t) {
+        if (t >= 1 || this.equals(to))
+            return to;
+        List<GunRange> blendedGuns = new ArrayList<>(to.guns.size());
+        List<GunRange> unpairedGuns = new ArrayList<>(guns);
+        for (GunRange gun : to.guns) {
+            GunRange from = nearest(unpairedGuns, gun.x, gun.z, GunRange::x, GunRange::z);
+            if (from == null) {
+                blendedGuns.add(gun);
+                continue;
+            }
+            unpairedGuns.remove(from);
+            double aimX = gun.aimX, aimZ = gun.aimZ;
+            if (from.hasAim() && gun.hasAim()) {
+                // Turn the bearing the short way round.
+                double fromAngle = Math.atan2(from.aimZ, from.aimX);
+                double toAngle = Math.atan2(gun.aimZ, gun.aimX);
+                double turn = Math.IEEEremainder(toAngle - fromAngle, 2 * Math.PI);
+                double angle = fromAngle + turn * t;
+                aimX = Math.cos(angle);
+                aimZ = Math.sin(angle);
+            }
+            blendedGuns.add(new GunRange(lerp(from.x, gun.x, t), lerp(from.z, gun.z, t),
+                    lerp(from.radius, gun.radius, t), aimX, aimZ, lerp(from.minRadius, gun.minRadius, t)));
+        }
+        List<RangefinderFix> blendedFixes = new ArrayList<>(to.fixes.size());
+        List<RangefinderFix> unpairedFixes = new ArrayList<>(fixes);
+        for (RangefinderFix fix : to.fixes) {
+            RangefinderFix from = nearest(unpairedFixes, fix.originX, fix.originZ,
+                    RangefinderFix::originX, RangefinderFix::originZ);
+            if (from == null) {
+                blendedFixes.add(fix);
+                continue;
+            }
+            unpairedFixes.remove(from);
+            blendedFixes.add(new RangefinderFix(lerp(from.x, fix.x, t), lerp(from.y, fix.y, t), lerp(from.z, fix.z, t),
+                    lerp(from.sigma, fix.sigma, t), lerp(from.originX, fix.originX, t), lerp(from.originZ, fix.originZ, t)));
+        }
+        return new BattlePlot(blendedFixes, blendedGuns);
+    }
+
+    @Nullable
+    private static <T> T nearest(List<T> items, double x, double z, ToDoubleFunction<T> getX, ToDoubleFunction<T> getZ) {
+        T best = null;
+        double bestDistance = SAME_ITEM_DISTANCE * SAME_ITEM_DISTANCE;
+        for (T item : items) {
+            double dx = getX.applyAsDouble(item) - x, dz = getZ.applyAsDouble(item) - z;
+            double distance = dx * dx + dz * dz;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = item;
+            }
+        }
+        return best;
+    }
+
+    private static double lerp(double from, double to, double t) {
+        return from + (to - from) * t;
     }
 
     public CompoundTag write() {

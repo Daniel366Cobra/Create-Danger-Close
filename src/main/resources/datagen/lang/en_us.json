@@ -70,8 +70,7 @@
       "target": "Target",
       "missing_orientation": "Missing: Gimbal or Heading",
       "missing_velocity": "Missing: Velocity (needs sensors on X, Y and Z)",
-      "no_sublevel": "Not on a physics object",
-      "missing_altitude": "Missing: Altitude",
+      "missing_altitude": "Missing: Altitude (for map and navigation targets well above or below)",
       "missing_target": "Missing: Target",
       "target_source": {
         "rangefinder": "Source: Rangefinder (%ss old, ±%s m)",
@@ -93,7 +92,8 @@
         "no_orientation": "No ship orientation data",
         "insufficient_charge": "Insufficient propellant",
         "degenerate": "Invalid geometry",
-        "too_close": "Too close for plunging fire"
+        "too_close": "Too close for plunging fire",
+        "no_altitude": "Own altitude unknown: needs an Altitude Sensor"
       }
     },
       "cannon_servo": {

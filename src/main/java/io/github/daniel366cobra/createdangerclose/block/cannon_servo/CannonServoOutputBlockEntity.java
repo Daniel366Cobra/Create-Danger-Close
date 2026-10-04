@@ -68,9 +68,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     // CBC turns a mount by 0.0375°/tick per interface RPM on the server
     // (Create's 0.3°/tick per RPM, scaled by 0.125 in CannonMountBlockEntity).
     private static final float MOUNT_DEG_PER_TICK_PER_RPM = 0.0375f;
-    // Direction of the contraption angle for positive interface rotation.
-    // CBC's pitch facing factor appears twice (mount step and applyRotation)
-    // and cancels, so these are fixed for every mount orientation.
+    // Which way CBC's raw angles turn for positive interface rotation, the same for
+    // every mount orientation. For the barrel's elevation, the pitch sign is
+    // multiplied by the cannon's elevationSign.
     private static final float PITCH_AXIS_SIGN = 1f;
     private static final float YAW_AXIS_SIGN = -1f;
     private static final float MAX_DRIVE_RPM = 32f;
@@ -91,7 +91,10 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         public final @Nullable CannonMountInterfaceBlockEntity iface;
         public final ServoAxis axis;
 
+        // Pitch axis: the barrel's elevation, positive up (CBC's raw pitch times
+        // elevationSign); yaw axis: CBC's yaw.
         public float currentAngle;
+        public float elevationSign = 1;
         public boolean hasShell;
         public @Nullable ResourceLocation shellType;
         public ItemStack fuzeStack = ItemStack.EMPTY;
@@ -272,7 +275,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         // Desired contraption angle rate: follow the command's own motion,
         // plus a proportional pull towards it.
         float angleRate = rate + CORRECTION_GAIN * error;
-        float axisSign = pitch ? PITCH_AXIS_SIGN : YAW_AXIS_SIGN;
+        float axisSign = pitch ? PITCH_AXIS_SIGN * sm.elevationSign : YAW_AXIS_SIGN;
         float mountRpm = angleRate / (MOUNT_DEG_PER_TICK_PER_RPM * axisSign);
         float generated = Mth.clamp(mountRpm / transmissionRatio, -MAX_DRIVE_RPM, MAX_DRIVE_RPM);
         applyGeneratedSpeed(generated);
@@ -340,12 +343,26 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             sm.currentAngle = 0;
             return;
         }
-        sm.currentAngle = (sm.axis == PITCH) ? entity.pitch : entity.yaw;
+        sm.elevationSign = elevationSign(entity);
+        sm.currentAngle = (sm.axis == PITCH) ? sm.elevationSign * entity.pitch : entity.yaw;
         readMuzzle(sm, entity);
 
         if (sm.axis == PITCH) {
             readShellData(sm);
         }
+    }
+
+    /**
+     * Which way CBC's raw pitch angle turns this barrel: +1 if raising the pitch
+     * raises the barrel, -1 if it lowers it. The pitch is a rotation about a fixed
+     * world axis, so it depends on the cannon's initial orientation; this is the
+     * rule CBC itself uses ({@code CannonMountBlockEntity.tick}).
+     */
+    private static float elevationSign(PitchOrientedContraptionEntity entity) {
+        Direction facing = entity.getInitialOrientation();
+        boolean pitchIsUp = (facing.getAxisDirection() == Direction.AxisDirection.POSITIVE)
+                == (facing.getAxis() == Direction.Axis.X);
+        return pitchIsUp ? 1 : -1;
     }
 
     /**

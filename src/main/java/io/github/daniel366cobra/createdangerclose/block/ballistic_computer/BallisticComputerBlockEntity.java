@@ -41,6 +41,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaterniond;
 import org.joml.Quaterniondc;
 import org.joml.Vector3d;
 import rbasamoyai.createbigcannons.config.CBCConfigs;
@@ -104,6 +105,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Re-solves from the muzzle where the last solve aimed the barrel: each pass
     // shrinks the launch point's error roughly by the change in aim, so two settle it.
     private static final int MUZZLE_REFINEMENT_PASSES = 2;
+    // Height difference to an absolute target a ship can still engage without an
+    // Altitude Sensor (roughly level with the target), blocks.
+    private static final double UNKNOWN_ALTITUDE_TOLERANCE = 16;
+    // The frame of a gun ashore: the world itself.
+    private static final Quaterniondc WORLD_FRAME = new Quaterniond();
 
     // Per mount (server only): the barrel's current pitch and yaw in ship
     // frame as its servos read them last poll, for the firing interlock.
@@ -123,8 +129,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // already covered are redundant: they count, but add no capability.
     private final int[] velocityAxisCounts = new int[3];
 
-    // Whether the computer is on a physics object at all (tooltip warning).
-    private boolean hasPose = false;
+    // Whether any gun it directs is on a ship (synced): only those need attitude and
+    // velocity sensors; guns ashore aim in the world's own frame.
+    private boolean directsShipGuns = false;
 
     // --- Target: rangefinder solution > map table > navigation table ---
     // Saved by ordinal: add new sources at the end.
@@ -391,7 +398,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         gimbalCount = navHeadingCount = altitudeCount = 0;
         Arrays.fill(velocityAxisCounts, 0);
 
-        hasPose = false;
 
         hasTarget = false;
         targetSource = TargetSource.NONE;
@@ -596,7 +602,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : FireControlStatus.STANDBY);
         }
 
-        readOwnShipState();
     }
 
     private boolean isFresh(SensorReading.Rangefinder reading) {
@@ -699,20 +704,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return merged;
     }
 
-    /** Whether the computer sits on a physics object, for the tooltip warning. */
-    private void readOwnShipState() {
-        hasPose = level != null && Sable.HELPER.getContaining(level, worldPosition) != null;
-    }
-
     // --- Gates ---
 
     /** Gimbal (tilt) and magnet navigation table (heading) are both present. */
     public boolean hasOrientationSensors() {
         return gimbalCount > 0 && navHeadingCount > 0;
-    }
-
-    public boolean hasAltitudeSensor() {
-        return altitudeCount > 0;
     }
 
     /** Number of distinct ship axes covered by at least one velocity sensor. */
@@ -746,6 +742,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         lastPitchResults.clear();
         aimCache.clear();
+        directsShipGuns = false;
 
         // Pitch servos run the ballistic solve (they know the shell and charge)
         // and cache the result per mount. Yaw servos run afterwards so both axes
@@ -763,6 +760,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 servo.receiveFiringSolution(null);
                 continue;
             }
+
+            if (subLevelOf(status.mounts().get(0)) != null)
+                directsShipGuns = true;
 
             if (status.axis() == PITCH) {
                 servo.receiveFiringSolution(withRates(status, solvePitch(status)));
@@ -918,16 +918,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         // No ballistic solution for this mount (no pitch servo, no shell, ...).
         // Keep tracking the target along the line of sight.
-        if (!hasOrientationSensors()) return null;
-
         SubLevel mountSubLevel = subLevelOf(mount);
-        if (mountSubLevel == null) return null;
+        if (mountSubLevel != null && !hasOrientationSensors()) return null;
 
         Vector3d toTargetWorld = new Vector3d(targetX, targetY, targetZ).sub(launchPivot(mount, mountSubLevel));
         if (toTargetWorld.lengthSquared() < 1e-8) return null;
 
-        Vector3d shipDir = mountSubLevel.logicalPose().orientation()
-                .transformInverse(toTargetWorld.normalize(), new Vector3d());
+        Quaterniondc shipToWorld = mountSubLevel != null ? mountSubLevel.logicalPose().orientation() : WORLD_FRAME;
+        Vector3d shipDir = shipToWorld.transformInverse(toTargetWorld.normalize(), new Vector3d());
         return new FireSolution(pitchOf(shipDir), yawOf(shipDir), 0, true);
     }
 
@@ -942,13 +940,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return restSolution(mount);
         }
 
-        if (mountSubLevel == null) {
-            lastPitchResults.put(servoPos,
-                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.DEGENERATE));
-            return null;
-        }
-
-        if (!hasOrientationSensors()) {
+        // On a ship, aiming in its frame takes knowing its attitude. A gun ashore (a
+        // fort, a battery) needs none: its frame is the world, which neither tilts nor turns.
+        if (mountSubLevel != null && !hasOrientationSensors()) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_ORIENTATION));
             return null;
@@ -967,12 +961,24 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return null;
         }
 
-        Quaterniondc shipToWorld = mountSubLevel.logicalPose().orientation();
+        Quaterniondc shipToWorld = mountSubLevel != null ? mountSubLevel.logicalPose().orientation() : WORLD_FRAME;
         Vector3d pivotWorld = launchPivot(mount, mountSubLevel);
         Vector3d targetWorld = new Vector3d(targetX, targetY, targetZ);
         // The shell leaves from the muzzle, which moves as the barrel turns: start
         // with the barrel pointing straight at the target, then from where it aims.
         Vector3d muzzleWorld = muzzleAt(pivotWorld, new Vector3d(targetWorld).sub(pivotWorld), mount);
+
+        // A map or navigation table gives the target as an absolute position: comparing
+        // heights with it takes knowing your own altitude, which a ship only gets from an
+        // Altitude Sensor. A rangefinder measures the target relative to itself, and a gun
+        // ashore stands at a surveyed height, so neither needs one.
+        boolean absoluteTarget = targetSource == TargetSource.MAP_TABLE || targetSource == TargetSource.NAV_TABLE;
+        if (mountSubLevel != null && absoluteTarget && altitudeCount == 0
+                && Math.abs(targetWorld.y - pivotWorld.y) > UNKNOWN_ALTITUDE_TOLERANCE) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_ALTITUDE));
+            return null;
+        }
         Vector3d targetVel = new Vector3d(targetVelX, targetVelY, targetVelZ);
 
         double muzzleVelocity = charge;
@@ -1036,9 +1042,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
      * {@code EntitySubLevelUtilMixin}), unless the server config disables it.
      * The computer only compensates along ship axes it has velocity sensors for.
      */
-    private Vector3d inheritedLaunchVelocity(SubLevel mountSubLevel, BlockPos mountPos) {
-        // Compensating for own-ship speed takes an Integrator (and velocity sensors).
-        if (level == null || velocityAxesCovered() == 0 || !has(ComputerModule.INTEGRATOR)
+    private Vector3d inheritedLaunchVelocity(@Nullable SubLevel mountSubLevel, BlockPos mountPos) {
+        // Compensating for own-ship speed takes an Integrator (and velocity sensors);
+        // a gun ashore does not move.
+        if (level == null || mountSubLevel == null || velocityAxesCovered() == 0 || !has(ComputerModule.INTEGRATOR)
                 || !CBCConfigs.server().compat.sableProjectilesInheritPhysicsObjectVelocity.get()) {
             return new Vector3d();
         }
@@ -1108,7 +1115,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     // --- Accessors for other blocks (fire control panel, map table, etc.) ---
 
-    public boolean hasPose() { return hasPose; }
     public boolean hasTarget() { return hasTarget; }
 
     public boolean isPowered() { return isPowered; }
@@ -1169,7 +1175,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         this.velocityAxisCounts[1] = compound.getInt("VelocityCountY");
         this.velocityAxisCounts[2] = compound.getInt("VelocityCountZ");
 
-        this.hasPose = compound.getBoolean("HasPose");
+        this.directsShipGuns = compound.getBoolean("DirectsShipGuns");
 
         this.hasTarget = compound.getBoolean("HasTarget");
         this.targetX = compound.getDouble("TargetX");
@@ -1235,7 +1241,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         compound.putInt("VelocityCountY", velocityAxisCounts[1]);
         compound.putInt("VelocityCountZ", velocityAxisCounts[2]);
 
-        compound.putBoolean("HasPose", hasPose);
+        compound.putBoolean("DirectsShipGuns", directsShipGuns);
 
         compound.putBoolean("HasTarget", hasTarget);
         compound.putDouble("TargetX", targetX);
@@ -1304,27 +1310,21 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     .forGoggles(tooltip);
         }
 
-        if (!hasPose) {
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.ballistic_computer.no_sublevel"))
-                    .style(ChatFormatting.DARK_RED)
-                    .forGoggles(tooltip);
-        }
-
-        // --- Missing sensors (the ship's own readings are on the Navigation Console) ---
-        if (!hasOrientationSensors()) {
+        // --- Missing sensors: only guns on a ship need them (the ship's own readings
+        // are on the Navigation Console) ---
+        if (directsShipGuns && !hasOrientationSensors()) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.ballistic_computer.missing_orientation"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
-        if (!hasFullVelocity()) {
+        if (directsShipGuns && !hasFullVelocity()) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.ballistic_computer.missing_velocity"))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
-        if (!hasAltitudeSensor()) {
+        if (directsShipGuns && altitudeCount == 0) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.ballistic_computer.missing_altitude"))
                     .style(ChatFormatting.DARK_RED)
