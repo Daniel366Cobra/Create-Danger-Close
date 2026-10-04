@@ -21,6 +21,8 @@ public final class CDCPackets {
                 .playToServer(MapTableTargetPayload.TYPE, MapTableTargetPayload.STREAM_CODEC,
                         MapTableTargetPayload::handle)
                 .playToServer(FireMissionKnobPayload.TYPE, FireMissionKnobPayload.STREAM_CODEC,
-                        FireMissionKnobPayload::handle);
+                        FireMissionKnobPayload::handle)
+                .playToServer(ServoLimitsPayload.TYPE, ServoLimitsPayload.STREAM_CODEC,
+                        ServoLimitsPayload::handle);
     }
 }

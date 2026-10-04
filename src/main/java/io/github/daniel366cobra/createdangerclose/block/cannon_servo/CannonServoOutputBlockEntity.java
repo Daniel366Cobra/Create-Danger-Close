@@ -5,47 +5,37 @@ import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
+import dev.ryanhcode.sable.Sable;
+import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
+import dev.ryanhcode.sable.sublevel.SubLevel;
+import dev.simulated_team.simulated.content.blocks.swivel_bearing.SwivelBearingBlock;
+import dev.simulated_team.simulated.content.blocks.swivel_bearing.SwivelBearingBlockEntity;
+import dev.simulated_team.simulated.content.blocks.swivel_bearing.link_block.SwivelBearingPlateBlock;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.Vec3;
-import rbasamoyai.createbigcannons.cannon_control.contraption.AbstractMountedCannonContraption;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaterniond;
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountInterfaceBlockEntity;
-import rbasamoyai.createbigcannons.cannon_control.contraption.MountedBigCannonContraption;
 import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
-import rbasamoyai.createbigcannons.cannons.big_cannons.BigCannonBehavior;
-import rbasamoyai.createbigcannons.cannons.big_cannons.IBigCannonBlockEntity;
-import rbasamoyai.createbigcannons.index.CBCDataComponents;
-import rbasamoyai.createbigcannons.index.CBCMunitionPropertiesHandlers;
-import rbasamoyai.createbigcannons.munitions.big_cannon.BigCannonMunitionBlock;
-import rbasamoyai.createbigcannons.munitions.big_cannon.FuzedProjectileBlock;
-import rbasamoyai.createbigcannons.munitions.big_cannon.ProjectileBlock;
-import rbasamoyai.createbigcannons.munitions.big_cannon.config.BigCannonProjectilePropertiesComponent;
-import rbasamoyai.createbigcannons.munitions.big_cannon.propellant.BigCannonPropellantBlock;
-import rbasamoyai.createbigcannons.munitions.config.components.BallisticPropertiesComponent;
-import rbasamoyai.createbigcannons.munitions.fuzes.DelayedImpactFuzeItem;
-import rbasamoyai.createbigcannons.munitions.fuzes.DelayedInertiaFuzeItem;
-import rbasamoyai.createbigcannons.munitions.fuzes.TimedFuzeItem;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,6 +84,8 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         // Pitch axis: the barrel's elevation, positive up (CBC's raw pitch times
         // elevationSign); yaw axis: CBC's yaw.
         public float currentAngle;
+        // The mount's yaw (CBC's), whichever axis this servo drives.
+        public float mountYaw;
         public float elevationSign = 1;
         public boolean hasShell;
         public @Nullable ResourceLocation shellType;
@@ -112,6 +104,10 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         // coordinates) and how far along the barrel from it the shell appears.
         public @Nullable Vec3 pivot;
         public double muzzleDistance;
+        // Where the barrel points, a unit vector in the frame the cannon stands in; null if unassembled.
+        public @Nullable Vec3 barrel;
+        // The way the cannon faced when assembled (CBC yaw), where the yaw dial reads 0.
+        public float facingYaw;
 
         public SlavedMount(BlockPos mountPos,
                            @Nullable CannonMountBlockEntity mount,
@@ -125,6 +121,25 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     }
 
     private final List<SlavedMount> slavedMounts = new ArrayList<>();
+    // The swivel bearing this servo turns (SWIVEL), and its cog on our network.
+    @Nullable private SwivelBearingBlockEntity swivel;
+    @Nullable private KineticBlockEntity swivelCog;
+    // The turret's angles for the goggles (synced): where it is and where it is turning to.
+    private float shownSwivelAngle, shownSwivelTarget;
+    // Whether a swivel is on the network at all (synced), for the goggles' invalid-setup message.
+    private boolean swivelSeen;
+    // How far a swivel's target angle turns per tick per cog RPM (Create's convertToAngular).
+    private static final float SWIVEL_DEG_PER_TICK_PER_RPM = 0.3f;
+    // A turret turns no faster than a cannon mount at the servo's full drive (1.2°/tick).
+    private static final float MAX_TRAVERSE_DEG_PER_TICK = MOUNT_DEG_PER_TICK_PER_RPM * MAX_DRIVE_RPM;
+    // The limits set on the dial (synced), or null for none: see getLimits.
+    @Nullable private ServoLimits limits;
+    // The swivel lies on its side, tilting a cradle (synced): its dial reads elevation.
+    private boolean swivelTilts;
+    // Which way the swivel's angle raises the barrels, as the computer last found (saved, synced).
+    private int swivelSense = 1;
+    // Where what this servo drives stands on its dial now (synced), for the dial's needle.
+    private float dialAngle;
     private ServoAxis detectedAxis = ServoAxis.NONE;
     private boolean isPowered = false;
 
@@ -157,6 +172,13 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         pollCannonNetwork();
         measureTransmission();
         applyControl();
+        swivelSeen = swivel != null;
+        swivelTilts = swivel != null && swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxis() != Direction.Axis.Y;
+        dialAngle = readDialAngle();
+        if (detectedAxis == ServoAxis.SWIVEL && swivel != null) {
+            shownSwivelAngle = Mth.wrapDegrees((float) swivelActualAngle());
+            shownSwivelTarget = Mth.wrapDegrees((float) swivel.getTargetAngleDegrees());
+        }
 
         // Clients only use this block's data for goggles.
         if (level.getGameTime() % CLIENT_SYNC_INTERVAL_TICKS == 0)
@@ -169,9 +191,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
      * signed speed to the mount interface. Their ratio is the transmission.
      */
     private void measureTransmission() {
-        if (slavedMounts.isEmpty() || slavedMounts.get(0).iface == null) return;
+        KineticBlockEntity driven = swivelCog != null ? swivelCog
+                : !slavedMounts.isEmpty() ? slavedMounts.get(0).iface : null;
+        if (driven == null) return;
         float own = getSpeed();
-        float atMount = slavedMounts.get(0).iface.getSpeed();
+        float atMount = driven.getSpeed();
         if (Math.abs(own) > 1e-3f && Math.abs(atMount) > 1e-3f) {
             transmissionRatio = atMount / own;
         }
@@ -192,6 +216,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         if (command == null || !command.valid() || !isPowered || detectedAxis == ServoAxis.NONE || detectedAxis == ServoAxis.INVALID) {
             applyIdleControl();
+            return;
+        }
+
+        if (detectedAxis == ServoAxis.SWIVEL) {
+            driveSwivel(command, Math.max(0, level.getGameTime() - input.getCommandTick()));
             return;
         }
 
@@ -218,7 +247,75 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 sm.iface.setSequencedAngleLimit(0);
             }
         }
-        applyGeneratedSpeed(isPowered ? KEEP_ALIVE_RPM : 0f);
+        // A swivel has no lock: any rotation winds it round, so it is held by standing still.
+        applyGeneratedSpeed(isPowered && swivel == null ? KEEP_ALIVE_RPM : 0f);
+    }
+
+    // ------------------------------------------------------------------
+    // Swivel bearing (turret yaw)
+    // ------------------------------------------------------------------
+
+    /**
+     * Turns the swivel to the commanded angle (the yaw of the command): winding
+     * its cog changes its target angle at 0.3° per tick per RPM, the other way
+     * round for a bearing facing down, and the turret follows the target angle.
+     */
+    private void driveSwivel(FireSolution command, long commandAge) {
+        float rate = (float) command.yawRateDegPerTick();
+        float target = (float) command.yawDeg() + rate * commandAge;
+        // Within the dial's limits, in dial degrees (dialSign times the swivel's angle).
+        ServoLimits arc = getLimits();
+        float sign = dialSign();
+        float current = (float) swivel.getTargetAngleDegrees();
+        float error;
+        if (swivelTilts) {
+            // A cradle: stops at its elevation limits.
+            float dialTarget = Mth.wrapDegrees(sign * target);
+            if (!arc.containsElevation(dialTarget)) {
+                target = sign * Mth.clamp(dialTarget, arc.start(), arc.end());
+                rate = 0;
+            }
+            error = Mth.wrapDegrees(target - current);
+        } else {
+            // A turret: the long way round rather than through the arc left out.
+            if (!arc.containsTurn(sign * target))
+                rate = 0;
+            error = sign * arc.turnWithin(sign * current, sign * target);
+        }
+        lastError = error;
+        if (Math.abs(error) < SNAP_THRESHOLD_DEG && Math.abs(rate) < HOLD_RATE_DEG_PER_TICK) {
+            applyGeneratedSpeed(0);
+            return;
+        }
+        float facingSign = swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxisDirection()
+                == Direction.AxisDirection.POSITIVE ? 1 : -1;
+        // No faster than a cannon mount traverses at full drive.
+        float angleRate = Mth.clamp(rate + CORRECTION_GAIN * error, -MAX_TRAVERSE_DEG_PER_TICK, MAX_TRAVERSE_DEG_PER_TICK);
+        float cogRpm = angleRate / (SWIVEL_DEG_PER_TICK_PER_RPM * facingSign);
+        // Until the cog has turned once the transmission is unknown: start as if direct, then correct.
+        float ratio = Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f ? 1 : transmissionRatio;
+        applyGeneratedSpeed(Mth.clamp(cogRpm / ratio, -MAX_DRIVE_RPM, MAX_DRIVE_RPM));
+    }
+
+    /**
+     * The angle the turret is actually at, degrees, worked out from the hull's and
+     * the turret's poses as Simulated does; its target angle if that is not possible.
+     */
+    private double swivelActualAngle() {
+        SubLevelContainer container = SubLevelContainer.getContainer(level);
+        SubLevel turret = container != null && swivel.getSubLevelID() != null
+                ? container.getSubLevel(swivel.getSubLevelID()) : null;
+        BlockPos platePos = swivel.getPlatePos();
+        BlockState plate = platePos != null ? level.getBlockState(platePos) : null;
+        if (turret == null || plate == null || !plate.hasProperty(SwivelBearingPlateBlock.FACING))
+            return swivel.getTargetAngleDegrees();
+        SubLevel hull = Sable.HELPER.getContaining(swivel);
+        Quaterniond hullOrientation = hull != null ? new Quaterniond(hull.logicalPose().orientation()) : new Quaterniond();
+        Quaterniond bearingFacing = new Quaterniond(swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getRotation());
+        Quaterniond plateFacing = new Quaterniond(plate.getValue(SwivelBearingPlateBlock.FACING).getRotation());
+        Quaterniond relative = hullOrientation.mul(bearingFacing).conjugate()
+                .mul(new Quaterniond(turret.logicalPose().orientation()).mul(plateFacing));
+        return Math.toDegrees(2 * Math.atan2(relative.y(), relative.w()));
     }
 
     private void applyGeneratedSpeed(float rpm) {
@@ -253,7 +350,21 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             return;
         }
 
-        float error = Mth.wrapDegrees(target - sm.currentAngle);
+        // Within the limits set on the dial: the barrel stops at them, and a mount
+        // traverses the long way round rather than through the arc left out.
+        ServoLimits arc = getLimits();
+        float error;
+        if (pitch) {
+            if (!arc.containsElevation(target)) {
+                target = Mth.clamp(target, arc.start(), arc.end());
+                rate = 0;
+            }
+            error = Mth.wrapDegrees(target - sm.currentAngle);
+        } else {
+            if (!arc.containsTurn(target - sm.facingYaw))
+                rate = 0;
+            error = arc.turnWithin(sm.currentAngle - sm.facingYaw, target - sm.facingYaw);
+        }
         lastError = error;
 
         // On target and not tracking: lock the mount.
@@ -287,6 +398,16 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
     private void pollCannonNetwork() {
         KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
+        // Holding a turret still, this servo generates nothing, and Create then takes the
+        // swivel's cog off our network: keep the swivel we found until we turn it again.
+        if (swivel != null && !swivel.isRemoved() && Math.abs(desiredGeneratedSpeed) < 1e-4f
+                && level.getBlockEntity(swivel.getBlockPos()) == swivel) {
+            detectedAxis = ServoAxis.SWIVEL;
+            slavedMounts.clear();
+            return;
+        }
+        swivel = null;
+        swivelCog = null;
         if (network == null) {
             slavedMounts.clear();
             detectedAxis = ServoAxis.NONE;
@@ -295,9 +416,18 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         List<SlavedMount> newMounts = new ArrayList<>();
         ServoAxis axisThisPoll = ServoAxis.NONE;
+        int swivels = 0;
 
         for (KineticBlockEntity member : network.members.keySet()) {
             if (member == this) continue;
+            // A swivel bearing's cog: this servo turns a turret.
+            if (member instanceof SwivelBearingBlockEntity.SwivelBearingCogwheelBlockEntity cog
+                    && cog.getParentBlockEntity() instanceof SwivelBearingBlockEntity bearing) {
+                swivels++;
+                swivel = bearing;
+                swivelCog = cog;
+                continue;
+            }
             if (!(member instanceof CannonMountInterfaceBlockEntity iface)) continue;
 
             ServoAxis axis;
@@ -332,6 +462,15 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             return;
         }
 
+        if (swivels > 0) {
+            // A swivel bearing, alone on the network: with a mount interface or another
+            // swivel too, one servo would drive two things.
+            detectedAxis = swivels == 1 && axisThisPoll == ServoAxis.NONE
+                    ? ServoAxis.SWIVEL : ServoAxis.INVALID;
+            slavedMounts.clear();
+            return;
+        }
+
         this.detectedAxis = axisThisPoll;
         this.slavedMounts.clear();
         this.slavedMounts.addAll(newMounts);
@@ -343,181 +482,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             sm.currentAngle = 0;
             return;
         }
-        sm.elevationSign = elevationSign(entity);
-        sm.currentAngle = (sm.axis == PITCH) ? sm.elevationSign * entity.pitch : entity.yaw;
-        readMuzzle(sm, entity);
-
-        if (sm.axis == PITCH) {
-            readShellData(sm);
-        }
-    }
-
-    /**
-     * Which way CBC's raw pitch angle turns this barrel: +1 if raising the pitch
-     * raises the barrel, -1 if it lowers it. The pitch is a rotation about a fixed
-     * world axis, so it depends on the cannon's initial orientation; this is the
-     * rule CBC itself uses ({@code CannonMountBlockEntity.tick}).
-     */
-    private static float elevationSign(PitchOrientedContraptionEntity entity) {
-        Direction facing = entity.getInitialOrientation();
-        boolean pitchIsUp = (facing.getAxisDirection() == Direction.AxisDirection.POSITIVE)
-                == (facing.getAxis() == Direction.Axis.X);
-        return pitchIsUp ? 1 : -1;
-    }
-
-    /**
-     * Where the shell leaves the cannon. CBC spawns it at the centre of the
-     * block just past the barrel's last block, on the line from the cannon's
-     * rotation centre (the contraption origin) along the barrel.
-     */
-    private static void readMuzzle(SlavedMount sm, PitchOrientedContraptionEntity entity) {
-        sm.pivot = entity.toGlobalVector(Vec3.atCenterOf(BlockPos.ZERO), 0);
-        if (!(entity.getContraption() instanceof AbstractMountedCannonContraption cannon)) {
-            sm.muzzleDistance = 0;
-            return;
-        }
-        Direction along = cannon.initialOrientation();
-        int farthest = 0;
-        for (BlockPos pos : cannon.getBlocks().keySet())
-            farthest = Math.max(farthest, pos.getX() * along.getStepX() + pos.getY() * along.getStepY()
-                    + pos.getZ() * along.getStepZ());
-        sm.muzzleDistance = farthest + 1;
-    }
-
-    // ------------------------------------------------------------------
-    // Shell reading (pitch servo only)
-    // ------------------------------------------------------------------
-
-    private void readShellData(SlavedMount sm) {
-        sm.hasShell = false;
-        sm.shellType = null;
-        sm.fuzeStack = ItemStack.EMPTY;
-        sm.fuzeTimer = 0;
-        sm.isTimedFuze = false;
-        sm.isDelayedImpactFuze = false;
-        sm.totalChargePower = 0f;
-
-        PitchOrientedContraptionEntity entity = sm.mount.getContraption();
-        if (entity == null) return;
-        if (!(entity.getContraption() instanceof MountedBigCannonContraption mounted)) return;
-
-        HolderLookup.Provider registries = level.registryAccess();
-
-        for (var entry : mounted.presentBlockEntities.entrySet()) {
-            if (!(entry.getValue() instanceof IBigCannonBlockEntity cbe)) continue;
-            BigCannonBehavior behavior = cbe.cannonBehavior();
-            StructureBlockInfo info = behavior.block();
-            if (info.state().isAir()) continue;
-
-            var block = info.state().getBlock();
-
-            if (block instanceof BigCannonPropellantBlock propellant) {
-                sm.totalChargePower += Math.max(0f, propellant.getChargePower(info));
-                continue;
-            }
-
-            if (block instanceof ProjectileBlock<?> projBlock && !sm.hasShell) {
-                if (!(block instanceof BigCannonMunitionBlock munition)) continue;
-
-                ItemStack shellStack = munition.getExtractedItem(info, registries);
-                ItemStack fuze = FuzedProjectileBlock.getFuzeFromItemStack(shellStack);
-
-                sm.hasShell = true;
-                sm.shellType = BuiltInRegistries.BLOCK.getKey(block);
-                sm.fuzeStack = fuze;
-                sm.isTimedFuze = fuze.getItem() instanceof TimedFuzeItem;
-                sm.isDelayedImpactFuze = isDelayedImpactFuze(fuze);
-                sm.fuzeTimer = sm.isTimedFuze || sm.isDelayedImpactFuze
-                        ? fuze.getOrDefault(CBCDataComponents.FUZE_TIMER, sm.isTimedFuze ? 20 : -1)
-                        : 0;
-
-                EntityType<?> projectileType = projBlock.getAssociatedEntityType();
-                BallisticPropertiesComponent ballistics = resolveBallistics(projectileType);
-                BigCannonProjectilePropertiesComponent bigCannon = resolveBigCannonProperties(projectileType);
-
-                sm.gravity = ballistics.gravity();
-                sm.drag = ballistics.drag();
-                sm.isQuadraticDrag = ballistics.isQuadraticDrag();
-                sm.addedChargePower = bigCannon.addedChargePower();
-                sm.minimumChargePower = bigCannon.minimumChargePower();
-            }
-        }
-    }
-
-    private static BallisticPropertiesComponent resolveBallistics(EntityType<?> projectileType) {
-        // Common shells: HE, fluid, smoke.
-        // Sentinel: gravity() != 0 because every shipped shell has a negative
-        // gravity value in its JSON. The default is 0.0, which means "no entry
-        // for this entity type in this handler."
-        BallisticPropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).ballistics();
-        if (common.gravity() != 0) return common;
-
-        BallisticPropertiesComponent inert = CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).ballistics();
-        if (inert.gravity() != 0) return inert;
-
-        BallisticPropertiesComponent shrapnel = CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (shrapnel.gravity() != 0) return shrapnel;
-
-        BallisticPropertiesComponent fluid = CBCMunitionPropertiesHandlers.FLUID_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (fluid.gravity() != 0) return fluid;
-
-        BallisticPropertiesComponent smoke = CBCMunitionPropertiesHandlers.SMOKE_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (smoke.gravity() != 0) return smoke;
-
-        BallisticPropertiesComponent mortar = CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (mortar.gravity() != 0) return mortar;
-
-        BallisticPropertiesComponent stone = CBCMunitionPropertiesHandlers.MORTAR_STONE
-                .getPropertiesOf(projectileType).ballistics();
-        if (stone.gravity() != 0) return stone;
-
-        // Nothing matched. Return the common default so callers get a consistent
-        // zeroed value and the ballistic solver can fall back.
-        return common;
-    }
-
-    private static BigCannonProjectilePropertiesComponent resolveBigCannonProperties(EntityType<?> projectileType) {
-        // Sentinel: minimumChargePower() != 0 because every shipped shell has a
-        // minimum charge of at least 1.0 in its JSON. The default is 0.
-        BigCannonProjectilePropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (common.minimumChargePower() != 0) return common;
-
-        BigCannonProjectilePropertiesComponent inert = CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (inert.minimumChargePower() != 0) return inert;
-
-        BigCannonProjectilePropertiesComponent shrapnel = CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (shrapnel.minimumChargePower() != 0) return shrapnel;
-
-        BigCannonProjectilePropertiesComponent grapeshot = CBCMunitionPropertiesHandlers.BAG_OF_GRAPESHOT
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (grapeshot.minimumChargePower() != 0) return grapeshot;
-
-        BigCannonProjectilePropertiesComponent fluid = CBCMunitionPropertiesHandlers.FLUID_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (fluid.minimumChargePower() != 0) return fluid;
-
-        BigCannonProjectilePropertiesComponent smoke = CBCMunitionPropertiesHandlers.SMOKE_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (smoke.minimumChargePower() != 0) return smoke;
-
-        BigCannonProjectilePropertiesComponent mortar = CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (mortar.minimumChargePower() != 0) return mortar;
-
-        BigCannonProjectilePropertiesComponent stone = CBCMunitionPropertiesHandlers.MORTAR_STONE
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (stone.minimumChargePower() != 0) return stone;
-
-        return common;
+        CannonReading.readCannon(sm, entity, level.registryAccess());
     }
 
     // ------------------------------------------------------------------
@@ -555,6 +520,14 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         compound.putInt("detectedAxis", detectedAxis.ordinal());
         compound.putFloat("TransmissionRatio", transmissionRatio);
         compound.putFloat("LastError", lastError);
+        compound.putFloat("SwivelAngle", shownSwivelAngle);
+        compound.putFloat("SwivelTarget", shownSwivelTarget);
+        compound.putBoolean("SwivelSeen", swivelSeen);
+        compound.putFloat("DialAngle", dialAngle);
+        compound.putBoolean("SwivelTilts", swivelTilts);
+        compound.putInt("SwivelSense", swivelSense);
+        if (limits != null)
+            compound.put("Limits", limits.write());
 
         ListTag slaves = new ListTag();
         for (SlavedMount sm : slavedMounts) {
@@ -593,8 +566,16 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         ServoAxis[] axes = ServoAxis.values();
         int ServoAxisOrd = compound.getInt("detectedAxis");
         this.detectedAxis = (ServoAxisOrd >= 0 && ServoAxisOrd < axes.length) ? axes[ServoAxisOrd] : ServoAxis.NONE;
+        this.limits = compound.contains("Limits") ? ServoLimits.read(compound.getCompound("Limits"), null) : null;
+        this.swivelSense = compound.getInt("SwivelSense") < 0 ? -1 : 1;
 
         if (!clientPacket) return;
+
+        this.shownSwivelAngle = compound.getFloat("SwivelAngle");
+        this.shownSwivelTarget = compound.getFloat("SwivelTarget");
+        this.swivelSeen = compound.getBoolean("SwivelSeen");
+        this.dialAngle = compound.getFloat("DialAngle");
+        this.swivelTilts = compound.getBoolean("SwivelTilts");
 
         this.transmissionRatio = compound.contains("TransmissionRatio")
                 ? compound.getFloat("TransmissionRatio") : Float.NaN;
@@ -642,92 +623,93 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
     public ServoStatus buildServoStatus() {
         List<ServoStatus.MountSnapshot> mounts = new ArrayList<>();
-        for (SlavedMount sm : slavedMounts) {
-            float facingYaw = 0f;
-            float maxElevation = 90f;
-            float maxDepression = -90f;
-
-            if (sm.mount != null) {
-                PitchOrientedContraptionEntity contraption = sm.mount.getContraption();
-                if (contraption != null) {
-                    facingYaw = contraption.getInitialOrientation().toYRot();
-                    maxElevation = contraption.maximumElevation();
-                    maxDepression = -contraption.maximumDepression();
-                }
-            }
-
-            mounts.add(new ServoStatus.MountSnapshot(
-                    sm.mountPos, facingYaw, sm.currentAngle,
-                    maxElevation, maxDepression,
-                    sm.hasShell, sm.shellType,
-                    sm.fuzeStack, sm.fuzeTimer, sm.isTimedFuze,
-                    sm.gravity, sm.drag, sm.isQuadraticDrag,
-                    sm.addedChargePower, sm.minimumChargePower, sm.totalChargePower,
-                    sm.pivot, sm.muzzleDistance));
+        for (SlavedMount sm : slavedMounts)
+            mounts.add(CannonReading.snapshot(sm, sm.mount != null ? sm.mount.getContraption() : null, true));
+        ServoStatus.SwivelSnapshot swivelSnapshot = null;
+        // Reported whenever a swivel is on the network, even in an invalid setup, so the
+        // computer knows the turret is there.
+        if (swivel != null) {
+            SubLevel hull = Sable.HELPER.getContaining(swivel);
+            swivelSnapshot = new ServoStatus.SwivelSnapshot(swivel.getBlockPos(), swivel.getSubLevelID(),
+                    hull != null ? hull.getUniqueId() : null, swivel.getBlockState().getValue(SwivelBearingBlock.FACING), swivelSense,
+                    swivel.getTargetAngleDegrees(), swivelActualAngle());
         }
-        return new ServoStatus(worldPosition, detectedAxis, isPowered, mounts);
+        return new ServoStatus(worldPosition, detectedAxis, isPowered, mounts, swivelSnapshot, getLimits());
     }
 
     private static final float SNAP_THRESHOLD_DEG = 0.2f;
 
-    /** Delayed impact and delayed inertia fuzes: their timer counts the delay after impact. */
-    private static boolean isDelayedImpactFuze(ItemStack fuze) {
-        return fuze.getItem() instanceof DelayedImpactFuzeItem || fuze.getItem() instanceof DelayedInertiaFuzeItem;
+    // ------------------------------------------------------------------
+    // Limits (the protractor dial)
+    // ------------------------------------------------------------------
+
+    /**
+     * The angles this servo may turn what it drives through: as set on its dial,
+     * or no limit. For a pitch servo, within -90..90.
+     */
+    public ServoLimits getLimits() {
+        boolean pitch = isElevationDial();
+        if (limits == null)
+            return pitch ? ServoLimits.FULL_ELEVATION : ServoLimits.FULL_TURN;
+        if (!pitch)
+            return limits;
+        float start = Mth.clamp(limits.start(), -90, 89);
+        return new ServoLimits(start, Mth.clamp(limits.end(), start + 1, 90) - start);
+    }
+
+    /** Sets the limits from the dial (server). */
+    public void setLimits(ServoLimits newLimits) {
+        limits = newLimits;
+        setChanged();
+        notifyUpdate();
+    }
+
+    /** Whether the dial reads elevation (a half dial): a mount's pitch, or a swivel tilting a cradle. */
+    public boolean isElevationDial() {
+        return detectedAxis == PITCH || detectedAxis == ServoAxis.SWIVEL && swivelTilts;
     }
 
     /**
-     * Sets the loaded shell's fuze timer to this many ticks: a timed fuze's time,
-     * or a delayed impact or inertia fuze's delay. Returns true if such a fuze was
-     * found and updated.
+     * A swivel's dial angle per degree of its angle: a turret's dial reads clockwise
+     * seen from the bearing's face (the other way round from its angle); a cradle's
+     * reads elevation, up positive.
      */
-    public boolean setLoadedFuzeTime(int ticks) {
-        if (level == null || level.isClientSide()) return false;
-        if (slavedMounts.isEmpty()) return false;
+    private float dialSign() {
+        return swivelTilts ? swivelSense : -1;
+    }
 
+    /** From the computer: which way this swivel's angle raises the barrels it tilts. */
+    public void setSwivelSense(int sense) {
+        if (sense == 0 || sense == swivelSense)
+            return;
+        swivelSense = sense > 0 ? 1 : -1;
+        setChanged();
+    }
+
+    public ServoAxis getDetectedAxis() {
+        return detectedAxis;
+    }
+
+    /** Where what this servo drives stands on its dial now (client: as last synced). */
+    public float getDialAngle() {
+        return dialAngle;
+    }
+
+    private float readDialAngle() {
+        if (detectedAxis == ServoAxis.SWIVEL && swivel != null)
+            return Mth.wrapDegrees(dialSign() * (float) swivelActualAngle());
+        if (slavedMounts.isEmpty())
+            return 0;
         SlavedMount sm = slavedMounts.get(0);
-        if (sm.axis != PITCH) return false;
-        if (sm.mount == null) return false;
+        return sm.axis == PITCH ? sm.currentAngle : Mth.wrapDegrees(sm.currentAngle - sm.facingYaw);
+    }
 
-        PitchOrientedContraptionEntity entity = sm.mount.getContraption();
-        if (entity == null) return false;
-        if (!(entity.getContraption() instanceof MountedBigCannonContraption mounted)) return false;
-
-        HolderLookup.Provider registries = level.registryAccess();
-
-        for (var entry : mounted.presentBlockEntities.entrySet()) {
-            if (!(entry.getValue() instanceof IBigCannonBlockEntity cbe)) continue;
-            BlockPos cannonLocalPos = entry.getKey();  // the cannon block's local position
-            BigCannonBehavior behavior = cbe.cannonBehavior();
-            StructureBlockInfo loadedInfo = behavior.block();
-            if (loadedInfo.state().isAir()) continue;
-            if (!(loadedInfo.state().getBlock() instanceof ProjectileBlock<?>)) continue;
-
-            // Modify the loaded shell's NBT
-            CompoundTag shellNbt = loadedInfo.nbt() != null ? loadedInfo.nbt().copy() : new CompoundTag();
-            ItemStack fuzeStack = ItemStack.parseOptional(registries, shellNbt.getCompound("Fuze"));
-            if (!(fuzeStack.getItem() instanceof TimedFuzeItem) && !isDelayedImpactFuze(fuzeStack)) return false;
-
-            fuzeStack.set(CBCDataComponents.FUZE_TIMER, ticks);
-            shellNbt.put("Fuze", fuzeStack.saveOptional(registries));
-
-            // Replace the loaded block in the behavior
-            behavior.loadBlock(new StructureBlockInfo(
-                    loadedInfo.pos(), loadedInfo.state(), shellNbt));
-            behavior.blockEntity.setChanged();
-
-            // Update the contraption's blocks map entry for the CANNON BLOCK,
-            // using the cannon block's own position and state.
-            StructureBlockInfo cannonInfo = mounted.getBlocks().get(cannonLocalPos);
-            if (cannonInfo == null) return true;  // behavior updated, but map not synced
-
-            CompoundTag beTag = behavior.blockEntity.saveWithFullMetadata(registries);
-            beTag.remove("x"); beTag.remove("y"); beTag.remove("z");
-            mounted.getBlocks().put(cannonLocalPos, new StructureBlockInfo(
-                    cannonInfo.pos(), cannonInfo.state(), beTag));
-
-            return true;
-        }
-        return false;
+    /** Sets the loaded shell's fuze timer on the mount this pitch servo drives (see {@link CannonReading#setLoadedFuzeTime}). */
+    public boolean setLoadedFuzeTime(int ticks) {
+        if (level == null || level.isClientSide() || slavedMounts.isEmpty()) return false;
+        SlavedMount sm = slavedMounts.get(0);
+        if (sm.axis != PITCH || sm.mount == null) return false;
+        return CannonReading.setLoadedFuzeTime(sm.mount.getContraption(), ticks, level.registryAccess());
     }
 
     // ------------------------------------------------------------------
@@ -749,7 +731,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         if (detectedAxis == ServoAxis.INVALID) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.cannon_servo_output.too_many_mounts"))
+                    .add(Component.translatable(swivelSeen
+                            ? "createdangerclose.cannon_servo_output.invalid_swivel"
+                            : "createdangerclose.cannon_servo_output.too_many_mounts"))
                     .style(ChatFormatting.RED)
                     .forGoggles(tooltip);
             return true;
@@ -769,6 +753,15 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                                 + detectedAxis.name().toLowerCase())))
                 .style(ChatFormatting.GRAY)
                 .forGoggles(tooltip);
+
+        if (detectedAxis == ServoAxis.SWIVEL) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.cannon_servo_output.swivel_angle",
+                            String.format("%.1f", shownSwivelAngle), String.format("%.1f", shownSwivelTarget)))
+                    .style(ChatFormatting.AQUA)
+                    .forGoggles(tooltip);
+            return true;
+        }
 
         if (slavedMounts.isEmpty()) {
             CDCLang.builder()

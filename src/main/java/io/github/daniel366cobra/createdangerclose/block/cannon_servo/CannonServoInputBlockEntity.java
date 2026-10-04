@@ -52,6 +52,13 @@ public class CannonServoInputBlockEntity extends KineticBlockEntity implements C
         this.lastCommandTick = level != null ? level.getGameTime() : 0;
     }
 
+    @Override
+    public void receiveElevationSense(int sense) {
+        CannonServoOutputBlockEntity output = getAdjacentOutput();
+        if (output != null)
+            output.setSwivelSense(sense);
+    }
+
     @Nullable
     public FireSolution getCurrentCommand() {
         return currentCommand;

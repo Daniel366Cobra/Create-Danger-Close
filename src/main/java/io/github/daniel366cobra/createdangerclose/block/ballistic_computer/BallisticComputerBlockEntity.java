@@ -16,6 +16,7 @@ import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
 import io.github.daniel366cobra.createdangerclose.api.ballistics.BallisticSolver;
@@ -44,6 +45,7 @@ import org.jetbrains.annotations.Nullable;
 import org.joml.Quaterniond;
 import org.joml.Quaterniondc;
 import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import rbasamoyai.createbigcannons.config.CBCConfigs;
 
 import java.util.ArrayList;
@@ -51,9 +53,12 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YAW;
+import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.FIXED_GUN;
+import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.SWIVEL;
 
 /**
  * The Ballistic Computer: the core of the fire control computer, which works
@@ -111,12 +116,29 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // The frame of a gun ashore: the world itself.
     private static final Quaterniondc WORLD_FRAME = new Quaterniond();
 
-    // Per mount (server only): the barrel's current pitch and yaw in ship
-    // frame as its servos read them last poll, for the firing interlock.
-    private final Map<BlockPos, Float> mountPitches = new HashMap<>();
-    private final Map<BlockPos, Float> mountYawsNow = new HashMap<>();
-    // A gun is on target when both axes are this close to its solution.
+    // Per mount (server only): each gun as its pitch servo read it last poll, for
+    // the firing interlock: where its barrel points, in the frame it stands in.
+    private final Map<BlockPos, ServoStatus.MountSnapshot> barrels = new HashMap<>();
+    // The swivel bearings on the network this poll, by the sub-level their plate carries.
+    private final Map<UUID, Joint> jointByPlate = new HashMap<>();
+    // Per bearing (by position): the gun it served last poll, which it keeps serving.
+    private final Map<BlockPos, BlockPos> directors = new HashMap<>();
+    // The guns a bearing could not bring round last poll (past its dial's limits): tried last.
+    private final Set<BlockPos> outOfArcLastPoll = new HashSet<>();
+    // Bearings carrying bearings, at most this deep (guards against loops).
+    private static final int MAX_CHAIN = 8;
+    // Two drives turn a gun about the same axis when their axes are this close to parallel.
+    private static final double PARALLEL_AXES_COS = 0.98;
+    // A barrel this close to a bearing's axis (squared sine) cannot be swung by it.
+    private static final double ALONG_AXIS_SQ = 1e-4;
+    // A gun is on target when its barrel points within this of its solution.
     private static final double ON_TARGET_DEG = 0.5;
+    // A gun riding bearings laid for another gun (side by side on one cradle) fires when
+    // its shell would land this close to the target: the salvo's spread, about the
+    // guns' spacing, which no bearing can take out of both at once. Blocks.
+    private static final double SALVO_SPREAD = 3;
+    // Per gun riding bearings laid for another gun: its range to the target, blocks.
+    private final Map<BlockPos, Double> passengerRange = new HashMap<>();
 
     /** What a salvo order did: guns fired, and guns held back (no solution, or not yet on target). */
     public record SalvoResult(int fired, int held) {}
@@ -292,15 +314,15 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     /**
      * Fires every gun that is ready: it has a firing solution, and its barrel
-     * has settled on it (both axes within {@link #ON_TARGET_DEG}; a mount
-     * without a yaw servo is judged on elevation alone). The rest hold fire.
+     * has settled on it (within {@link #ON_TARGET_DEG}, whatever turns it; a gun riding
+     * bearings laid for another gun, within {@link #SALVO_SPREAD} of the target). The rest hold fire.
      * Uses the last poll's solutions and barrel angles.
      */
     public SalvoResult fireSalvo() {
         if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
             return new SalvoResult(0, 0);
         int fired = 0, held = 0;
-        for (BlockPos mountPos : mountPitches.keySet()) {
+        for (BlockPos mountPos : barrels.keySet()) {
             if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos))
                 fired++;
             else
@@ -312,22 +334,33 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /** The guns that would fire right now (as fired) and those that would hold (server). */
     public SalvoResult gunsOnTarget() {
         if (!isPowered || bankConflict)
-            return new SalvoResult(0, mountPitches.size());
+            return new SalvoResult(0, barrels.size());
         int ready = 0;
-        for (BlockPos mountPos : mountPitches.keySet())
+        for (BlockPos mountPos : barrels.keySet())
             if (isOnTarget(mountPos))
                 ready++;
-        return new SalvoResult(ready, mountPitches.size() - ready);
+        return new SalvoResult(ready, barrels.size() - ready);
     }
 
-    /** Whether this mount has a firing solution and its barrel has settled on it (last poll). */
+    /**
+     * Whether this gun's barrel actually points along its solution (last poll):
+     * the angle between the two directions, whatever turns the barrel (its mount,
+     * a turret, or the ship steering onto the bearing).
+     */
     private boolean isOnTarget(BlockPos mountPos) {
         FireSolution solution = aimCache.get(mountPos);
-        Float pitch = mountPitches.get(mountPos);
-        Float yaw = mountYawsNow.get(mountPos);
-        return solution != null && solution.valid() && pitch != null
-                && Math.abs(pitch - solution.pitchDeg()) <= ON_TARGET_DEG
-                && (yaw == null || Math.abs(Mth.wrapDegrees(yaw - solution.yawDeg())) <= ON_TARGET_DEG);
+        ServoStatus.MountSnapshot barrel = barrels.get(mountPos);
+        if (solution == null || !solution.valid() || barrel == null)
+            return false;
+        Vector3d pointing = barrel.barrel() != null
+                ? new Vector3d(barrel.barrel().x, barrel.barrel().y, barrel.barrel().z)
+                : aimDirection(barrel.currentAngle(), barrel.mountYaw());
+        Vector3d wanted = aimDirection(solution.pitchDeg(), solution.yawDeg());
+        double off = pointing.angle(wanted);
+        if (Math.toDegrees(off) <= ON_TARGET_DEG)
+            return true;
+        Double range = passengerRange.get(mountPos);
+        return range != null && off * range <= SALVO_SPREAD;
     }
 
     /**
@@ -569,6 +602,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 case SensorReading.Computer ignored -> { }
                 case SensorReading.NavConsole ignored -> { }
                 case SensorReading.FireConsole ignored -> { }
+                case SensorReading.FixedGun ignored -> { }
                 case SensorReading.None ignored -> { }
             }
         }
@@ -736,6 +770,18 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     // --- Solving ---
 
+
+    /** A gun the computer aims: a cannon mount with a pitch servo, or a fixed mount read by an interface. */
+    private record Gun(ServoStatus.MountSnapshot mount, ServoStatus status, ComputerServo servo) {
+        BlockPos pos() { return mount.mountPos(); }
+        /** Where its line on the console is kept: the servo or interface reporting it. */
+        BlockPos reportPos() { return status.servoPos(); }
+        boolean ownPitchDrive() { return status.axis() == PITCH; }
+    }
+
+    /** A swivel bearing on the network, and the servo turning it (if it can: an invalid setup does not). */
+    private record Joint(ServoStatus.SwivelSnapshot swivel, ComputerServo servo, boolean driven, ServoLimits limits) {}
+
     private void pollAndPushServos() {
         KineticNetwork network = battleNetwork();
         if (network == null) return;
@@ -743,58 +789,402 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         lastPitchResults.clear();
         aimCache.clear();
         directsShipGuns = false;
+        jointByPlate.clear();
 
-        // Pitch servos run the ballistic solve (they know the shell and charge)
-        // and cache the result per mount. Yaw servos run afterwards so both axes
-        // of a mount aim along the same 3D direction.
-        List<ComputerServo> yawServos = new ArrayList<>();
-        // For the map table: the armed mounts, and the barrel yaw its yaw servo reads.
-        List<ServoStatus.MountSnapshot> pitchMounts = new ArrayList<>();
-        Map<BlockPos, Float> mountYaws = new HashMap<>();
-
+        // Read the network: guns, the mounts' own yaw servos, and the bearings carrying them.
+        List<Gun> guns = new ArrayList<>();
+        Map<BlockPos, ComputerServo> yawServoOf = new HashMap<>();
+        Map<BlockPos, ServoStatus> yawStatusOf = new HashMap<>();
         for (KineticBlockEntity member : network.members.keySet()) {
             if (!(member instanceof ComputerServo servo)) continue;
 
-            var status = servo.getServoStatus();
-            if (status == null || status.mounts().isEmpty() || !status.powered()) {
+            ServoStatus status = servo.getServoStatus();
+            if (status == null || !status.powered()) {
                 servo.receiveFiringSolution(null);
                 continue;
             }
-
-            if (subLevelOf(status.mounts().get(0)) != null)
-                directsShipGuns = true;
-
-            if (status.axis() == PITCH) {
-                servo.receiveFiringSolution(withRates(status, solvePitch(status)));
-                pitchMounts.add(status.mounts().get(0));
-            } else if (status.axis() == YAW) {
-                yawServos.add(servo);
-                ServoStatus.MountSnapshot mount = status.mounts().get(0);
-                mountYaws.put(mount.mountPos(), mount.currentAngle());
-            } else {
+            // A swivel is part of the chain even in an invalid setup, which its servo does not drive.
+            if (status.swivel() != null && status.swivel().plate() != null) {
+                jointByPlate.putIfAbsent(status.swivel().plate(),
+                        new Joint(status.swivel(), servo, status.axis() == SWIVEL, status.limits()));
+                continue;
+            }
+            if (status.mounts().isEmpty()) {
                 servo.receiveFiringSolution(null);
+                continue;
+            }
+            ServoStatus.MountSnapshot mount = status.mounts().get(0);
+            switch (status.axis()) {
+                case PITCH, FIXED_GUN -> guns.add(new Gun(mount, status, servo));
+                case YAW -> {
+                    yawServoOf.put(mount.mountPos(), servo);
+                    yawStatusOf.put(mount.mountPos(), status);
+                }
+                default -> servo.receiveFiringSolution(null);
             }
         }
 
-        for (ComputerServo servo : yawServos) {
-            ServoStatus status = servo.getServoStatus();
-            servo.receiveFiringSolution(withRates(status, solveYaw(status)));
+        // Each gun: what aims it, and whether that can work. Then its solution.
+        Set<BlockPos> redundant = new HashSet<>();
+        Map<BlockPos, List<Joint>> chains = new HashMap<>();
+        for (Gun gun : guns) {
+            List<Joint> chain = chainOf(gun.mount());
+            chains.put(gun.pos(), chain);
+            if (onShip(gun.mount()))
+                directsShipGuns = true;
+
+            if (hasRedundantDrives(gun.mount(), gun.ownPitchDrive(), yawServoOf.containsKey(gun.pos()), chain)) {
+                redundant.add(gun.pos());
+                lastPitchResults.put(gun.reportPos(),
+                        BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.REDUNDANT_DRIVES));
+                gun.servo().receiveFiringSolution(null);
+                continue;
+            }
+            FireSolution solution = solveGun(gun.reportPos(), gun.mount(),
+                    gun.ownPitchDrive() ? gun.status() : null, yawStatusOf.get(gun.pos()));
+            gun.servo().receiveFiringSolution(gun.ownPitchDrive() ? withRates(gun.status(), solution) : solution);
         }
+
+        // The mounts' own yaw servos, after the solve so both axes aim along one direction.
+        for (Map.Entry<BlockPos, ComputerServo> entry : yawServoOf.entrySet()) {
+            ServoStatus status = yawStatusOf.get(entry.getKey());
+            ServoStatus.MountSnapshot mount = status.mounts().get(0);
+            if (onShip(mount))
+                directsShipGuns = true;
+            // A mount with no pitch servo is no gun here, but its yaw may still fight a bearing.
+            boolean isGun = chains.containsKey(entry.getKey());
+            if (redundant.contains(entry.getKey())
+                    || !isGun && hasRedundantDrives(mount, false, true, chainOf(mount))) {
+                if (!isGun)
+                    lastPitchResults.put(status.servoPos(),
+                            BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.REDUNDANT_DRIVES));
+                entry.getValue().receiveFiringSolution(null);
+                continue;
+            }
+            entry.getValue().receiveFiringSolution(withRates(status, solveYaw(status)));
+        }
+
+        aimBearings(guns, chains, redundant);
 
         // Where each barrel points now, for the firing interlock.
-        mountPitches.clear();
-        for (ServoStatus.MountSnapshot mount : pitchMounts)
-            mountPitches.put(mount.mountPos(), mount.currentAngle());
-        mountYawsNow.clear();
-        mountYawsNow.putAll(mountYaws);
+        barrels.clear();
+        for (Gun gun : guns)
+            barrels.put(gun.pos(), gun.mount());
 
-        List<BattlePlot.GunRange> guns = new ArrayList<>();
-        for (ServoStatus.MountSnapshot mount : pitchMounts) {
-            BattlePlot.GunRange range = gunRange(mount, mountYaws.get(mount.mountPos()));
+        List<BattlePlot.GunRange> ranges = new ArrayList<>();
+        for (Gun gun : guns) {
+            double[] elevation = elevationLimits(gun, chains.get(gun.pos()));
+            BattlePlot.GunRange range = gunRange(gun.mount(), elevation[1], elevation[0],
+                    traverseArc(gun, chains.get(gun.pos()), yawStatusOf.get(gun.pos())));
             if (range != null)
-                guns.add(range);
+                ranges.add(range);
         }
-        plot = plotFixes.isEmpty() && guns.isEmpty() ? BattlePlot.EMPTY : new BattlePlot(plotFixes, guns);
+        plot = plotFixes.isEmpty() && ranges.isEmpty() ? BattlePlot.EMPTY : new BattlePlot(plotFixes, ranges);
+    }
+
+    /**
+     * Turns each driven bearing so the gun it serves points along its solution:
+     * from the root outwards, each bearing turns by the angle about its own axis
+     * that brings that gun's barrel closest to the solution, as the bearings
+     * below it will have turned it. Steered by where the barrel really points, so
+     * the bearings' give and the guns' own offsets do not matter. A bearing does
+     * not serve a gun it would have to turn past its dial's limits for: that gun
+     * is out of arc, and holds fire.
+     */
+    private void aimBearings(List<Gun> guns, Map<BlockPos, List<Joint>> chains, Set<BlockPos> redundant) {
+        List<Joint> joints = new ArrayList<>(jointByPlate.values());
+        joints.sort(Comparator.comparingInt(this::depthOf));
+        Map<BlockPos, Double> turnOf = new HashMap<>();
+        Map<BlockPos, BlockPos> directorThisPoll = new HashMap<>();
+        Set<BlockPos> outOfArc = new HashSet<>();
+
+        // No target: every bearing back to the way it was assembled, as mounts return to rest.
+        if (!hasTarget) {
+            for (Joint joint : joints)
+                joint.servo().receiveFiringSolution(joint.driven() ? new FireSolution(0, 0, 0, true) : null);
+            directors.clear();
+            outOfArcLastPoll.clear();
+            passengerRange.clear();
+            return;
+        }
+
+        for (Joint joint : joints) {
+            BlockPos swivelPos = joint.swivel().swivelPos();
+            if (!joint.driven()) {
+                joint.servo().receiveFiringSolution(null);
+                continue;
+            }
+            Gun director = null;
+            Lay lay = null;
+            for (Gun candidate : candidates(joint, guns, chains, redundant, directorThisPoll)) {
+                Lay candidateLay = turnFor(joint, candidate, chains.get(candidate.pos()), turnOf);
+                double dial = dialOf(joint, joint.swivel().actualAngle() + candidateLay.turn(), candidateLay.sense());
+                if (tilts(joint) ? joint.limits().containsElevation(dial) : joint.limits().containsTurn(dial)) {
+                    director = candidate;
+                    lay = candidateLay;
+                    break;
+                }
+                // This bearing cannot bring that gun round: it is out of arc.
+                outOfArc.add(candidate.pos());
+                aimCache.remove(candidate.pos());
+                lastPitchResults.put(candidate.reportPos(),
+                        BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.OUT_OF_ARC));
+            }
+            if (director == null) {
+                joint.servo().receiveFiringSolution(null);
+                continue;
+            }
+            directorThisPoll.put(swivelPos, director.pos());
+            turnOf.put(swivelPos, lay.turn());
+            if (tilts(joint))
+                joint.servo().receiveElevationSense(lay.sense());
+            joint.servo().receiveFiringSolution(
+                    new FireSolution(0, Mth.wrapDegrees(joint.swivel().actualAngle() + lay.turn()), 0, true));
+        }
+        directors.clear();
+        directors.putAll(directorThisPoll);
+        outOfArcLastPoll.clear();
+        outOfArcLastPoll.addAll(outOfArc);
+
+        // The guns these bearings carry but are not laid for: they fire with the salvo if near enough.
+        passengerRange.clear();
+        for (Gun gun : guns) {
+            boolean passenger = false;
+            for (Joint joint : chains.get(gun.pos()))
+                if (joint.driven() && directorThisPoll.containsKey(joint.swivel().swivelPos())
+                        && !gun.pos().equals(directorThisPoll.get(joint.swivel().swivelPos())))
+                    passenger = true;
+            if (passenger && hasTarget)
+                passengerRange.put(gun.pos(), launchPivot(gun.mount(), subLevelOf(gun.mount()))
+                        .distance(targetX, targetY, targetZ));
+        }
+    }
+
+    /** How a bearing lays a gun: the turn to make (degrees), and which way turning raises the barrel (+1 or -1). */
+    private record Lay(double turn, int sense) {}
+
+    /**
+     * The turn this bearing must make to lay this gun: about its own axis, as the
+     * bearings under it (towards the root) will have turned it this poll.
+     */
+    private Lay turnFor(Joint joint, Gun gun, List<Joint> chain, Map<BlockPos, Double> turnOf) {
+        int index = chain.indexOf(joint);
+        Vector3d barrel = barrelWorld(gun.mount());
+        Vector3d axis = axisWorld(joint.swivel());
+        List<Vector3d> axesBetween = new ArrayList<>();
+        for (int k = index + 1; k < chain.size(); k++)
+            axesBetween.add(axisWorld(chain.get(k).swivel()));
+        for (int k = chain.size() - 1; k > index; k--) {
+            double turn = turnOf.getOrDefault(chain.get(k).swivel().swivelPos(), 0.0);
+            if (turn == 0) continue;
+            Quaterniond rotation = new Quaterniond().fromAxisAngleRad(axesBetween.get(k - index - 1), Math.toRadians(turn));
+            rotation.transform(barrel);
+            rotation.transform(axis);
+            for (int i = 0; i < k - index - 1; i++)
+                rotation.transform(axesBetween.get(i));
+        }
+        FireSolution aim = aimCache.get(gun.pos());
+        Vector3d wanted = frameOf(gun.mount()).transform(aimDirection(aim.pitchDeg(), aim.yawDeg()));
+        Vector3d raised = new Quaterniond().fromAxisAngleRad(axis, Math.toRadians(1)).transform(new Vector3d(barrel));
+        return new Lay(turnAbout(axis, barrel, wanted), pitchOf(raised) >= pitchOf(barrel) ? 1 : -1);
+    }
+
+    /**
+     * The guns a bearing could serve this poll, of those it carries with a
+     * solution, in order of preference: the one the bearing under it serves, so a
+     * turret and its cradle serve the same gun; then the one it served last poll,
+     * until that one fires or loses its solution; then the rest, with the guns
+     * found out of arc last poll last.
+     */
+    private List<Gun> candidates(Joint joint, List<Gun> guns, Map<BlockPos, List<Joint>> chains,
+                                 Set<BlockPos> redundant, Map<BlockPos, BlockPos> directorThisPoll) {
+        List<Gun> candidates = new ArrayList<>();
+        for (Gun gun : guns) {
+            FireSolution aim = aimCache.get(gun.pos());
+            if (!redundant.contains(gun.pos()) && aim != null && aim.valid() && chains.get(gun.pos()).contains(joint))
+                candidates.add(gun);
+        }
+        Joint under = joint.swivel().hull() != null ? jointByPlate.get(joint.swivel().hull()) : null;
+        BlockPos preferred = under != null ? directorThisPoll.get(under.swivel().swivelPos()) : null;
+        BlockPos previous = directors.get(joint.swivel().swivelPos());
+        candidates.sort(Comparator
+                .comparingInt((Gun gun) -> gun.pos().equals(preferred) ? 0 : gun.pos().equals(previous) ? 1
+                        : outOfArcLastPoll.contains(gun.pos()) ? 3 : 2)
+                .thenComparingLong(gun -> gun.pos().asLong()));
+        return candidates;
+    }
+
+    /**
+     * How far this gun may depress and elevate, degrees ({lowest, highest}): its
+     * mount's limits and its pitch servo's dial if it elevates itself; else what
+     * the dials of the bearings tilting it allow, worked out by turning its barrel
+     * to each end of their arcs. For the map table's range rings.
+     */
+    private double[] elevationLimits(Gun gun, List<Joint> chain) {
+        ServoStatus.MountSnapshot mount = gun.mount();
+        if (gun.ownPitchDrive()) {
+            ServoLimits dial = gun.status().limits();
+            return new double[]{Math.max(mount.maxDepression(), dial.start()), Math.min(mount.maxElevation(), dial.end())};
+        }
+        double lowest = -90, highest = 90;
+        Vector3d barrel = barrelWorld(mount);
+        for (Joint joint : chain) {
+            if (!joint.driven() || !joint.limits().limitsTurn())
+                continue;
+            Vector3d axis = axisWorld(joint.swivel());
+            if (Math.abs(axis.y) > 0.9) // turns the gun about the vertical: elevation stays
+                continue;
+            double[] ends = new double[2];
+            float[] dials = {joint.limits().start(), joint.limits().end()};
+            for (int i = 0; i < 2; i++) {
+                double angle = tilts(joint) ? joint.swivel().elevationSense() * dials[i] : -dials[i];
+                double turn = Mth.wrapDegrees(angle - joint.swivel().actualAngle());
+                Vector3d atEnd = new Quaterniond().fromAxisAngleRad(axis, Math.toRadians(turn)).transform(new Vector3d(barrel));
+                ends[i] = pitchOf(atEnd);
+            }
+            lowest = Math.max(lowest, Math.min(ends[0], ends[1]));
+            highest = Math.min(highest, Math.max(ends[0], ends[1]));
+        }
+        return new double[]{lowest, highest};
+    }
+
+    /**
+     * The traverse this gun may turn through, as a world bearing arc ({start, width},
+     * degrees, clockwise from the start; width 360 for all round): its yaw servo's
+     * dial, or that of the turret carrying it. For the map table's pie slices; taken
+     * as the ship stands now, level.
+     */
+    private double[] traverseArc(Gun gun, List<Joint> chain, @Nullable ServoStatus yawServo) {
+        ServoStatus.MountSnapshot mount = gun.mount();
+        if (yawServo != null && yawServo.limits().limitsTurn()) {
+            ServoLimits dial = yawServo.limits();
+            Vector3d from = frameOf(mount).transform(aimDirection(0, mount.facingYaw() + dial.start()));
+            return new double[]{yawOf(from), dial.length()};
+        }
+        for (Joint joint : chain) {
+            if (!joint.driven() || tilts(joint) || !joint.limits().limitsTurn())
+                continue;
+            ServoLimits dial = joint.limits();
+            // The barrel turns with the turret, so its bearing moves with the dial: clockwise
+            // from above for a bearing facing up, the other way for one hanging down.
+            double barrelYaw = yawOf(barrelWorld(mount));
+            double dialNow = dialOf(joint, joint.swivel().actualAngle(), 1);
+            double start = axisWorld(joint.swivel()).y >= 0
+                    ? barrelYaw + dial.start() - dialNow
+                    : barrelYaw - (dial.end() - dialNow);
+            return new double[]{start, dial.length()};
+        }
+        return new double[]{0, 360};
+    }
+
+    /** Whether this bearing lies on its side, tilting a cradle: its dial reads elevation. */
+    private static boolean tilts(Joint joint) {
+        return joint.swivel().facing().getAxis() != Direction.Axis.Y;
+    }
+
+    /**
+     * A bearing's dial angle at this swivel angle: a cradle's reads elevation (up
+     * positive, by {@code sense}), a turret's clockwise seen from its face.
+     */
+    private static double dialOf(Joint joint, double angle, int sense) {
+        return Mth.wrapDegrees(tilts(joint) ? sense * angle : -angle);
+    }
+
+    /** The bearings carrying this gun, from the one under it down to the root. */
+    private List<Joint> chainOf(ServoStatus.MountSnapshot mount) {
+        List<Joint> chain = new ArrayList<>();
+        SubLevel subLevel = subLevelOf(mount);
+        UUID carrier = subLevel != null ? subLevel.getUniqueId() : null;
+        while (carrier != null && chain.size() < MAX_CHAIN) {
+            Joint joint = jointByPlate.get(carrier);
+            if (joint == null || chain.contains(joint))
+                break;
+            chain.add(joint);
+            carrier = joint.swivel().hull();
+        }
+        return chain;
+    }
+
+    /** How many bearings stand under this one. */
+    private int depthOf(Joint joint) {
+        int depth = 0;
+        UUID hull = joint.swivel().hull();
+        while (hull != null && depth < MAX_CHAIN) {
+            Joint under = jointByPlate.get(hull);
+            if (under == null)
+                break;
+            depth++;
+            hull = under.swivel().hull();
+        }
+        return depth;
+    }
+
+    /**
+     * Whether more drives aim this gun than it has ways to turn: a barrel is pointed
+     * by two rotations, so a third drive, or two about the same axis, would only
+     * fight. Its own mount's axes count, and every driven bearing carrying it.
+     */
+    private boolean hasRedundantDrives(ServoStatus.MountSnapshot mount, boolean ownPitch, boolean ownYaw, List<Joint> chain) {
+        List<Vector3d> axes = new ArrayList<>();
+        Quaterniondc frame = frameOf(mount);
+        if (ownYaw)
+            axes.add(frame.transform(new Vector3d(0, 1, 0)));
+        if (ownPitch) {
+            double yaw = Math.toRadians(mount.mountYaw());
+            axes.add(frame.transform(new Vector3d(Math.cos(yaw), 0, Math.sin(yaw))));
+        }
+        for (Joint joint : chain)
+            if (joint.driven())
+                axes.add(axisWorld(joint.swivel()));
+        if (axes.size() > 2)
+            return true;
+        return axes.size() == 2 && Math.abs(axes.get(0).dot(axes.get(1))) > PARALLEL_AXES_COS;
+    }
+
+    /** A bearing's axis in the world: the way it faces, as its hull now stands. */
+    private Vector3d axisWorld(ServoStatus.SwivelSnapshot swivel) {
+        Direction facing = swivel.facing();
+        Vector3d axis = new Vector3d(facing.getStepX(), facing.getStepY(), facing.getStepZ());
+        SubLevel hull = level != null ? Sable.HELPER.getContaining(level, swivel.swivelPos()) : null;
+        return hull != null ? hull.logicalPose().orientation().transform(axis) : axis;
+    }
+
+    /** Where this gun's barrel points now, in the world. */
+    private Vector3d barrelWorld(ServoStatus.MountSnapshot mount) {
+        Vector3d barrel = mount.barrel() != null
+                ? new Vector3d(mount.barrel().x, mount.barrel().y, mount.barrel().z)
+                : aimDirection(mount.currentAngle(), mount.mountYaw());
+        return frameOf(mount).transform(barrel);
+    }
+
+    /** The frame a gun stands in: its sub-level's orientation, or the world's. */
+    private Quaterniondc frameOf(ServoStatus.MountSnapshot mount) {
+        SubLevel subLevel = subLevelOf(mount);
+        return subLevel != null ? subLevel.logicalPose().orientation() : WORLD_FRAME;
+    }
+
+    /**
+     * The turn about this axis (degrees, right-handed) that brings one direction
+     * closest to another; 0 if either lies along the axis, which turning cannot change.
+     */
+    private static double turnAbout(Vector3dc axis, Vector3dc from, Vector3dc to) {
+        Vector3d f = new Vector3d(from).fma(-axis.dot(from), axis);
+        Vector3d t = new Vector3d(to).fma(-axis.dot(to), axis);
+        if (f.lengthSquared() < ALONG_AXIS_SQ || t.lengthSquared() < ALONG_AXIS_SQ)
+            return 0;
+        return Math.toDegrees(Math.atan2(axis.dot(f.cross(t, new Vector3d())), f.dot(t)));
+    }
+
+    /**
+     * Whether this gun's attitude depends on a ship's: whatever its chain of bearings
+     * stands on at the bottom is a ship. Guns ashore, and on turrets ashore, need no
+     * ship sensors.
+     */
+    private boolean onShip(ServoStatus.MountSnapshot mount) {
+        List<Joint> chain = chainOf(mount);
+        if (chain.isEmpty())
+            return subLevelOf(mount) != null;
+        return chain.get(chain.size() - 1).swivel().hull() != null;
     }
 
     /**
@@ -803,13 +1193,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
      * ground (or sea level, if unloaded) under the mount. Uses the same top
      * pitch as the ballistic solver (45°, or less if the mount cannot elevate that far),
      * so it matches where solutions turn into "out of range". The ship's own
-     * motion is left out.
-     *
-     * @param shipYawDeg the barrel's yaw in ship frame, as the mount's yaw servo
-     *                   reads it; null if the mount has no yaw servo
+     * motion is left out. Its aim line is where the barrel really points.
      */
     @Nullable
-    private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount, @Nullable Float shipYawDeg) {
+    private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount, double maxElevation, double maxDepression,
+                                         double[] arc) {
         if (level == null || !mount.hasShell())
             return null;
         double charge = mount.totalChargePower() + mount.addedChargePower();
@@ -831,23 +1219,17 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
 
         double radius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
-                Math.min(45, mount.maxElevation()), referenceY - muzzleWorld.y);
+                Math.min(45, maxElevation), referenceY - muzzleWorld.y);
         if (radius <= 0)
             return null;
 
-        // The barrel's bearing: its ship-frame yaw (same convention as the
-        // solutions) turned into the world, flattened onto the map.
+        // The barrel's bearing in the world, flattened onto the map.
         double aimX = 0, aimZ = 0;
-        if (shipYawDeg != null) {
-            double yaw = Math.toRadians(shipYawDeg);
-            Vector3d barrel = new Vector3d(-Math.sin(yaw), 0, Math.cos(yaw));
-            if (mountSubLevel != null)
-                mountSubLevel.logicalPose().orientation().transform(barrel);
-            double horizontal = Math.sqrt(barrel.x * barrel.x + barrel.z * barrel.z);
-            if (horizontal > 1e-6) {
-                aimX = barrel.x / horizontal;
-                aimZ = barrel.z / horizontal;
-            }
+        Vector3d barrel = barrelWorld(mount);
+        double horizontal = Math.sqrt(barrel.x * barrel.x + barrel.z * barrel.z);
+        if (horizontal > 1e-6) {
+            aimX = barrel.x / horizontal;
+            aimZ = barrel.z / horizontal;
         }
         // The dead zone around the gun, for a level ship (as a plotting officer
         // would draw it from the range table). Plunging fire: the steepest shot
@@ -856,14 +1238,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         double minRadius = 0;
         double relativeY = referenceY - muzzleWorld.y;
         if (plungingFire) {
-            if (mount.maxElevation() > 45)
+            if (maxElevation > 45)
                 minRadius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
-                        BallisticSolver.steepestPlungingPitch(mount.maxElevation()), relativeY);
+                        BallisticSolver.steepestPlungingPitch(maxElevation), relativeY);
         } else if (relativeY < 0) {
             minRadius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
-                    mount.maxDepression(), relativeY);
+                    maxDepression, relativeY);
         }
-        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius);
+        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius, arc[0], arc[1]);
     }
 
     /**
@@ -919,7 +1301,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         // No ballistic solution for this mount (no pitch servo, no shell, ...).
         // Keep tracking the target along the line of sight.
         SubLevel mountSubLevel = subLevelOf(mount);
-        if (mountSubLevel != null && !hasOrientationSensors()) return null;
+        if (onShip(mount) && !hasOrientationSensors()) return null;
 
         Vector3d toTargetWorld = new Vector3d(targetX, targetY, targetZ).sub(launchPivot(mount, mountSubLevel));
         if (toTargetWorld.lengthSquared() < 1e-8) return null;
@@ -929,9 +1311,17 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new FireSolution(pitchOf(shipDir), yawOf(shipDir), 0, true);
     }
 
-    private FireSolution solvePitch(ServoStatus status) {
-        BlockPos servoPos = status.servoPos();
-        ServoStatus.MountSnapshot mount = status.mounts().get(0);
+    /**
+     * Solves a gun: the direction its barrel must point, in the frame it stands in,
+     * and its fuze. Its line on the console is kept under {@code servoPos}.
+     *
+     * @param pitchServo the mount's own pitch servo, if it elevates the barrel itself (so its
+     *                   elevation limits apply); null if bearings carrying it do
+     * @param yawServo   the mount's own yaw servo, if any (its traverse limits apply)
+     */
+    private FireSolution solveGun(BlockPos servoPos, ServoStatus.MountSnapshot mount,
+                                  @Nullable ServoStatus pitchServo, @Nullable ServoStatus yawServo) {
+        boolean ownPitchDrive = pitchServo != null;
         SubLevel mountSubLevel = subLevelOf(mount);
 
         if (!hasTarget) {
@@ -942,7 +1332,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         // On a ship, aiming in its frame takes knowing its attitude. A gun ashore (a
         // fort, a battery) needs none: its frame is the world, which neither tilts nor turns.
-        if (mountSubLevel != null && !hasOrientationSensors()) {
+        if (onShip(mount) && !hasOrientationSensors()) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_ORIENTATION));
             return null;
@@ -973,7 +1363,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         // Altitude Sensor. A rangefinder measures the target relative to itself, and a gun
         // ashore stands at a surveyed height, so neither needs one.
         boolean absoluteTarget = targetSource == TargetSource.MAP_TABLE || targetSource == TargetSource.NAV_TABLE;
-        if (mountSubLevel != null && absoluteTarget && altitudeCount == 0
+        if (onShip(mount) && absoluteTarget && altitudeCount == 0
                 && Math.abs(targetWorld.y - pivotWorld.y) > UNKNOWN_ALTITUDE_TOLERANCE) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_ALTITUDE));
@@ -1016,7 +1406,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         double shipPitchDeg = pitchOf(shipDir);
         double shipYawDeg = yawOf(shipDir);
 
-        if (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()) {
+        boolean outOfArc = ownPitchDrive && (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()
+                || !pitchServo.limits().containsElevation(shipPitchDeg));
+        // The traverse set on its yaw servo's dial, counted from the way it was assembled.
+        if (yawServo != null && !yawServo.limits().containsTurn(Mth.wrapDegrees(shipYawDeg - mount.facingYaw())))
+            outOfArc = true;
+        if (outOfArc) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.OUT_OF_ARC));
             return null;

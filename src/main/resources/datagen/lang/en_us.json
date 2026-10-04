@@ -27,7 +27,9 @@
       "map_no_target": "Map table: no target",
       "computer": "Fire control computer (driving)",
       "nav_console": "Navigation console",
-      "fire_console": "Fire mission console"
+      "fire_console": "Fire mission console",
+      "fixed_gun": "Fixed cannon mount: loaded",
+      "fixed_gun_empty": "Fixed cannon mount: empty"
     },
     "fire_mission_console": {
       "title": "Fire Mission Console",
@@ -93,7 +95,8 @@
         "insufficient_charge": "Insufficient propellant",
         "degenerate": "Invalid geometry",
         "too_close": "Too close for plunging fire",
-        "no_altitude": "Own altitude unknown: needs an Altitude Sensor"
+        "no_altitude": "Own altitude unknown: needs an Altitude Sensor",
+        "redundant_drives": "Too many drives aim this gun"
       }
     },
       "cannon_servo": {
@@ -103,10 +106,13 @@
         "title": "Cannon Servo Output",
         "no_mount": "No cannon mount on network",
         "too_many_mounts": "Too many cannon mounts on network",
+        "invalid_swivel": "A Swivel Bearing must be the only thing this servo drives",
+        "swivel_angle": "Bearing: %s° (turning to %s°)",
         "no_slaves": "No slaved mounts found",
         "axis": "Axis: %s",
         "axis.pitch": "Pitch",
         "axis.yaw": "Yaw",
+        "axis.swivel": "Swivel Bearing",
         "mount_header": "Mount %s @ %s",
         "mount_angle_pitch": "Pitch: %s°",
         "mount_angle_yaw": "Yaw: %s°",
@@ -164,7 +170,19 @@
         "unlit": "Reticle lamp: off"
       },
 
-      "gui": {},
+      "gui": {
+        "servo_limits": {
+          "title": {
+            "elevation": "Elevation limits",
+            "traverse": "Traverse limits",
+            "swivel": "Bearing limits"
+          },
+          "no_limit": "No limit",
+          "arc": "%s° allowed",
+          "now": "Now: %s°",
+          "hint": "Drag the ends · Ctrl: move both · Shift: 5° steps · Right-click: clear"
+        }
+      },
 
       "unit": {
         "angle": "°",

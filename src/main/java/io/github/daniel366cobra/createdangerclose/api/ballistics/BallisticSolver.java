@@ -71,7 +71,10 @@ public final class BallisticSolver {
             TOO_CLOSE,
             // A gun on a ship without an Altitude Sensor, at an absolute target (map or
             // navigation table) well above or below it: its own height is unknown.
-            NO_ALTITUDE
+            NO_ALTITUDE,
+            // More drives aim a gun than it has ways to turn: two turn it about the same
+            // axis, or there are more than two.
+            REDUNDANT_DRIVES
         }
 
         public static Result invalid(Reason reason) {

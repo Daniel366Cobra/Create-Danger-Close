@@ -58,10 +58,19 @@ public final class MapTablePlot {
             double x = sheet.pixelX(gun.x()) / sheet.sizeInPixels() * sheetSize;
             double y = sheet.pixelY(gun.z()) / sheet.sizeInPixels() * sheetSize;
             double radius = gun.radius() * scale;
-            pen.circle(x, y, radius, pixel * DASH, pixel * DASH_GAP);
+            // Only as far round as it may traverse: a pie slice, if its arc is limited. On the
+            // sheet, a bearing (Minecraft yaw) lies a quarter turn on from east.
+            double from = gun.limitsTraverse() ? Math.toRadians(gun.arcFrom() + 90) : 0;
+            double sweep = gun.limitsTraverse() ? Math.toRadians(gun.arcLength()) : 2 * Math.PI;
+            pen.arc(x, y, radius, from, sweep, pixel * DASH, pixel * DASH_GAP);
             // The dead zone inside: too close for the steepest (plunging) or lowest (direct) shot.
             if (gun.minRadius() > 0)
-                pen.circle(x, y, gun.minRadius() * scale, pixel * AIM_DASH, pixel * AIM_GAP);
+                pen.arc(x, y, gun.minRadius() * scale, from, sweep, pixel * AIM_DASH, pixel * AIM_GAP);
+            if (gun.limitsTraverse()) {
+                for (double edge : new double[]{from, from + sweep})
+                    pen.line(x, y, x + Math.cos(edge) * radius, y + Math.sin(edge) * radius,
+                            pixel * DASH, pixel * DASH_GAP);
+            }
             // Where the barrel points, out to the edge of its reach.
             if (gun.hasAim())
                 pen.line(x, y, x + gun.aimX() * radius, y + gun.aimZ() * radius,
@@ -98,15 +107,20 @@ public final class MapTablePlot {
 
         /** A circle of dashes, each covering {@code dash} of every {@code dash + gap} along it. */
         void circle(double cx, double cy, double radius, float dash, float gap) {
+            arc(cx, cy, radius, 0, 2 * Math.PI, dash, gap);
+        }
+
+        /** Part of a circle, dashed, from angle {@code from} on by {@code sweep} (radians, clockwise on the sheet). */
+        void arc(double cx, double cy, double radius, double from, double sweep, float dash, float gap) {
             if (radius < width)
                 return;
-            double circumference = 2 * Math.PI * radius;
-            int patterns = (int) Math.min(MAX_PATTERNS, Math.max(8, Math.round(circumference / (dash + gap))));
-            double patternAngle = 2 * Math.PI / patterns;
+            double length = sweep * radius;
+            int patterns = (int) Math.min(MAX_PATTERNS, Math.max(sweep >= 2 * Math.PI ? 8 : 2, Math.round(length / (dash + gap))));
+            double patternAngle = sweep / patterns;
             double dashAngle = patternAngle * dash / (dash + gap);
             double inner = radius - width / 2, outer = radius + width / 2;
             for (int i = 0; i < patterns; i++) {
-                double a0 = i * patternAngle, a1 = a0 + dashAngle;
+                double a0 = from + i * patternAngle, a1 = a0 + dashAngle;
                 double mid = (a0 + a1) / 2;
                 if (!onSheet(cx + Math.cos(mid) * radius, cy + Math.sin(mid) * radius))
                     continue;

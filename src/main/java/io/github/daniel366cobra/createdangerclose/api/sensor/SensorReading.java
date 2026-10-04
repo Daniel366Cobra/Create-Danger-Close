@@ -12,7 +12,7 @@ public sealed interface SensorReading {
 
     enum Kind {
         // Saved by ordinal: add new kinds at the end.
-        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE, MAP_TARGET, COMPUTER, NAV_CONSOLE, FIRE_CONSOLE
+        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE, MAP_TARGET, COMPUTER, NAV_CONSOLE, FIRE_CONSOLE, FIXED_GUN
     }
 
     interface Provider {
@@ -230,6 +230,25 @@ public sealed interface SensorReading {
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
     }
 
+    /**
+     * Not a sensor: the interface faces a fixed cannon mount, and the computer aims
+     * and fires its gun through it. Whether the gun is loaded, for the goggles.
+     */
+    record FixedGun(boolean loaded) implements SensorReading {
+        @Override public Kind kind() { return Kind.FIXED_GUN; }
+
+        @Override
+        public CompoundTag serializeNBT(HolderLookup.Provider registries) {
+            CompoundTag tag = new CompoundTag();
+            tag.putBoolean("loaded", loaded);
+            return tag;
+        }
+
+        static FixedGun fromNBT(CompoundTag tag) {
+            return new FixedGun(tag.getBoolean("loaded"));
+        }
+    }
+
     record None() implements SensorReading {
         @Override public Kind kind() { return Kind.NONE; }
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
@@ -259,6 +278,7 @@ public sealed interface SensorReading {
             case COMPUTER    -> new Computer();
             case NAV_CONSOLE -> new NavConsole();
             case FIRE_CONSOLE -> new FireConsole();
+            case FIXED_GUN   -> FixedGun.fromNBT(tag);
         };
     }
 }

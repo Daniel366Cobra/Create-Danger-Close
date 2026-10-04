@@ -15,6 +15,13 @@ import dev.simulated_team.simulated.content.navigation_targets.lodestone_compass
 import dev.simulated_team.simulated.index.SimBlocks;
 import dev.simulated_team.simulated.index.SimDataComponents;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
+import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
+import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonReading;
+import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerBank;
@@ -44,7 +51,7 @@ import java.util.UUID;
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 
 public class NetworkInterfaceBlockEntity extends KineticBlockEntity
-        implements IHaveGoggleInformation, SensorReading.Provider {
+        implements IHaveGoggleInformation, SensorReading.Provider, ComputerServo {
 
     public static final float MIN_OPERATING_RPM = 32.0f;
 
@@ -127,12 +134,59 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             console.pollFrom(this);
             return new SensorReading.NavConsole();
         }
+        if (be instanceof FixedCannonMountBlockEntity mount) {
+            // Not a sensor: the computer aims (through the bearings carrying it) and fires this gun.
+            ServoStatus.MountSnapshot gun = CannonReading.readFixedGun(mount, level.registryAccess());
+            return new SensorReading.FixedGun(gun != null && gun.hasShell());
+        }
         if (be instanceof FireMissionConsoleBlockEntity console) {
             // Not a sensor: the console reaches the fire control computer through this interface.
             console.pollFrom(this);
             return new SensorReading.FireConsole();
         }
         return new SensorReading.None();
+    }
+
+    // --- A gun on a fixed cannon mount ---
+
+    @Nullable
+    private FixedCannonMountBlockEntity facedFixedMount() {
+        if (level == null)
+            return null;
+        BlockPos facing = worldPosition.relative(getBlockState().getValue(FACING));
+        return level.isLoaded(facing) && level.getBlockEntity(facing) instanceof FixedCannonMountBlockEntity mount
+                ? mount : null;
+    }
+
+    /** Facing a fixed cannon mount: its gun, read now, as a gun with no drive of its own. */
+    @Override
+    @Nullable
+    public ServoStatus getServoStatus() {
+        FixedCannonMountBlockEntity mount = facedFixedMount();
+        if (mount == null)
+            return null;
+        ServoStatus.MountSnapshot gun = CannonReading.readFixedGun(mount, level.registryAccess());
+        return new ServoStatus(worldPosition, ServoAxis.FIXED_GUN, isPowered,
+                gun != null ? List.of(gun) : List.of(), null, ServoLimits.FULL_ELEVATION);
+    }
+
+    /**
+     * The gun's solution: nothing to drive, but its fuze is set as a pitch servo sets
+     * a mount's, a timed fuze to the time of flight and a delayed one to its delay.
+     */
+    @Override
+    public void receiveFiringSolution(@Nullable FireSolution solution) {
+        FixedCannonMountBlockEntity mount = facedFixedMount();
+        if (solution == null || !solution.valid() || mount == null || level.isClientSide())
+            return;
+        ServoStatus.MountSnapshot gun = CannonReading.readFixedGun(mount, level.registryAccess());
+        if (gun == null || !gun.hasShell())
+            return;
+        boolean delayed = CannonReading.isDelayedImpactFuze(gun.fuzeStack());
+        int wanted = gun.isTimedFuze() ? solution.fuzeTicks() : delayed ? solution.impactDelayTicks() : -1;
+        boolean leaveAsLoaded = gun.isTimedFuze() ? wanted <= 0 : wanted < 0;
+        if (!leaveAsLoaded && gun.fuzeTimer() != wanted)
+            CannonReading.setFixedGunFuze(mount, wanted, level.registryAccess());
     }
 
     /** The fire control computer this interface faces and drives, if any. */
@@ -354,6 +408,16 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                         .add(Component.literal("  • "))
                         .add(Component.translatable("createdangerclose.network_interface.fire_console"))
                         .style(ChatFormatting.GREEN)
+                        .forGoggles(tooltip);
+                yield true;
+            }
+            case SensorReading.FixedGun g -> {
+                CDCLang.builder()
+                        .add(Component.literal("  • "))
+                        .add(Component.translatable(g.loaded()
+                                ? "createdangerclose.network_interface.fixed_gun"
+                                : "createdangerclose.network_interface.fixed_gun_empty"))
+                        .style(g.loaded() ? ChatFormatting.GREEN : ChatFormatting.GOLD)
                         .forGoggles(tooltip);
                 yield true;
             }

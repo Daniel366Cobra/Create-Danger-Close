@@ -2,6 +2,8 @@ package io.github.daniel366cobra.createdangerclose.block.cannon_servo;
 
 import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
 import com.simibubi.create.foundation.block.IBE;
+import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
+import io.github.daniel366cobra.createdangerclose.client.ServoLimitsScreen;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import net.createmod.catnip.data.Iterate;
@@ -57,6 +59,19 @@ public class CannonServoOutputBlock extends DirectionalKineticBlock implements I
             return null;
         }
         return stateForPlacement.setValue(FACING, preferredFacing);
+    }
+
+    /** Right-click with an empty hand: the protractor dial, to set the limits it may turn through. */
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        if (!(level.getBlockEntity(pos) instanceof CannonServoOutputBlockEntity servo))
+            return InteractionResult.PASS;
+        ServoAxis axis = servo.getDetectedAxis();
+        if (axis != ServoAxis.PITCH && axis != ServoAxis.YAW && axis != ServoAxis.SWIVEL)
+            return InteractionResult.PASS;
+        if (level.isClientSide)
+            ServoLimitsScreen.open(servo);
+        return InteractionResult.sidedSuccess(level.isClientSide);
     }
 
     @Override

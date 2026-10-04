@@ -5,8 +5,9 @@ import net.minecraft.server.level.ServerLevel;
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
 import rbasamoyai.createbigcannons.cannon_control.contraption.AbstractMountedCannonContraption;
 import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
+import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
 
-/** Firing a CBC cannon mount on command, as a redstone pulse on the mount would. */
+/** Firing a CBC cannon (on a cannon mount or a fixed one) on command, as a redstone pulse on the mount would. */
 public final class CannonFiring {
 
     private CannonFiring() {}
@@ -18,9 +19,11 @@ public final class CannonFiring {
      * @return false if there is no assembled cannon there
      */
     public static boolean fire(ServerLevel level, BlockPos mountPos) {
-        if (!(level.getBlockEntity(mountPos) instanceof CannonMountBlockEntity mount))
-            return false;
-        PitchOrientedContraptionEntity cannonEntity = mount.getContraption();
+        PitchOrientedContraptionEntity cannonEntity = switch (level.getBlockEntity(mountPos)) {
+            case CannonMountBlockEntity mount -> mount.getContraption();
+            case FixedCannonMountBlockEntity mount -> mount.getContraption();
+            case null, default -> null;
+        };
         if (cannonEntity == null || !(cannonEntity.getContraption() instanceof AbstractMountedCannonContraption cannon))
             return false;
         cannon.fireShot(level, cannonEntity);
