@@ -79,7 +79,7 @@ public class BallisticComputerRenderer extends SafeBlockEntityRenderer<Ballistic
         renderRange(be, partialTicks, ms, buffer, front, panelLight);
     }
 
-    /** The range counter: four digits printed in the range window, until it gets drums. */
+    /** The range counter: four digits printed in the range window. */
     private void renderRange(BallisticComputerBlockEntity be, float partialTicks, PoseStack ms,
                              MultiBufferSource buffer, Direction front, int light) {
         int range = Mth.clamp(Math.round(be.getRangeCounter(partialTicks)), 0, RANGE_MAX);

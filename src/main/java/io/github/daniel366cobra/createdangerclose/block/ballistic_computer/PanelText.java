@@ -7,9 +7,9 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.core.Direction;
 
 /**
- * A readout window on a cabinet, with text printed in it in Minecraft's font
- * (until the windows get drum art). Positions are model pixels with the front
- * towards north, as in the models; the text reads for someone standing in front.
+ * A readout window on a cabinet, with text printed in it in Minecraft's font.
+ * Positions are model pixels with the front towards north, as in the models;
+ * the text reads for someone standing in front.
  */
 public final class PanelText {
 
