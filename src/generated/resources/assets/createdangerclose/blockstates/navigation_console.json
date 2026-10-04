@@ -1,18 +1,18 @@
 {
   "variants": {
     "facing=east": {
-      "model": "createdangerclose:block/navigation_console",
+      "model": "createdangerclose:block/navigation_console/block",
       "y": 90
     },
     "facing=north": {
-      "model": "createdangerclose:block/navigation_console"
+      "model": "createdangerclose:block/navigation_console/block"
     },
     "facing=south": {
-      "model": "createdangerclose:block/navigation_console",
+      "model": "createdangerclose:block/navigation_console/block",
       "y": 180
     },
     "facing=west": {
-      "model": "createdangerclose:block/navigation_console",
+      "model": "createdangerclose:block/navigation_console/block",
       "y": 270
     }
   }

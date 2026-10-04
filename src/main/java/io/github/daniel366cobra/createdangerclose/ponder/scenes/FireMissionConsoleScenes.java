@@ -74,9 +74,9 @@ public final class FireMissionConsoleScenes {
         // The controls on the console's deck. It faces north, so its user looks
         // south: left to right (east to west) the fuze knob, the trajectory lever
         // and the fire button (model pixels, as the console faces).
-        Vec3 fuzeKnob = onConsole(console, 12.5, 13, 9.5);
-        Vec3 trajectorySwitch = onConsole(console, 8.5, 14, 9.5);
-        Vec3 fireButton = onConsole(console, 3.5, 13, 9.5);
+        Vec3 fuzeKnob = onConsole(console, 12.5, 17, 7.5);
+        Vec3 trajectorySwitch = onConsole(console, 8.5, 18, 7.5);
+        Vec3 fireButton = onConsole(console, 3.5, 17, 7.5);
 
         // The gun comes already assembled.
         scene.world().modifyBlock(lever, state -> state.setValue(BlockStateProperties.POWERED, true), false);
@@ -212,7 +212,7 @@ public final class FireMissionConsoleScenes {
                 .pointAt(fuzeKnob)
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Scroll over the knob on the left to correct timed fuzes: earlier for an airburst, later to burst late");
+                .text("Scroll over the knob on the left to correct timed fuzes: earlier for an airburst, later to burst inside after piercing");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
         scene.overlay().showControls(fuzeKnob, Pointing.DOWN, 30).rightClick();

@@ -11,12 +11,14 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
+import net.createmod.catnip.animation.LerpedFloat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Quaterniondc;
@@ -63,6 +65,17 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
     private double shipVelZ = 0;
     private double shipAltitude = 0;
 
+    // Client: the instruments ease towards the latest readings between polls.
+    // Each shows only what the network has a sensor for, resting at zero otherwise.
+    private static final float INSTRUMENT_EASING = 0.3f;
+    /** Speedometer full scale, blocks per second (half a turn of the needle). */
+    public static final double SPEEDOMETER_FULL_SCALE = 40;
+    private final LerpedFloat ballHeading = LerpedFloat.angular().startWithValue(0);
+    private final LerpedFloat ballPitch = LerpedFloat.angular().startWithValue(0);
+    private final LerpedFloat ballRoll = LerpedFloat.angular().startWithValue(0);
+    private final LerpedFloat altimeter = LerpedFloat.linear().startWithValue(0);
+    private final LerpedFloat speedometer = LerpedFloat.linear().startWithValue(0);
+
     public NavigationConsoleBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
     }
@@ -84,13 +97,71 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
     @Override
     public void tick() {
         super.tick();
-        if (level == null || level.isClientSide())
+        if (level == null)
             return;
+        if (level.isClientSide()) {
+            tickInstruments();
+            return;
+        }
         // The interface stopped polling (unpowered, turned away, removed).
         if (linked && level.getGameTime() - lastLinkTick > LINK_TIMEOUT_TICKS) {
             linked = false;
             notifyUpdate();
         }
+    }
+
+    // --- Instruments (client) ---
+
+    private void tickInstruments() {
+        boolean live = linked && hasPose;
+        boolean attitude = live && gimbalCount > 0;
+        ballHeading.chase(live && navHeadingCount > 0 ? shipHeadingDeg : 0, INSTRUMENT_EASING, LerpedFloat.Chaser.EXP);
+        ballPitch.chase(attitude ? shipPitchDeg : 0, INSTRUMENT_EASING, LerpedFloat.Chaser.EXP);
+        ballRoll.chase(attitude ? shipRollDeg : 0, INSTRUMENT_EASING, LerpedFloat.Chaser.EXP);
+
+        // Bedrock to build height.
+        double altitudeShown = live && altitudeCount > 0
+                ? (shipAltitude - level.getMinBuildHeight()) / (level.getMaxBuildHeight() - level.getMinBuildHeight()) : 0;
+        altimeter.chase(Mth.clamp(altitudeShown, 0, 1), INSTRUMENT_EASING, LerpedFloat.Chaser.EXP);
+
+        // Only the ship axes with a velocity sensor count towards the speed.
+        double vx = velocityAxisCounts[0] > 0 ? shipVelX : 0;
+        double vy = velocityAxisCounts[1] > 0 ? shipVelY : 0;
+        double vz = velocityAxisCounts[2] > 0 ? shipVelZ : 0;
+        double speed = live ? Math.sqrt(vx * vx + vy * vy + vz * vz) : 0;
+        speedometer.chase(Double.isFinite(speed) ? Mth.clamp(speed / SPEEDOMETER_FULL_SCALE, 0, 1) : 0,
+                INSTRUMENT_EASING, LerpedFloat.Chaser.EXP);
+
+        ballHeading.tickChaser();
+        ballPitch.tickChaser();
+        ballRoll.tickChaser();
+        altimeter.tickChaser();
+        speedometer.tickChaser();
+    }
+
+    /** Navball: the ship's heading, degrees (Minecraft yaw: 0 = south, 90 = west); 0 without a heading sensor. */
+    public float getBallHeading(float partialTicks) {
+        return ballHeading.getValue(partialTicks);
+    }
+
+    /** Navball: the ship's pitch, degrees, nose up positive; 0 without a Gimbal Sensor. */
+    public float getBallPitch(float partialTicks) {
+        return ballPitch.getValue(partialTicks);
+    }
+
+    /** Navball: the ship's roll, degrees; 0 without a Gimbal Sensor. */
+    public float getBallRoll(float partialTicks) {
+        return ballRoll.getValue(partialTicks);
+    }
+
+    /** Altimeter: 0 (bedrock) to 1 (build height); 0 without an Altitude Sensor. */
+    public float getAltimeter(float partialTicks) {
+        return altimeter.getValue(partialTicks);
+    }
+
+    /** Speedometer: 0 (stopped) to 1 (full scale); 0 without Velocity Sensors. */
+    public float getSpeedometer(float partialTicks) {
+        return speedometer.getValue(partialTicks);
     }
 
     private void countSensors(KineticNetwork network) {
@@ -251,11 +322,6 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
                     .add(Component.literal(", ").withStyle(ChatFormatting.RESET))
                     .add(velocityComponent(2, shipVelZ))
                     .forGoggles(tooltip);
-            CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.navigation_console.velocity_axes",
-                            velocityAxisCount(0), velocityAxisCount(1), velocityAxisCount(2)))
-                    .style(ChatFormatting.GRAY)
-                    .forGoggles(tooltip);
         } else {
             line(tooltip, "no_velocity", ChatFormatting.DARK_GRAY);
         }
@@ -287,12 +353,4 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
         return CDCLang.numberWithUnit(value, "createdangerclose.unit.velocity").withStyle(ChatFormatting.WHITE);
     }
 
-    /** Sensor count for an axis: red if missing, yellow if redundant. */
-    private MutableComponent velocityAxisCount(int axis) {
-        int count = velocityAxisCounts[axis];
-        ChatFormatting color = count == 0 ? ChatFormatting.RED
-                : count > 1 ? ChatFormatting.YELLOW
-                : ChatFormatting.WHITE;
-        return Component.literal(Integer.toString(count)).withStyle(color);
-    }
-}
+    /** Sensor count for an axis: red if missing, yellow if redundant. */}

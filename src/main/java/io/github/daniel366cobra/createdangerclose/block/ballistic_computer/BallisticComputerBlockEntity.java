@@ -18,7 +18,7 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
-import io.github.daniel366cobra.createdangerclose.ballistics.BallisticSolver;
+import io.github.daniel366cobra.createdangerclose.api.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import net.minecraft.server.level.ServerLevel;
@@ -101,6 +101,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private long fuzeOffsetSetTick = Long.MIN_VALUE;
     // Shortest fuze it sets, ticks: a fuze set to burst at once would go off in the barrel.
     private static final int MIN_FUZE_TICKS = 1;
+    // Re-solves from the muzzle where the last solve aimed the barrel: each pass
+    // shrinks the launch point's error roughly by the change in aim, so two settle it.
+    private static final int MUZZLE_REFINEMENT_PASSES = 2;
 
     // Per mount (server only): the barrel's current pitch and yaw in ship
     // frame as its servos read them last poll, for the firing interlock.
@@ -115,8 +118,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // --- Sensor gates: what is present on the battle network ---
     private int gimbalCount = 0;
     private int navHeadingCount = 0;
-    private int navTargetCount = 0;
-    private int mapTableCount = 0;
     private int altitudeCount = 0;
     // Velocity sensors per ship axis (X, Y, Z). Sensors on an axis that is
     // already covered are redundant: they count, but add no capability.
@@ -142,7 +143,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Age and 1σ range error of the rangefinder reading, for the tooltip.
     private long targetAgeTicks = 0;
     private double targetSigma = 0;
-    private int rangefinderCount = 0;
     // How many rangefinders' readings went into the target (1 = just the directing one).
     private int mergedRangefinders = 0;
 
@@ -342,6 +342,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return Math.max(MIN_FUZE_TICKS, timeOfFlightTicks + fuzeOffsetTicks);
     }
 
+    /**
+     * The delay for delayed impact and inertia fuzes, ticks: the fuze correction
+     * itself (they count from impact, not launch), never below none.
+     */
+    private int impactDelay() {
+        return Math.max(0, fuzeOffsetTicks);
+    }
+
     /** Whether the bank has this module, i.e. the computer has its capability. */
     public boolean has(ComputerModule module) {
         return modules.contains(module);
@@ -380,7 +388,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     private void invalidateData() {
-        gimbalCount = navHeadingCount = navTargetCount = mapTableCount = altitudeCount = rangefinderCount = 0;
+        gimbalCount = navHeadingCount = altitudeCount = 0;
         Arrays.fill(velocityAxisCounts, 0);
 
         hasPose = false;
@@ -531,7 +539,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 case SensorReading.Gimbal ignored -> gimbalCount++;
                 case SensorReading.NavHeading ignored -> navHeadingCount++;
                 case SensorReading.NavTarget t -> {
-                    navTargetCount++;
                     if (!hasTarget) {
                         targetX = t.worldPos().x;
                         targetY = t.worldPos().y;
@@ -544,12 +551,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 case SensorReading.Velocity v -> velocityAxisCounts[v.dominantAxis()]++;
                 case SensorReading.Altitude ignored -> altitudeCount++;
                 case SensorReading.Rangefinder r -> {
-                    rangefinderCount++;
                     if (isFresh(r))
                         rangefinderReadings.put(member.getBlockPos(), r);
                 }
                 case SensorReading.MapTarget m -> {
-                    mapTableCount++;
                     // Several tables: the latest designation wins.
                     if (m.worldPos() != null
                             && (mapTarget == null || m.designatedTick() > mapTarget.designatedTick()))
@@ -812,9 +817,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return null;
 
         SubLevel mountSubLevel = subLevelOf(mount);
-        Vector3d muzzleWorld = mountSubLevel != null
-                ? mountSubLevel.logicalPose().transformPosition(blockCenter(mount.mountPos()), new Vector3d())
-                : blockCenter(mount.mountPos());
+        // From the cannon's pivot: the muzzle's few blocks matter little at the edge of its reach.
+        Vector3d muzzleWorld = launchPivot(mount, mountSubLevel);
 
         double referenceY;
         if (hasTarget) {
@@ -919,9 +923,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         SubLevel mountSubLevel = subLevelOf(mount);
         if (mountSubLevel == null) return null;
 
-        Vector3d mountWorld = mountSubLevel.logicalPose()
-                .transformPosition(blockCenter(mount.mountPos()), new Vector3d());
-        Vector3d toTargetWorld = new Vector3d(targetX, targetY, targetZ).sub(mountWorld);
+        Vector3d toTargetWorld = new Vector3d(targetX, targetY, targetZ).sub(launchPivot(mount, mountSubLevel));
         if (toTargetWorld.lengthSquared() < 1e-8) return null;
 
         Vector3d shipDir = mountSubLevel.logicalPose().orientation()
@@ -966,10 +968,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
 
         Quaterniondc shipToWorld = mountSubLevel.logicalPose().orientation();
-        Vector3d muzzleWorld = mountSubLevel.logicalPose()
-                .transformPosition(blockCenter(mount.mountPos()), new Vector3d());
-
+        Vector3d pivotWorld = launchPivot(mount, mountSubLevel);
         Vector3d targetWorld = new Vector3d(targetX, targetY, targetZ);
+        // The shell leaves from the muzzle, which moves as the barrel turns: start
+        // with the barrel pointing straight at the target, then from where it aims.
+        Vector3d muzzleWorld = muzzleAt(pivotWorld, new Vector3d(targetWorld).sub(pivotWorld), mount);
         Vector3d targetVel = new Vector3d(targetVelX, targetVelY, targetVelZ);
 
         double muzzleVelocity = charge;
@@ -985,19 +988,21 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 muzzleWorld, targetWorld, targetVel, inheritedVelocity,
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
                 90.0, -90.0, plungingFire);
+        for (int pass = 0; pass < MUZZLE_REFINEMENT_PASSES && result.valid() && mount.muzzleDistance() > 0; pass++) {
+            muzzleWorld = muzzleAt(pivotWorld, aimDirection(result.pitchDeg(), result.yawDeg()), mount);
+            result = BallisticSolver.solve(
+                    muzzleWorld, targetWorld, targetVel, inheritedVelocity,
+                    muzzleVelocity, gravity, drag, isQuadraticDrag,
+                    90.0, -90.0, plungingFire);
+        }
 
         if (!result.valid()) {
             lastPitchResults.put(servoPos, result);
             return null;
         }
 
-        // Build the world-frame aim direction from the solve's pitch and yaw.
-        double wp = Math.toRadians(result.pitchDeg());
-        double wy = Math.toRadians(result.yawDeg());
-        Vector3d worldDir = new Vector3d(
-                -Math.sin(wy) * Math.cos(wp),
-                Math.sin(wp),
-                Math.cos(wy) * Math.cos(wp));
+        // The world-frame aim direction from the solve's pitch and yaw.
+        Vector3d worldDir = aimDirection(result.pitchDeg(), result.yawDeg());
 
         // Rotate into ship frame. This is the inverse of the rotation Sable
         // applies to the shell's velocity when it kicks it out of the plot.
@@ -1013,9 +1018,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         lastPitchResults.put(servoPos, result);
 
-        // A fuze time of 0 leaves the fuze as loaded; setting it takes a Fuze Computer.
+        // Setting fuzes takes a Fuze Computer: without one, fuzes stay as loaded (0 and -1).
+        boolean setsFuzes = has(ComputerModule.FUZE_COMPUTER);
         FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg,
-                has(ComputerModule.FUZE_COMPUTER) ? correctedFuze(result.fuzeTicks()) : 0, true);
+                setsFuzes ? correctedFuze(result.fuzeTicks()) : 0,
+                setsFuzes ? impactDelay() : -1, true);
         aimCache.put(mount.mountPos(), solution);
         return solution;
     }
@@ -1060,6 +1067,30 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private SubLevel subLevelOf(ServoStatus.MountSnapshot mount) {
         if (level == null) return null;
         return Sable.HELPER.getContaining(level, mount.mountPos());
+    }
+
+    /** A world-frame barrel direction from a solve's pitch and yaw, degrees. */
+    private static Vector3d aimDirection(double pitchDeg, double yawDeg) {
+        double p = Math.toRadians(pitchDeg), y = Math.toRadians(yawDeg);
+        return new Vector3d(-Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p));
+    }
+
+    /**
+     * The cannon's rotation centre in the world, where its barrel turns about;
+     * the mount block's centre if the cannon has not been measured (unassembled).
+     */
+    private static Vector3d launchPivot(ServoStatus.MountSnapshot mount, @Nullable SubLevel mountSubLevel) {
+        Vector3d local = mount.pivot() != null
+                ? new Vector3d(mount.pivot().x, mount.pivot().y, mount.pivot().z)
+                : blockCenter(mount.mountPos());
+        return mountSubLevel != null ? mountSubLevel.logicalPose().transformPosition(local, new Vector3d()) : local;
+    }
+
+    /** Where the shell appears with the barrel pointing this way (world frame): along it from the pivot. */
+    private static Vector3d muzzleAt(Vector3d pivotWorld, Vector3d barrelDirection, ServoStatus.MountSnapshot mount) {
+        if (barrelDirection.lengthSquared() < 1e-12)
+            return new Vector3d(pivotWorld);
+        return new Vector3d(barrelDirection).normalize().mul(mount.muzzleDistance()).add(pivotWorld);
     }
 
     private static Vector3d blockCenter(BlockPos pos) {
@@ -1133,8 +1164,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         this.gimbalCount = compound.getInt("GimbalCount");
         this.navHeadingCount = compound.getInt("NavHeadingCount");
-        this.navTargetCount = compound.getInt("NavTargetCount");
-        this.mapTableCount = compound.getInt("MapTableCount");
         this.altitudeCount = compound.getInt("AltitudeCount");
         this.velocityAxisCounts[0] = compound.getInt("VelocityCountX");
         this.velocityAxisCounts[1] = compound.getInt("VelocityCountY");
@@ -1155,7 +1184,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         this.targetVelZ = compound.getDouble("TargetVelZ");
         this.targetAgeTicks = compound.getLong("TargetAge");
         this.targetSigma = compound.getDouble("TargetSigma");
-        this.rangefinderCount = compound.getInt("RangefinderCount");
         this.mergedRangefinders = compound.getInt("MergedRangefinders");
 
         if (clientPacket) {
@@ -1202,8 +1230,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         compound.putInt("GimbalCount", gimbalCount);
         compound.putInt("NavHeadingCount", navHeadingCount);
-        compound.putInt("NavTargetCount", navTargetCount);
-        compound.putInt("MapTableCount", mapTableCount);
         compound.putInt("AltitudeCount", altitudeCount);
         compound.putInt("VelocityCountX", velocityAxisCounts[0]);
         compound.putInt("VelocityCountY", velocityAxisCounts[1]);
@@ -1222,7 +1248,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         compound.putDouble("TargetVelZ", targetVelZ);
         compound.putLong("TargetAge", targetAgeTicks);
         compound.putDouble("TargetSigma", targetSigma);
-        compound.putInt("RangefinderCount", rangefinderCount);
         compound.putInt("MergedRangefinders", mergedRangefinders);
 
         ListTag results = new ListTag();
@@ -1313,16 +1338,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
-
-        // Debug counts
-        int velocityCount = velocityAxisCounts[0] + velocityAxisCounts[1] + velocityAxisCounts[2];
-        CDCLang.builder()
-                .add(Component.literal(String.format(
-                        "  [G:%d H:%d T:%d M:%d V:%d A:%d R:%d]",
-                        gimbalCount, navHeadingCount, navTargetCount, mapTableCount, velocityCount, altitudeCount,
-                        rangefinderCount)))
-                .style(ChatFormatting.DARK_GRAY)
-                .forGoggles(tooltip);
 
         return true;
     }

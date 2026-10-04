@@ -8,9 +8,9 @@
 	"elements": [
 		{
 			"name": "fire_button",
-			"from": [2.5, 12, 8.5],
-			"to": [4.5, 13, 10.5],
-			"rotation": {"angle": 0, "axis": "y", "origin": [3.5, 12.5, 9.5]},
+			"from": [2.5, 16, 6.5],
+			"to": [4.5, 17, 8.5],
+			"rotation": {"angle": 0, "axis": "y", "origin": [3.5, 16.5, 7.5]},
 			"faces": {
 				"north": {"uv": [8, 4, 10, 5], "texture": "#5"},
 				"east": {"uv": [10, 5, 11, 7], "rotation": 90, "texture": "#5"},

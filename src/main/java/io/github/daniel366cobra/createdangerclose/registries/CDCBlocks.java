@@ -107,13 +107,13 @@ public class CDCBlocks {
     public static final BlockEntry<NavigationConsoleBlock> NAVIGATION_CONSOLE = REGISTRATE
             .block("navigation_console", NavigationConsoleBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            .properties(p -> p.mapColor(MapColor.PODZOL))
+            // A desk, not a full block: neighbours and light must show around it.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .transform(axeOrPickaxe())
-            .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientable(c.getName(),
-                    p.modLoc("block/computer/side"),
-                    p.modLoc("block/computer/navigation_console_front"),
-                    p.modLoc("block/computer/top"))))
-            .simpleItem()
+            .blockstate((c, p) -> p.horizontalBlock(c.get(),
+                    p.models().getExistingFile(p.modLoc("block/navigation_console/block"))))
+            .item()
+            .transform(customItemModel("navigation_console/item"))
             .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
                     .requires(AllBlocks.BRASS_CASING)
                     .requires(AllItems.PRECISION_MECHANISM)

@@ -37,10 +37,11 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
 
     public static final MapCodec<FireMissionConsoleBlock> CODEC = simpleCodec(FireMissionConsoleBlock::new);
 
-    // The desk and the backboard behind its deck, facing north as in the model.
+    // The desk, and the backboard rising above the back of its deck (into the space
+    // above, as a fence does), facing north as in the model.
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(Shapes.or(
-            Block.box(0, 0, 2, 16, 12, 16),
-            Block.box(0, 12, 12, 16, 16, 16)), Direction.NORTH);
+            Block.box(0, 0, 0, 16, 16, 16),
+            Block.box(0, 16, 12, 16, 20, 16)), Direction.NORTH);
 
     /** The controls on the deck, left to right as seen from in front. */
     public enum Control { FUZE_KNOB, TRAJECTORY_LEVER, FIRE_BUTTON }

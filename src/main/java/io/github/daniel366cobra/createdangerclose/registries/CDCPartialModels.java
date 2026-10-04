@@ -35,6 +35,11 @@ public class CDCPartialModels {
     public static final PartialModel CONSOLE_TRAJECTORY_LEVER = block("fire_mission_console/trajectory_switch_lever");
     public static final PartialModel CONSOLE_FIRE_BUTTON = block("fire_mission_console/fire_button");
 
+    // Navigation Console.
+    public static final PartialModel NAV_CONSOLE_BALL = block("navigation_console/nav_ball");
+    public static final PartialModel NAV_CONSOLE_ALTIMETER_NEEDLE = block("navigation_console/altimeter_needle");
+    public static final PartialModel NAV_CONSOLE_SPEEDOMETER_NEEDLE = block("navigation_console/speedometer_needle");
+
     private static PartialModel block(String path) {
         return PartialModel.of(CreateDangerClose.asResource("block/" + path));
     }

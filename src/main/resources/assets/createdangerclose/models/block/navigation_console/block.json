@@ -1,0 +1,171 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"render_type": "minecraft:cutout",
+	"ambientocclusion": false,
+	"textures": {
+		"0": "createdangerclose:block/navigation_console/navigation_console_side",
+		"1": "createdangerclose:block/navigation_console/navigation_console_top",
+		"3": "createdangerclose:block/navigation_console/navigation_console_back",
+		"4": "createdangerclose:block/navigation_console/navigation_console_front",
+		"5": "createdangerclose:block/navigation_console/navigation_console_controls",
+		"6": "createdangerclose:block/navigation_console/navigation_console_backboard",
+		"particle": "createdangerclose:block/navigation_console/navigation_console_back"
+	},
+	"elements": [
+		{
+			"name": "body",
+			"from": [0, 0, 0],
+			"to": [16, 16, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [0, 0, 16, 16], "texture": "#4"},
+				"east": {"uv": [0, 0, 16, 16], "texture": "#0"},
+				"south": {"uv": [0, 0, 16, 16], "texture": "#3"},
+				"west": {"uv": [16, 0, 0, 16], "texture": "#0"},
+				"up": {"uv": [16, 16, 0, 0], "texture": "#1"},
+				"down": {"uv": [0, 0, 16, 12], "texture": "#missing"}
+			}
+		},
+		{
+			"name": "backboard",
+			"from": [0, 16, 12],
+			"to": [16, 20.15, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [0, 4, 16, 8], "texture": "#6"},
+				"east": {"uv": [0, 8, 4, 12], "texture": "#6"},
+				"south": {"uv": [0, 0, 16, 4], "texture": "#6"},
+				"west": {"uv": [4, 8, 0, 12], "texture": "#6"},
+				"up": {"uv": [0, 4, 16, 0], "texture": "#6"}
+			}
+		},
+		{
+			"name": "guardrail1",
+			"from": [15, 16.62254, 5.51133],
+			"to": [15.98, 17.62254, 16.41133],
+			"rotation": {"angle": -22.5, "axis": "x", "origin": [8, 8, 8]},
+			"faces": {
+				"east": {"uv": [0, 0, 1, 11], "rotation": 90, "texture": "#5"},
+				"west": {"uv": [0, 11, 1, 0], "rotation": 90, "texture": "#5"},
+				"up": {"uv": [0, 0, 1, 11], "texture": "#5"},
+				"down": {"uv": [0, 11, 1, 0], "texture": "#5"}
+			}
+		},
+		{
+			"name": "guardrail2",
+			"from": [0.02, 16.62254, 5.51133],
+			"to": [1, 17.62254, 16.41133],
+			"rotation": {"angle": -22.5, "axis": "x", "origin": [8, 8, 8]},
+			"faces": {
+				"east": {"uv": [0, 0, 1, 11], "rotation": 90, "texture": "#5"},
+				"west": {"uv": [0, 11, 1, 0], "rotation": 90, "texture": "#5"},
+				"up": {"uv": [0, 0, 1, 11], "texture": "#5"},
+				"down": {"uv": [0, 11, 1, 0], "texture": "#5"}
+			}
+		},
+		{
+			"name": "altimeter_gauge",
+			"from": [4, 17.91803, 8.47697],
+			"to": [6, 17.56803, 12.47697],
+			"rotation": {"angle": -45, "axis": "x", "origin": [5, 17.74303, 10.47697]},
+			"faces": {
+				"north": {"uv": [7, 15, 9, 16], "texture": "#5"},
+				"east": {"uv": [6, 11, 7, 15], "rotation": 90, "texture": "#5"},
+				"south": {"uv": [7, 15, 9, 16], "texture": "#5"},
+				"west": {"uv": [6, 11, 7, 15], "rotation": 90, "texture": "#5"},
+				"up": {"uv": [7, 15, 9, 11], "texture": "#5"}
+			}
+		},
+		{
+			"name": "nav_ball_base",
+			"from": [3, 10.3033, 13.63173],
+			"to": [13, 13.3033, 19.63173],
+			"rotation": {"angle": -45, "axis": "x", "origin": [8, 8, 8]},
+			"faces": {
+				"east": {"uv": [3, 0, 6, 6], "rotation": 90, "texture": "#5"},
+				"west": {"uv": [3, 0, 6, 6], "rotation": 90, "texture": "#5"},
+				"up": {"uv": [6, 6, 16, 0], "texture": "#5"}
+			}
+		},
+		{
+			"name": "speedometer_gauge",
+			"from": [5, 16, 2],
+			"to": [11, 15.5, 6],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 15.75, 4]},
+			"faces": {
+				"north": {"uv": [10, 11, 16, 12], "texture": "#5"},
+				"east": {"uv": [9, 7, 10, 11], "rotation": 90, "texture": "#5"},
+				"south": {"uv": [10, 11, 16, 12], "texture": "#5"},
+				"west": {"uv": [10, 7, 9, 11], "rotation": 90, "texture": "#5"},
+				"up": {"uv": [10, 11, 16, 7], "texture": "#5"}
+			}
+		}
+	],
+	"display": {
+		"thirdperson_righthand": {
+			"rotation": [75, 45, 0],
+			"translation": [0, 2.5, 0],
+			"scale": [0.375, 0.375, 0.375]
+		},
+		"thirdperson_lefthand": {
+			"rotation": [75, 45, 0],
+			"translation": [0, 2.5, 0],
+			"scale": [0.375, 0.375, 0.375]
+		},
+		"firstperson_righthand": {
+			"rotation": [0, 135, 0],
+			"scale": [0.4, 0.4, 0.4]
+		},
+		"firstperson_lefthand": {
+			"rotation": [0, 135, 0],
+			"scale": [0.4, 0.4, 0.4]
+		},
+		"ground": {
+			"translation": [0, 3, 0],
+			"scale": [0.25, 0.25, 0.25]
+		},
+		"gui": {
+			"rotation": [30, -135, 0],
+			"scale": [0.625, 0.625, 0.625]
+		},
+		"fixed": {
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"on_shelf": {
+			"rotation": [0, -180, 0]
+		}
+	},
+	"groups": [
+		0,
+		1,
+		{
+			"name": "guardrails",
+			"origin": [8, 6, 9],
+			"scope": 0,
+			"color": 0,
+			"children": [2, 3]
+		},
+		{
+			"name": "altimeter",
+			"origin": [11, 11, 4.25],
+			"scope": 0,
+			"color": 0,
+			"children": [4]
+		},
+		{
+			"name": "nav_ball",
+			"origin": [8.5, 11.75, 9.5],
+			"scope": 0,
+			"color": 0,
+			"children": [5]
+		},
+		{
+			"name": "speedometer",
+			"origin": [6, 11, 4.25],
+			"scope": 0,
+			"color": 0,
+			"children": [6]
+		}
+	]
+}

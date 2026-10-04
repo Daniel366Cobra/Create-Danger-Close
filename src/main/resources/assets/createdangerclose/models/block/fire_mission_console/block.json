@@ -2,48 +2,49 @@
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
 	"render_type": "minecraft:cutout",
+	"ambientocclusion": false,
 	"textures": {
 		"0": "createdangerclose:block/fire_mission_console/fire_mission_console_side",
 		"1": "createdangerclose:block/fire_mission_console/fire_mission_console_top",
 		"3": "createdangerclose:block/fire_mission_console/fire_mission_console_back",
 		"4": "createdangerclose:block/fire_mission_console/fire_mission_console_front",
 		"5": "createdangerclose:block/fire_mission_console/fire_mission_console_controls",
+		"6": "createdangerclose:block/fire_mission_console/fire_mission_console_backboard",
 		"particle": "createdangerclose:block/fire_mission_console/fire_mission_console_back"
 	},
 	"elements": [
 		{
 			"name": "body",
-			"from": [0, 0, 2],
-			"to": [16, 12, 16],
-			"rotation": {"angle": 0, "axis": "y", "origin": [8, 6, 9]},
+			"from": [0, 0, 0],
+			"to": [16, 16, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
 			"faces": {
-				"north": {"uv": [0, 4, 16, 16], "texture": "#4"},
-				"east": {"uv": [0, 4, 14, 16], "texture": "#0"},
-				"south": {"uv": [0, 4, 16, 16], "texture": "#3"},
-				"west": {"uv": [14, 4, 0, 16], "texture": "#0"},
-				"up": {"uv": [16, 14, 0, 0], "texture": "#1"},
+				"north": {"uv": [0, 0, 16, 16], "texture": "#4"},
+				"east": {"uv": [0, 0, 16, 16], "texture": "#0"},
+				"south": {"uv": [0, 0, 16, 16], "texture": "#3"},
+				"west": {"uv": [16, 0, 0, 16], "texture": "#0"},
+				"up": {"uv": [16, 16, 0, 0], "texture": "#1"},
 				"down": {"uv": [0, 0, 16, 12], "texture": "#missing"}
 			}
 		},
 		{
 			"name": "backboard",
-			"from": [0, 12, 12],
-			"to": [16, 16.15, 16],
-			"rotation": {"angle": 0, "axis": "y", "origin": [8, 6, 9]},
+			"from": [0, 16, 12],
+			"to": [16, 20.15, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
 			"faces": {
-				"north": {"uv": [0, 0, 16, 4], "texture": "#4"},
-				"east": {"uv": [0, 0, 4, 4], "texture": "#0"},
-				"south": {"uv": [0, 0, 16, 4], "texture": "#3"},
-				"west": {"uv": [4, 0, 0, 4], "texture": "#0"},
-				"up": {"uv": [0, 4, 16, 0], "texture": "#1"},
-				"down": {"uv": [0, 0, 16, 4], "texture": "#missing"}
+				"north": {"uv": [0, 4, 16, 8], "texture": "#6"},
+				"east": {"uv": [0, 8, 4, 12], "texture": "#6"},
+				"south": {"uv": [0, 0, 16, 4], "texture": "#6"},
+				"west": {"uv": [4, 8, 0, 12], "texture": "#6"},
+				"up": {"uv": [0, 4, 16, 0], "texture": "#6"}
 			}
 		},
 		{
 			"name": "guardrail1",
-			"from": [15, 13.15746, 4.82208],
-			"to": [15.98, 14.15746, 15.72208],
-			"rotation": {"angle": -22.5, "axis": "x", "origin": [8, 6, 9]},
+			"from": [15, 16.62254, 5.51133],
+			"to": [15.98, 17.62254, 16.41133],
+			"rotation": {"angle": -22.5, "axis": "x", "origin": [8, 8, 8]},
 			"faces": {
 				"east": {"uv": [0, 0, 1, 11], "rotation": 90, "texture": "#5"},
 				"west": {"uv": [0, 11, 1, 0], "rotation": 90, "texture": "#5"},
@@ -53,9 +54,9 @@
 		},
 		{
 			"name": "guardrail2",
-			"from": [0.02, 13.15746, 4.82208],
-			"to": [1, 14.15746, 15.72208],
-			"rotation": {"angle": -22.5, "axis": "x", "origin": [8, 6, 9]},
+			"from": [0.02, 16.62254, 5.51133],
+			"to": [1, 17.62254, 16.41133],
+			"rotation": {"angle": -22.5, "axis": "x", "origin": [8, 8, 8]},
 			"faces": {
 				"east": {"uv": [0, 0, 1, 11], "rotation": 90, "texture": "#5"},
 				"west": {"uv": [0, 11, 1, 0], "rotation": 90, "texture": "#5"},
@@ -65,9 +66,9 @@
 		},
 		{
 			"name": "fuze_delay_gauge",
-			"from": [11, 12, 4],
-			"to": [14, 11.5, 6],
-			"rotation": {"angle": 0, "axis": "y", "origin": [12.5, 11.5, 5]},
+			"from": [11, 16, 2],
+			"to": [14, 15.5, 4],
+			"rotation": {"angle": 0, "axis": "y", "origin": [12.5, 15.5, 3]},
 			"faces": {
 				"north": {"uv": [3, 0, 6, 1], "texture": "#5"},
 				"east": {"uv": [6, 1, 7, 3], "rotation": 90, "texture": "#5"},
@@ -78,9 +79,9 @@
 		},
 		{
 			"name": "trajectory_switch_base",
-			"from": [7.5, 11.5, 7.5],
-			"to": [9.5, 12.5, 11.5],
-			"rotation": {"angle": 0, "axis": "y", "origin": [0, 0, 0.5]},
+			"from": [7.5, 15.5, 5.5],
+			"to": [9.5, 16.5, 9.5],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
 			"faces": {
 				"north": {"uv": [13, 0, 15, 1], "texture": "#5"},
 				"east": {"uv": [15, 1, 16, 5], "rotation": 90, "texture": "#5"},
@@ -91,9 +92,9 @@
 		},
 		{
 			"name": "trajectory_gauge",
-			"from": [7, 12, 4],
-			"to": [10, 11.5, 6],
-			"rotation": {"angle": 0, "axis": "y", "origin": [8.5, 11.5, 5]},
+			"from": [7, 16, 2],
+			"to": [10, 15.5, 4],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8.5, 15.5, 3]},
 			"faces": {
 				"north": {"uv": [3, 0, 6, 1], "texture": "#5"},
 				"east": {"uv": [6, 1, 7, 3], "rotation": 90, "texture": "#5"},
@@ -104,9 +105,9 @@
 		},
 		{
 			"name": "fire_ready_gauge",
-			"from": [2, 12, 4],
-			"to": [5, 11.5, 6],
-			"rotation": {"angle": 0, "axis": "y", "origin": [3.5, 11.5, 5]},
+			"from": [2, 16, 2],
+			"to": [5, 15.5, 4],
+			"rotation": {"angle": 0, "axis": "y", "origin": [3.5, 15.5, 3]},
 			"faces": {
 				"north": {"uv": [3, 0, 6, 1], "texture": "#5"},
 				"east": {"uv": [6, 1, 7, 3], "rotation": 90, "texture": "#5"},

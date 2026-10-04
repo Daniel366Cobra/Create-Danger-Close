@@ -4,11 +4,11 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
+import io.github.daniel366cobra.createdangerclose.client.RenderLight;
 import io.github.daniel366cobra.createdangerclose.registries.CDCPartialModels;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -71,7 +71,7 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
             return;
         Direction front = state.getValue(ComputerModuleBlock.FACING);
         // The block itself is solid: light the parts by the space in front of it.
-        int partLight = LevelRenderer.getLightColor(be.getLevel(), be.getBlockPos().relative(front));
+        int partLight = RenderLight.at(be.getLevel(), be.getBlockPos().relative(front));
         // The models face north; the blockstate turns them like this.
         float faceTurn = (float) Math.toRadians(-(front.toYRot() + 180));
         Parts parts = new Parts(state, faceTurn, partLight, ms, buffer.getBuffer(RenderType.cutoutMipped()));

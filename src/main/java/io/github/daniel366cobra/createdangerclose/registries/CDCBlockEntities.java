@@ -15,6 +15,7 @@ import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRender
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceRenderer;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceVisual;
@@ -73,6 +74,7 @@ public class CDCBlockEntities {
     public static final BlockEntityEntry<NavigationConsoleBlockEntity> NAVIGATION_CONSOLE = REGISTRATE
             .blockEntity("navigation_console", NavigationConsoleBlockEntity::new)
             .validBlocks(CDCBlocks.NAVIGATION_CONSOLE)
+            .renderer(() -> NavigationConsoleRenderer::new)
             .register();
 
     public static final BlockEntityEntry<FireMissionConsoleBlockEntity> FIRE_MISSION_CONSOLE = REGISTRATE

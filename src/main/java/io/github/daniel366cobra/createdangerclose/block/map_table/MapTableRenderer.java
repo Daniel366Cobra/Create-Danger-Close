@@ -2,7 +2,7 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
-import net.minecraft.client.renderer.LevelRenderer;
+import io.github.daniel366cobra.createdangerclose.client.RenderLight;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -53,7 +53,7 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
                 // Map x → east, map y (down the page) → south, facing up.
                 pose.mulPose(Axis.XP.rotationDegrees(90));
                 pose.scale(texel, texel, texel);
-                int mapLight = LevelRenderer.getLightColor(table.getLevel(), part.getBlockPos().above());
+                int mapLight = RenderLight.at(table.getLevel(), part.getBlockPos().above());
                 MapTableBlockEntity.PonderChart chart = table.getPonderChart();
                 if (chart != null)
                     MapTableMaps.renderPonderChart(pose, buffers, chart.texture(), dx, dz, width, mapLight);
@@ -63,7 +63,7 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
             }
         }
 
-        int light = LevelRenderer.getLightColor(table.getLevel(), table.getBlockPos().above());
+        int light = RenderLight.at(table.getLevel(), table.getBlockPos().above());
         // A Ponder chart draws its lines and markers bolder, to read in the small view.
         MapTableBlockEntity.PonderChart chart = table.getPonderChart();
         float bold = chart != null ? chart.boldness() : 1;

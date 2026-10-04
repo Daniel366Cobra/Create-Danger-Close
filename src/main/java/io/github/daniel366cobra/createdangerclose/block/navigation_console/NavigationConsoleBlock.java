@@ -4,7 +4,16 @@ import com.mojang.serialization.MapCodec;
 import com.simibubi.create.foundation.block.IBE;
 import io.github.daniel366cobra.createdangerclose.block.HorizontalFacedBlock;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
+import net.createmod.catnip.math.VoxelShaper;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 
 /**
@@ -16,8 +25,19 @@ public class NavigationConsoleBlock extends HorizontalFacedBlock implements IBE<
 
     public static final MapCodec<NavigationConsoleBlock> CODEC = simpleCodec(NavigationConsoleBlock::new);
 
+    // The desk, and the backboard rising above the back of its deck (into the space
+    // above, as a fence does), facing north as in the model.
+    private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(Shapes.or(
+            Block.box(0, 0, 0, 16, 16, 16),
+            Block.box(0, 16, 12, 16, 20, 16)), Direction.NORTH);
+
     public NavigationConsoleBlock(Properties properties) {
         super(properties);
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return SHAPE.get(state.getValue(FACING));
     }
 
     @Override

@@ -3,11 +3,11 @@ package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
+import io.github.daniel366cobra.createdangerclose.client.RenderLight;
 import io.github.daniel366cobra.createdangerclose.registries.CDCPartialModels;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -48,7 +48,7 @@ public class BallisticComputerRenderer extends SafeBlockEntityRenderer<Ballistic
         BlockState state = be.getBlockState();
         Direction front = state.getValue(BallisticComputerBlock.FACING);
         // The block itself is solid: light the panel by the space in front of it.
-        int panelLight = LevelRenderer.getLightColor(be.getLevel(), be.getBlockPos().relative(front));
+        int panelLight = RenderLight.at(be.getLevel(), be.getBlockPos().relative(front));
         // The model faces north; the blockstate turns it like this.
         float faceTurn = (float) Math.toRadians(-(front.toYRot() + 180));
         VertexConsumer vb = buffer.getBuffer(RenderType.cutoutMipped());

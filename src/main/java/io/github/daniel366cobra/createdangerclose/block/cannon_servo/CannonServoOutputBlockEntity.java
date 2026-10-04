@@ -13,6 +13,8 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import rbasamoyai.createbigcannons.cannon_control.contraption.AbstractMountedCannonContraption;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -41,6 +43,8 @@ import rbasamoyai.createbigcannons.munitions.big_cannon.ProjectileBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.config.BigCannonProjectilePropertiesComponent;
 import rbasamoyai.createbigcannons.munitions.big_cannon.propellant.BigCannonPropellantBlock;
 import rbasamoyai.createbigcannons.munitions.config.components.BallisticPropertiesComponent;
+import rbasamoyai.createbigcannons.munitions.fuzes.DelayedImpactFuzeItem;
+import rbasamoyai.createbigcannons.munitions.fuzes.DelayedInertiaFuzeItem;
 import rbasamoyai.createbigcannons.munitions.fuzes.TimedFuzeItem;
 
 import java.util.ArrayList;
@@ -93,12 +97,18 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         public ItemStack fuzeStack = ItemStack.EMPTY;
         public int fuzeTimer = 0;
         public boolean isTimedFuze = false;
+        // A delayed impact or inertia fuze: its timer is the delay after impact.
+        public boolean isDelayedImpactFuze = false;
         public double gravity;
         public double drag;
         public boolean isQuadraticDrag;
         public float addedChargePower;
         public float minimumChargePower;
         public float totalChargePower;
+        // Where CBC launches the shell from: the cannon's rotation centre (level
+        // coordinates) and how far along the barrel from it the shell appears.
+        public @Nullable Vec3 pivot;
+        public double muzzleDistance;
 
         public SlavedMount(BlockPos mountPos,
                            @Nullable CannonMountBlockEntity mount,
@@ -222,11 +232,15 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         // Extrapolate the command to now: the computer only updates every poll.
         float target = (float) (pitch ? command.pitchDeg() : command.yawDeg()) + rate * commandAge;
 
-        if (detectedAxis == ServoAxis.PITCH && command.fuzeTicks() > 0) {
+        // Set the loaded fuze: a timed fuze to the time of flight (with correction),
+        // a delayed impact or inertia fuze's delay to the correction alone.
+        if (detectedAxis == ServoAxis.PITCH) {
             for (SlavedMount sm : slavedMounts) {
-                if (sm.isTimedFuze && sm.fuzeTimer != command.fuzeTicks()) {
-                    setLoadedFuzeTime(command.fuzeTicks());
-                }
+                int wanted = sm.isTimedFuze ? command.fuzeTicks()
+                        : sm.isDelayedImpactFuze ? command.impactDelayTicks() : -1;
+                boolean leaveAsLoaded = sm.isTimedFuze ? wanted <= 0 : wanted < 0;
+                if (!leaveAsLoaded && sm.fuzeTimer != wanted)
+                    setLoadedFuzeTime(wanted);
             }
         }
 
@@ -327,10 +341,30 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             return;
         }
         sm.currentAngle = (sm.axis == PITCH) ? entity.pitch : entity.yaw;
+        readMuzzle(sm, entity);
 
         if (sm.axis == PITCH) {
             readShellData(sm);
         }
+    }
+
+    /**
+     * Where the shell leaves the cannon. CBC spawns it at the centre of the
+     * block just past the barrel's last block, on the line from the cannon's
+     * rotation centre (the contraption origin) along the barrel.
+     */
+    private static void readMuzzle(SlavedMount sm, PitchOrientedContraptionEntity entity) {
+        sm.pivot = entity.toGlobalVector(Vec3.atCenterOf(BlockPos.ZERO), 0);
+        if (!(entity.getContraption() instanceof AbstractMountedCannonContraption cannon)) {
+            sm.muzzleDistance = 0;
+            return;
+        }
+        Direction along = cannon.initialOrientation();
+        int farthest = 0;
+        for (BlockPos pos : cannon.getBlocks().keySet())
+            farthest = Math.max(farthest, pos.getX() * along.getStepX() + pos.getY() * along.getStepY()
+                    + pos.getZ() * along.getStepZ());
+        sm.muzzleDistance = farthest + 1;
     }
 
     // ------------------------------------------------------------------
@@ -343,6 +377,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         sm.fuzeStack = ItemStack.EMPTY;
         sm.fuzeTimer = 0;
         sm.isTimedFuze = false;
+        sm.isDelayedImpactFuze = false;
         sm.totalChargePower = 0f;
 
         PitchOrientedContraptionEntity entity = sm.mount.getContraption();
@@ -374,8 +409,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 sm.shellType = BuiltInRegistries.BLOCK.getKey(block);
                 sm.fuzeStack = fuze;
                 sm.isTimedFuze = fuze.getItem() instanceof TimedFuzeItem;
-                sm.fuzeTimer = sm.isTimedFuze
-                        ? fuze.getOrDefault(CBCDataComponents.FUZE_TIMER, 20)
+                sm.isDelayedImpactFuze = isDelayedImpactFuze(fuze);
+                sm.fuzeTimer = sm.isTimedFuze || sm.isDelayedImpactFuze
+                        ? fuze.getOrDefault(CBCDataComponents.FUZE_TIMER, sm.isTimedFuze ? 20 : -1)
                         : 0;
 
                 EntityType<?> projectileType = projBlock.getAssociatedEntityType();
@@ -519,6 +555,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
             tag.putInt("FuzeTimer", sm.fuzeTimer);
             tag.putBoolean("IsTimedFuze", sm.isTimedFuze);
+            tag.putBoolean("IsDelayedImpactFuze", sm.isDelayedImpactFuze);
             tag.putDouble("Gravity", sm.gravity);
             tag.putDouble("Drag", sm.drag);
             tag.putBoolean("QuadraticDrag", sm.isQuadraticDrag);
@@ -567,6 +604,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             sm.fuzeStack = ItemStack.parseOptional(registries, tag.getCompound("FuzeStack"));
             sm.fuzeTimer = tag.getInt("FuzeTimer");
             sm.isTimedFuze = tag.getBoolean("IsTimedFuze");
+            sm.isDelayedImpactFuze = tag.getBoolean("IsDelayedImpactFuze");
             sm.gravity = tag.getDouble("Gravity");
             sm.drag = tag.getDouble("Drag");
             sm.isQuadraticDrag = tag.getBoolean("QuadraticDrag");
@@ -607,16 +645,23 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                     sm.hasShell, sm.shellType,
                     sm.fuzeStack, sm.fuzeTimer, sm.isTimedFuze,
                     sm.gravity, sm.drag, sm.isQuadraticDrag,
-                    sm.addedChargePower, sm.minimumChargePower, sm.totalChargePower));
+                    sm.addedChargePower, sm.minimumChargePower, sm.totalChargePower,
+                    sm.pivot, sm.muzzleDistance));
         }
         return new ServoStatus(worldPosition, detectedAxis, isPowered, mounts);
     }
 
     private static final float SNAP_THRESHOLD_DEG = 0.2f;
 
+    /** Delayed impact and delayed inertia fuzes: their timer counts the delay after impact. */
+    private static boolean isDelayedImpactFuze(ItemStack fuze) {
+        return fuze.getItem() instanceof DelayedImpactFuzeItem || fuze.getItem() instanceof DelayedInertiaFuzeItem;
+    }
+
     /**
-     * Sets the loaded shell's timed fuze to this many ticks (the Fuze Computer's
-     * time of flight). Returns true if a timed fuze was found and updated.
+     * Sets the loaded shell's fuze timer to this many ticks: a timed fuze's time,
+     * or a delayed impact or inertia fuze's delay. Returns true if such a fuze was
+     * found and updated.
      */
     public boolean setLoadedFuzeTime(int ticks) {
         if (level == null || level.isClientSide()) return false;
@@ -643,7 +688,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
             // Modify the loaded shell's NBT
             CompoundTag shellNbt = loadedInfo.nbt() != null ? loadedInfo.nbt().copy() : new CompoundTag();
             ItemStack fuzeStack = ItemStack.parseOptional(registries, shellNbt.getCompound("Fuze"));
-            if (!(fuzeStack.getItem() instanceof TimedFuzeItem)) return false;
+            if (!(fuzeStack.getItem() instanceof TimedFuzeItem) && !isDelayedImpactFuze(fuzeStack)) return false;
 
             fuzeStack.set(CBCDataComponents.FUZE_TIMER, ticks);
             shellNbt.put("Fuze", fuzeStack.saveOptional(registries));
