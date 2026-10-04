@@ -126,15 +126,13 @@ public class CDCBlocks {
     public static final BlockEntry<FireMissionConsoleBlock> FIRE_MISSION_CONSOLE = REGISTRATE
             .block("fire_mission_console", FireMissionConsoleBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            .properties(p -> p.mapColor(MapColor.PODZOL))
+            // A desk, not a full block: neighbours and light must show around it.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .transform(axeOrPickaxe())
-            // Placeholder: the top shows the two controls (fire button, trajectory switch).
-            .blockstate((c, p) -> p.horizontalBlock(c.get(), p.models().orientableWithBottom(c.getName(),
-                    p.modLoc("block/computer/side"),
-                    p.modLoc("block/computer/fire_mission_console_front"),
-                    p.modLoc("block/computer/top"),
-                    p.modLoc("block/computer/fire_mission_console_top"))))
-            .simpleItem()
+            .blockstate((c, p) -> p.horizontalBlock(c.get(),
+                    p.models().getExistingFile(p.modLoc("block/fire_mission_console/block"))))
+            .item()
+            .transform(customItemModel("fire_mission_console/item"))
             .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
                     .requires(AllBlocks.BRASS_CASING)
                     .requires(AllItems.PRECISION_MECHANISM)

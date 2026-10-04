@@ -94,6 +94,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Trajectory: the flat arc (direct fire, default) or the steep arc
     // (plunging fire). Set from Fire Mission Consoles; the last flip wins.
     private boolean plungingFire = false;
+    // Fuze correction added to every timed fuze it sets, ticks (negative bursts
+    // early, positive late), and the game time it was set at a Fire Mission
+    // Console: of several consoles, the most recently set one wins.
+    private int fuzeOffsetTicks = 0;
+    private long fuzeOffsetSetTick = Long.MIN_VALUE;
+    // Shortest fuze it sets, ticks: a fuze set to burst at once would go off in the barrel.
+    private static final int MIN_FUZE_TICKS = 1;
 
     // Per mount (server only): the barrel's current pitch and yaw in ship
     // frame as its servos read them last poll, for the firing interlock.
@@ -181,7 +188,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private float panelRange;
     private float panelRangeFraction;
     private float panelElevationDeg;
-    // ...and its time of flight, ticks, which the Fuze Computer sets timed fuzes to.
+    // ...and the fuze time set for it, ticks: time of flight plus the fuze correction.
     private int panelFuzeTicks;
     // Also synced, for the modules: the battle network's speed (RPM, 0 unpowered); the
     // ship's own speed as the velocity sensors see it (blocks per second, 0 without an
@@ -286,19 +293,53 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
             return new SalvoResult(0, 0);
         int fired = 0, held = 0;
-        for (Map.Entry<BlockPos, Float> entry : mountPitches.entrySet()) {
-            BlockPos mountPos = entry.getKey();
-            FireSolution solution = aimCache.get(mountPos);
-            Float yaw = mountYawsNow.get(mountPos);
-            boolean onTarget = solution != null && solution.valid()
-                    && Math.abs(entry.getValue() - solution.pitchDeg()) <= ON_TARGET_DEG
-                    && (yaw == null || Math.abs(Mth.wrapDegrees(yaw - solution.yawDeg())) <= ON_TARGET_DEG);
-            if (onTarget && CannonFiring.fire(serverLevel, mountPos))
+        for (BlockPos mountPos : mountPitches.keySet()) {
+            if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos))
                 fired++;
             else
                 held++;
         }
         return new SalvoResult(fired, held);
+    }
+
+    /** The guns that would fire right now (as fired) and those that would hold (server). */
+    public SalvoResult gunsOnTarget() {
+        if (!isPowered || bankConflict)
+            return new SalvoResult(0, mountPitches.size());
+        int ready = 0;
+        for (BlockPos mountPos : mountPitches.keySet())
+            if (isOnTarget(mountPos))
+                ready++;
+        return new SalvoResult(ready, mountPitches.size() - ready);
+    }
+
+    /** Whether this mount has a firing solution and its barrel has settled on it (last poll). */
+    private boolean isOnTarget(BlockPos mountPos) {
+        FireSolution solution = aimCache.get(mountPos);
+        Float pitch = mountPitches.get(mountPos);
+        Float yaw = mountYawsNow.get(mountPos);
+        return solution != null && solution.valid() && pitch != null
+                && Math.abs(pitch - solution.pitchDeg()) <= ON_TARGET_DEG
+                && (yaw == null || Math.abs(Mth.wrapDegrees(yaw - solution.yawDeg())) <= ON_TARGET_DEG);
+    }
+
+    /**
+     * Takes a Fire Mission Console's fuze correction, if it was set more
+     * recently than the one in use (server).
+     */
+    public void offerFuzeOffset(int ticks, long setTick) {
+        if (setTick < fuzeOffsetSetTick || (setTick == fuzeOffsetSetTick && ticks == fuzeOffsetTicks))
+            return;
+        fuzeOffsetSetTick = setTick;
+        if (fuzeOffsetTicks != ticks) {
+            fuzeOffsetTicks = ticks;
+            setChanged();
+        }
+    }
+
+    /** A time of flight with the fuze correction added, as set on the shells, ticks. */
+    private int correctedFuze(int timeOfFlightTicks) {
+        return Math.max(MIN_FUZE_TICKS, timeOfFlightTicks + fuzeOffsetTicks);
     }
 
     /** Whether the bank has this module, i.e. the computer has its capability. */
@@ -408,7 +449,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 .findFirst()
                 .orElse(null);
         panelElevationDeg = firstSolution != null ? (float) firstSolution.pitchDeg() : 0;
-        panelFuzeTicks = firstSolution != null ? firstSolution.fuzeTicks() : 0;
+        panelFuzeTicks = firstSolution != null ? correctedFuze(firstSolution.fuzeTicks()) : 0;
     }
 
     /** Eases the panel's moving parts towards the synced readings (client). */
@@ -438,7 +479,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return camAngle.getValue(partialTicks);
     }
 
-    /** The first gun's time of flight, seconds; 0 without a solution (client). */
+    /** The fuze time set for the first gun (time of flight plus correction), seconds; 0 without a solution (client). */
     public float getFuzeSeconds() {
         return panelFuzeTicks / 20f;
     }
@@ -974,7 +1015,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         // A fuze time of 0 leaves the fuze as loaded; setting it takes a Fuze Computer.
         FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg,
-                has(ComputerModule.FUZE_COMPUTER) ? result.fuzeTicks() : 0, true);
+                has(ComputerModule.FUZE_COMPUTER) ? correctedFuze(result.fuzeTicks()) : 0, true);
         aimCache.put(mount.mountPos(), solution);
         return solution;
     }
@@ -1070,6 +1111,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         this.isPowered = compound.getBoolean("IsPowered");
         this.bankConflict = compound.getBoolean("BankConflict");
         this.plungingFire = compound.getBoolean("PlungingFire");
+        this.fuzeOffsetTicks = compound.getInt("FuzeOffset");
+        if (!clientPacket)
+            this.fuzeOffsetSetTick = compound.contains("FuzeOffsetSet") ? compound.getLong("FuzeOffsetSet") : Long.MIN_VALUE;
         this.panelBearingDeg = compound.getFloat("PanelBearing");
         this.panelRange = compound.getFloat("PanelRange");
         this.panelRangeFraction = compound.getFloat("PanelRangeFraction");
@@ -1137,6 +1181,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         compound.putBoolean("IsPowered", isPowered);
         compound.putBoolean("BankConflict", bankConflict);
         compound.putBoolean("PlungingFire", plungingFire);
+        compound.putInt("FuzeOffset", fuzeOffsetTicks);
+        if (!clientPacket)
+            compound.putLong("FuzeOffsetSet", fuzeOffsetSetTick);
         compound.putFloat("PanelBearing", panelBearingDeg);
         compound.putFloat("PanelRange", panelRange);
         compound.putFloat("PanelRangeFraction", panelRangeFraction);

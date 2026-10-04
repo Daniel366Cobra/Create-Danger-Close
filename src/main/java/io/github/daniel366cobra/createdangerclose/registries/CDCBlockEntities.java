@@ -13,6 +13,7 @@ import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.Compu
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceRenderer;
@@ -77,6 +78,7 @@ public class CDCBlockEntities {
     public static final BlockEntityEntry<FireMissionConsoleBlockEntity> FIRE_MISSION_CONSOLE = REGISTRATE
             .blockEntity("fire_mission_console", FireMissionConsoleBlockEntity::new)
             .validBlocks(CDCBlocks.FIRE_MISSION_CONSOLE)
+            .renderer(() -> FireMissionConsoleRenderer::new)
             .register();
 
     /** Loads this class, which registers its entries. */

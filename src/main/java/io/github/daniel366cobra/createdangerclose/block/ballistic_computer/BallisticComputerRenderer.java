@@ -32,7 +32,7 @@ public class BallisticComputerRenderer extends SafeBlockEntityRenderer<Ballistic
     private static final float FOLLOWER_TRAVEL = 8;
 
     // Range window: x 3..7, y 9..12, 1 px deep; the digits stand 0.25 px off its back wall.
-    private static final PanelText RANGE_WINDOW = new PanelText(3, 7, 9, 12, 0.75f, 0.9f);
+    private static final PanelText RANGE_WINDOW = PanelText.front(3, 7, 9, 12, 0.75f, 0.9f);
     private static final int RANGE_DIGITS = 4;
     private static final int RANGE_MAX = 9999;
 

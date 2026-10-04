@@ -1,18 +1,18 @@
 {
   "variants": {
     "facing=east": {
-      "model": "createdangerclose:block/fire_mission_console",
+      "model": "createdangerclose:block/fire_mission_console/block",
       "y": 90
     },
     "facing=north": {
-      "model": "createdangerclose:block/fire_mission_console"
+      "model": "createdangerclose:block/fire_mission_console/block"
     },
     "facing=south": {
-      "model": "createdangerclose:block/fire_mission_console",
+      "model": "createdangerclose:block/fire_mission_console/block",
       "y": 180
     },
     "facing=west": {
-      "model": "createdangerclose:block/fire_mission_console",
+      "model": "createdangerclose:block/fire_mission_console/block",
       "y": 270
     }
   }

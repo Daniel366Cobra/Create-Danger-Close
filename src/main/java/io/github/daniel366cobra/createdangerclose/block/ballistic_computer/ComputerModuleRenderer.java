@@ -54,7 +54,7 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
     // (8, 7, 0.75), clockwise (seen from in front) as the time grows. The time is
     // printed in the window x 6..10, y 4..7, 0.25 px in front of its back wall (0.74 deep).
     private static final float RING_PIVOT_X = 8, RING_PIVOT_Y = 7, RING_PIVOT_Z = 0.75f;
-    private static final PanelText FUZE_WINDOW = new PanelText(6, 10, 4, 7, 0.74f - 0.25f, 0.9f);
+    private static final PanelText FUZE_WINDOW = PanelText.front(6, 10, 4, 7, 0.74f - 0.25f, 0.9f);
     private static final float FUZE_MAX_SECONDS = 99.9f;
 
     private final Font font;

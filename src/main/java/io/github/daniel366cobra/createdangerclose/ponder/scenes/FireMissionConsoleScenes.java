@@ -1,6 +1,7 @@
 package io.github.daniel366cobra.createdangerclose.ponder.scenes;
 
 import com.simibubi.create.foundation.ponder.CreateSceneBuilder;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
 import net.createmod.catnip.math.Pointing;
 import net.createmod.ponder.api.PonderPalette;
 import net.createmod.ponder.api.element.ElementLink;
@@ -30,6 +31,8 @@ public final class FireMissionConsoleScenes {
     private static final int RETRAIN_TICKS = 80;
     // Output network speed while training, as a multiple of its 1 RPM keep-alive.
     private static final float TRAINING_SPEED_FACTOR = 32;
+    // The fuze knob demonstration: this many notches early, each this many ticks.
+    private static final int FUZE_DEMO_NOTCHES = 4, FUZE_NOTCH_TICKS = 2;
 
     /**
      * Structure {@code fire_mission_console.nbt}: a 6×6 floor (the bottom
@@ -68,11 +71,12 @@ public final class FireMissionConsoleScenes {
                 .add(util.select().fromTo(2, 0, 0, 4, 0, 0))
                 .add(util.select().fromTo(4, 1, 1, 4, 1, 2));
 
-        // Clicks on the console's top. It faces north, so its user looks
-        // south: their left half is the east one, the trajectory switch.
-        Vec3 consoleTop = util.vector().topOf(console);
-        Vec3 trajectorySwitch = consoleTop.add(0.25, 0, 0);
-        Vec3 fireButton = consoleTop.add(-0.25, 0, 0);
+        // The controls on the console's deck. It faces north, so its user looks
+        // south: left to right (east to west) the fuze knob, the trajectory lever
+        // and the fire button (model pixels, as the console faces).
+        Vec3 fuzeKnob = onConsole(console, 12.5, 13, 9.5);
+        Vec3 trajectorySwitch = onConsole(console, 8.5, 14, 9.5);
+        Vec3 fireButton = onConsole(console, 3.5, 13, 9.5);
 
         // The gun comes already assembled.
         scene.world().modifyBlock(lever, state -> state.setValue(BlockStateProperties.POWERED, true), false);
@@ -95,6 +99,8 @@ public final class FireMissionConsoleScenes {
         scene.world().showSection(consoleBranch, Direction.SOUTH);
         scene.idle(10);
         scene.world().showSection(util.select().position(console), Direction.DOWN);
+        // One gun on the network, not yet on target.
+        showGunsReady(scene, console, 0);
         scene.idle(15);
 
         scene.overlay().showText(PonderTiming.TEXT)
@@ -117,20 +123,25 @@ public final class FireMissionConsoleScenes {
                 .placeNearTarget()
                 .text("The guns train onto the computer's firing solution");
         scene.idle(20);
+        showGunsReady(scene, console, 0);
         train(scene, cannonNetworks, mount, aim, TRAVERSE_DEG, DIRECT_DEG, TRAINING_TICKS);
+        showGunsReady(scene, console, 1);
         scene.idle(PonderTiming.AFTER_TEXT - 20 - TRAINING_TICKS);
 
         // Trajectory switch: plunging fire, then back to direct.
         scene.overlay().showControls(trajectorySwitch, Pointing.DOWN, 30).rightClick();
+        showPlunging(scene, console, true);
         scene.idle(10);
         scene.overlay().showText(PonderTiming.TEXT)
                 .pointAt(trajectorySwitch)
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Right-click the left half of its top to switch the trajectory");
+                .text("Right-click the lever in the middle to switch the trajectory");
         scene.idle(PonderTiming.AFTER_TEXT);
 
+        showGunsReady(scene, console, 0);
         train(scene, cannonNetworks, mount, aim, 0, PLUNGING_DEG - DIRECT_DEG, TRAINING_TICKS);
+        showGunsReady(scene, console, 1);
         scene.overlay().showText(PonderTiming.TEXT)
                 .colored(PonderPalette.BLUE)
                 .pointAt(muzzle(util, TRAVERSE_DEG, PLUNGING_DEG))
@@ -139,8 +150,11 @@ public final class FireMissionConsoleScenes {
         scene.idle(PonderTiming.AFTER_TEXT);
 
         scene.overlay().showControls(trajectorySwitch, Pointing.DOWN, 30).rightClick();
+        showPlunging(scene, console, false);
         scene.idle(10);
+        showGunsReady(scene, console, 0);
         train(scene, cannonNetworks, mount, aim, 0, DIRECT_DEG - PLUNGING_DEG, TRAINING_TICKS);
+        showGunsReady(scene, console, 1);
         scene.overlay().showText(PonderTiming.TEXT)
                 .colored(PonderPalette.BLUE)
                 .pointAt(muzzle(util, TRAVERSE_DEG, DIRECT_DEG))
@@ -150,6 +164,7 @@ public final class FireMissionConsoleScenes {
 
         // Fire.
         scene.overlay().showControls(fireButton, Pointing.DOWN, 30).rightClick();
+        pressFireButton(scene, console);
         scene.idle(10);
         fire(scene, util, TRAVERSE_DEG, DIRECT_DEG);
         scene.overlay().showText(PonderTiming.TEXT)
@@ -157,14 +172,16 @@ public final class FireMissionConsoleScenes {
                 .pointAt(fireButton)
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Right-click the right half to fire every gun that is on target");
+                .text("Right-click the button on the right to fire every gun that is on target");
         scene.idle(PonderTiming.AFTER_TEXT);
 
         // The target moves; an order given while the gun is still training is refused.
+        showGunsReady(scene, console, 0);
         scene.world().multiplyKineticSpeed(cannonNetworks, TRAINING_SPEED_FACTOR);
         scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountYaw(mount, -RETRAIN_DEG, RETRAIN_TICKS));
         aim.turn(RETRAIN_DEG * 30 / RETRAIN_TICKS, 0, 30);
         scene.overlay().showControls(fireButton, Pointing.DOWN, 30).rightClick();
+        pressFireButton(scene, console);
         aim.turn(RETRAIN_DEG * 10 / RETRAIN_TICKS, 0, 10);
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .colored(PonderPalette.RED)
@@ -173,14 +190,39 @@ public final class FireMissionConsoleScenes {
                 .attachKeyFrame()
                 .text("Guns still training onto their solution hold their fire, so no shell is wasted");
         aim.turn(RETRAIN_DEG * (RETRAIN_TICKS - 40) / RETRAIN_TICKS, 0, RETRAIN_TICKS - 40);
+        showGunsReady(scene, console, 1);
         scene.world().multiplyKineticSpeed(cannonNetworks, 1 / TRAINING_SPEED_FACTOR);
         scene.idle(PonderTiming.AFTER_LONG_TEXT - (RETRAIN_TICKS - 40));
 
         // On target again: now it fires.
         scene.overlay().showControls(fireButton, Pointing.DOWN, 30).rightClick();
+        pressFireButton(scene, console);
         scene.idle(10);
         fire(scene, util, TRAVERSE_DEG + RETRAIN_DEG, DIRECT_DEG);
         scene.idle(30);
+
+        // The fuze correction.
+        scene.overlay().showControls(fuzeKnob, Pointing.DOWN, 40).scroll();
+        scene.idle(10);
+        for (int notch = 1; notch <= FUZE_DEMO_NOTCHES; notch++) {
+            showFuzeOffset(scene, console, -notch * FUZE_NOTCH_TICKS);
+            scene.idle(5);
+        }
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(fuzeKnob)
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("Scroll over the knob on the left to correct timed fuzes: earlier for an airburst, later to burst late");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showControls(fuzeKnob, Pointing.DOWN, 30).rightClick();
+        scene.idle(10);
+        showFuzeOffset(scene, console, 0);
+        scene.overlay().showText(PonderTiming.TEXT)
+                .pointAt(fuzeKnob)
+                .placeNearTarget()
+                .text("Right-click the knob to zero it");
+        scene.idle(PonderTiming.AFTER_TEXT);
 
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .pointAt(util.vector().topOf(console))
@@ -188,6 +230,29 @@ public final class FireMissionConsoleScenes {
                 .attachKeyFrame()
                 .text("Look at the console with Goggles to see the target, the trajectory and each gun's solution");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
+    }
+
+    /** A point on the console, in model pixels as it faces (north). */
+    private static Vec3 onConsole(BlockPos console, double x, double y, double z) {
+        return Vec3.atLowerCornerOf(console).add(x / 16, y / 16, z / 16);
+    }
+
+    private static void showPlunging(CreateSceneBuilder scene, BlockPos console, boolean plunging) {
+        scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showPlunging(plunging));
+    }
+
+    private static void pressFireButton(CreateSceneBuilder scene, BlockPos console) {
+        scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class,
+                FireMissionConsoleBlockEntity::animateButtonPress);
+    }
+
+    /** The console's readiness readout, out of the scene's one gun. */
+    private static void showGunsReady(CreateSceneBuilder scene, BlockPos console, int ready) {
+        scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showGunsReady(ready, 1));
+    }
+
+    private static void showFuzeOffset(CreateSceneBuilder scene, BlockPos console, int ticks) {
+        scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showFuzeOffset(ticks));
     }
 
     /**

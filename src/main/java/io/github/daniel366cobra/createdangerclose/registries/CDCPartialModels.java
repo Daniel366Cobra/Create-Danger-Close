@@ -30,6 +30,11 @@ public class CDCPartialModels {
     // Fuze Computer.
     public static final PartialModel COMPUTER_FUZE_SETTING_RING = block("computer/fuze_computer/setting_ring");
 
+    // Fire Mission Console.
+    public static final PartialModel CONSOLE_FUZE_KNOB = block("fire_mission_console/fuze_delay_knob");
+    public static final PartialModel CONSOLE_TRAJECTORY_LEVER = block("fire_mission_console/trajectory_switch_lever");
+    public static final PartialModel CONSOLE_FIRE_BUTTON = block("fire_mission_console/fire_button");
+
     private static PartialModel block(String path) {
         return PartialModel.of(CreateDangerClose.asResource("block/" + path));
     }

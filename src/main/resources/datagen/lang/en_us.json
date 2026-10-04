@@ -39,7 +39,8 @@
         "plunging": "Trajectory: Plunging fire"
       },
       "no_guns": "No guns on the network",
-      "salvo": "Salvo: %s fired, %s held (no solution or not on target)"
+      "salvo": "Salvo: %s fired, %s held (no solution or not on target)",
+      "fuze_offset": "Fuze correction: %s s"
     },
     "navigation_console": {
       "title": "Navigation Console",
@@ -213,10 +214,12 @@
         "summary": "The gunnery officer's station: shows the _fire mission_ and gives the _orders_.",
         "condition1": "When a powered Battle Network Interface faces it:",
         "behaviour1": "Shows the _target_, the _trajectory_ and each gun's _firing solution_ through Goggles.",
-        "condition2": "When the left half of its top is right-clicked:",
-        "behaviour2": "Switches between _direct_ and _plunging_ fire.",
-        "condition3": "When the right half of its top is right-clicked:",
-        "behaviour3": "_Fires_ every gun that has a solution and is _on target_. The others hold fire."
+        "condition2": "When scrolling over the knob on the left:",
+        "behaviour2": "Sets a _fuze correction_ from -2 to +2 seconds, added to timed fuzes: early for an _airburst_ short of the target, late for a delayed burst. Hold _Shift_ for fine steps; _right-click_ the knob to zero it.",
+        "condition3": "When the lever in the middle is right-clicked:",
+        "behaviour3": "Switches between _direct_ and _plunging_ fire.",
+        "condition4": "When the button on the right is right-clicked:",
+        "behaviour4": "_Fires_ every gun that has a solution and is _on target_. The others hold fire."
       },
       "navigation_console.tooltip": {
         "summary": "Shows the ship's own _attitude_, _speed_ and _altitude_ through Goggles.",

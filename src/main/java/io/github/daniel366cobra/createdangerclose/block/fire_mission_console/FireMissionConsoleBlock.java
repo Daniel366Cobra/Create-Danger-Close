@@ -5,6 +5,7 @@ import com.simibubi.create.foundation.block.IBE;
 import io.github.daniel366cobra.createdangerclose.block.HorizontalFacedBlock;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
+import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -12,40 +13,79 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.Nullable;
 
 /**
- * The Fire Mission Console. Its top carries the controls, seen from the
- * player standing at its face: the left half is the trajectory switch (direct
- * or plunging fire), the right half the fire button. A Battle Network
- * Interface facing it connects it to the Ballistic Computer.
+ * The Fire Mission Console. Its deck carries three controls side by side, as
+ * seen from the player standing at its face: the fuze correction knob on the
+ * left (scroll to turn, right-click to zero), the trajectory lever in the
+ * middle (direct or plunging fire) and the fire button on the right. A Battle
+ * Network Interface facing it connects it to the Ballistic Computer.
  */
 public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE<FireMissionConsoleBlockEntity> {
 
     public static final MapCodec<FireMissionConsoleBlock> CODEC = simpleCodec(FireMissionConsoleBlock::new);
 
+    // The desk and the backboard behind its deck, facing north as in the model.
+    private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(Shapes.or(
+            Block.box(0, 0, 2, 16, 12, 16),
+            Block.box(0, 12, 12, 16, 16, 16)), Direction.NORTH);
+
+    /** The controls on the deck, left to right as seen from in front. */
+    public enum Control { FUZE_KNOB, TRAJECTORY_LEVER, FIRE_BUTTON }
+
     public FireMissionConsoleBlock(Properties properties) {
         super(properties);
     }
 
-    /** Clicks on the top: left half the trajectory switch, right half the fire button. */
+    /**
+     * The control under a point on the deck (a hit on its upper side), or null
+     * elsewhere: the deck is split into thirds across, as seen from in front.
+     */
+    @Nullable
+    public static Control controlAt(BlockState state, BlockPos pos, BlockHitResult hit) {
+        if (hit.getDirection() != Direction.UP || !(state.getBlock() instanceof FireMissionConsoleBlock))
+            return null;
+        // The player stands at the face, looking the opposite way to it.
+        Direction playersRight = state.getValue(FACING).getCounterClockWise();
+        Vec3 fromCenter = hit.getLocation().subtract(Vec3.atCenterOf(pos));
+        double across = fromCenter.x * playersRight.getStepX() + fromCenter.z * playersRight.getStepZ() + 0.5;
+        if (across < 1 / 3.0)
+            return Control.FUZE_KNOB;
+        return across < 2 / 3.0 ? Control.TRAJECTORY_LEVER : Control.FIRE_BUTTON;
+    }
+
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
                                                BlockHitResult hitResult) {
-        if (hitResult.getDirection() != Direction.UP)
+        Control control = controlAt(state, pos, hitResult);
+        if (control == null)
             return InteractionResult.PASS;
         if (level.isClientSide)
             return InteractionResult.SUCCESS;
-
-        boolean fireButton = isOnFireButtonSide(state, pos, hitResult.getLocation());
         FireMissionConsoleBlockEntity console = getBlockEntity(level, pos);
-        BallisticComputerBlockEntity computer = console != null ? console.getComputer() : null;
-        if (console == null || !console.isLinked()) {
+        if (console == null)
+            return InteractionResult.SUCCESS;
+
+        if (control == Control.FUZE_KNOB) {
+            console.setFuzeOffset(0);
+            level.playSound(null, pos, SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.BLOCKS, 0.3f, 1.2f);
+            return InteractionResult.SUCCESS;
+        }
+
+        BallisticComputerBlockEntity computer = console.getComputer();
+        if (!console.isLinked()) {
             status(player, "not_connected");
             return InteractionResult.SUCCESS;
         }
@@ -54,7 +94,8 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
             return InteractionResult.SUCCESS;
         }
 
-        if (fireButton) {
+        if (control == Control.FIRE_BUTTON) {
+            level.blockEvent(pos, this, FireMissionConsoleBlockEntity.BUTTON_PRESS_EVENT, 0);
             BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo();
             level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
             if (salvo.fired() + salvo.held() == 0)
@@ -68,18 +109,20 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
             level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.4f, plunging ? 0.6f : 0.5f);
             status(player, plunging ? "mode.plunging" : "mode.direct");
         }
+        console.refreshFromComputer();
         return InteractionResult.SUCCESS;
     }
 
-    /**
-     * Whether a point on the top lies on the fire button's half: the right
-     * half, as seen by a player standing at the console's face (looking the
-     * opposite way to it).
-     */
-    private static boolean isOnFireButtonSide(BlockState state, BlockPos pos, Vec3 hit) {
-        Direction playersRight = state.getValue(FACING).getCounterClockWise();
-        Vec3 fromCenter = hit.subtract(Vec3.atCenterOf(pos));
-        return fromCenter.x * playersRight.getStepX() + fromCenter.z * playersRight.getStepZ() > 0;
+    /** Block events reach the block entity (and, on the server, go out to clients). */
+    @Override
+    protected boolean triggerEvent(BlockState state, Level level, BlockPos pos, int id, int param) {
+        FireMissionConsoleBlockEntity console = getBlockEntity(level, pos);
+        return console != null && console.triggerEvent(id, param);
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return SHAPE.get(state.getValue(FACING));
     }
 
     private static void status(Player player, String key) {
