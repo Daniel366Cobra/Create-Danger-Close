@@ -9,6 +9,7 @@ import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.ryanhcode.sable.Sable;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.createmod.catnip.nbt.NBTHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -49,6 +50,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * One block of a map table. Tables join into flat squares of up to 3×3 blocks
@@ -307,11 +309,56 @@ public class MapTableBlockEntity extends SmartBlockEntity
         if (level == null)
             return;
         lastLinkTick = level.getGameTime();
+        if (level instanceof ServerLevel serverLevel)
+            chartRangedTargets(serverLevel, plot);
         if (!linked || !plot.equals(this.plot)) {
             linked = true;
             this.plot = plot;
             sendData();
         }
+    }
+
+    // --- Charting (controller, server) ---
+    // A table on a battle network keeps its maps up to date where its crew can see:
+    // around itself, as a player holding the maps there would, and around each
+    // target being ranged, as seen through the rangefinder. Unloaded ground stays stale.
+
+    /** Around each fresh rangefinder fix: the patch seen through the optics, blocks. */
+    private static final int RANGED_CHART_RADIUS = 32;
+    private int chartStep;
+
+    /** Draws a sixteenth of the area around the table each tick, as vanilla does for a held map. */
+    private void chartSurroundings(ServerLevel serverLevel) {
+        Vec3 here = worldCentre();
+        int step = chartStep++ % MapCharting.STAGGER_COLUMNS;
+        forEachChartedMap(serverLevel, data ->
+                MapCharting.chart(serverLevel, data, here.x, here.z, MapCharting.holderRadius(serverLevel, data), step));
+    }
+
+    /** Draws the patch around each target being ranged, all at once (once per poll). */
+    private void chartRangedTargets(ServerLevel serverLevel, BattlePlot plot) {
+        for (BattlePlot.RangefinderFix fix : plot.fixes())
+            forEachChartedMap(serverLevel, data -> MapCharting.chart(serverLevel, data, fix.x(), fix.z(),
+                    Math.max(1, Mth.ceil((double) RANGED_CHART_RADIUS / (1 << data.scale))), -1));
+    }
+
+    private void forEachChartedMap(ServerLevel serverLevel, Consumer<MapItemSavedData> action) {
+        for (int dx = 0; dx < width; dx++) {
+            for (int dz = 0; dz < width; dz++) {
+                MapTableBlockEntity part = partAt(dx, dz);
+                ItemStack map = part != null ? part.getMap() : ItemStack.EMPTY;
+                MapItemSavedData data = map.isEmpty() ? null : MapItem.getSavedData(map, serverLevel);
+                if (data != null)
+                    action.accept(data);
+            }
+        }
+    }
+
+    /** The middle of the table's top in the world (out of its ship, if on one). */
+    private Vec3 worldCentre() {
+        Vec3 centre = new Vec3(worldPosition.getX() + width / 2.0, worldPosition.getY() + 1, worldPosition.getZ() + width / 2.0);
+        SubLevel ship = level != null ? Sable.HELPER.getContaining(level, centre) : null;
+        return ship != null ? ship.logicalPose().transformPosition(centre) : centre;
     }
 
     /** Rangefinder fixes and gun ranges to draw; empty unless on a battle network with a Ballistic Computer. */
@@ -442,6 +489,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
             return;
         if (level.getGameTime() % MAP_SYNC_INTERVAL_TICKS == 0)
             syncMapsToPlayers();
+        if (linked && level instanceof ServerLevel serverLevel)
+            chartSurroundings(serverLevel);
         if (linked && level.getGameTime() - lastLinkTick > LINK_TIMEOUT_TICKS) {
             linked = false;
             plot = BattlePlot.EMPTY;

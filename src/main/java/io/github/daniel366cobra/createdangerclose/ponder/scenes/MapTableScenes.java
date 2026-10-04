@@ -174,6 +174,20 @@ public final class MapTableScenes {
                 .attachKeyFrame()
                 .text("Green: spotters, players out in the field carrying a copy of one of the maps");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        // Charting.
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(onChart(controller, SHIP_U, SHIP_V))
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("While connected, the table keeps its maps up to date around itself, as a player holding them would...");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(onChart(controller, FIX_U, FIX_V))
+                .placeNearTarget()
+                .text("...and around each target being ranged. Ground out of loaded range stays as last seen");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 
     /** A point on the table's top, at a fraction of its chart (north-west = 0, 0). */

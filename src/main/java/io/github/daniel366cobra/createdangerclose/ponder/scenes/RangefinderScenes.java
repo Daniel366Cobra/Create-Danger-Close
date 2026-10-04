@@ -170,6 +170,12 @@ public final class RangefinderScenes {
                 .text("On the Battle Network, its target goes to the Ballistic Computer");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(util.vector().blockSurface(eastLens, Direction.SOUTH))
+                .placeNearTarget()
+                .text("Map Tables on the network chart the ground around what it ranges onto their maps");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
         // Damage and repair, on the assembled tube: first turn it so the lenses
         // face the viewer. The pointers then follow the lens to where it turned.
         scene.world().rotateBearing(bearing, LENS_TURN_DEG, LENS_TURN_TICKS);
