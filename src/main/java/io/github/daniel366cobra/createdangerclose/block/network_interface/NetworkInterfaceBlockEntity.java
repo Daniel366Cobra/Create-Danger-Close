@@ -209,6 +209,15 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             CannonReading.setFixedGunFuze(mount, wanted, level.registryAccess());
     }
 
+    /** The map table this interface faces (its controller), if any. */
+    @Nullable
+    public MapTableBlockEntity getFacedMapTable() {
+        if (level == null || !(reading instanceof SensorReading.MapTarget))
+            return null;
+        BlockPos facing = worldPosition.relative(getBlockState().getValue(FACING));
+        return level.getBlockEntity(facing) instanceof MapTableBlockEntity table ? table.getControllerBE() : null;
+    }
+
     /** The fire control computer this interface faces and drives, if any. */
     @Nullable
     public BallisticComputerBlockEntity getLinkedComputer() {

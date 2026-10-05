@@ -12,6 +12,8 @@ public class CServer extends CDCConfigBase {
             "Upkeep: dust on lenses, lubrication of mechanisms");
     public final FireControl fireControl = nested(0, FireControl::new,
             "Aiming and firing the guns");
+    public final DangerClose dangerClose = nested(0, DangerClose::new,
+            "Holding fire that would land on your own side until confirmed");
     public final Rangefinder rangefinder = nested(0, Rangefinder::new,
             "Rangefinder accuracy and reach");
     public final MapTable mapTable = nested(0, MapTable::new,
@@ -104,6 +106,42 @@ public class CServer extends CDCConfigBase {
         @Override
         public String getName() {
             return "fireControl";
+        }
+    }
+
+    public static class DangerClose extends CDCConfigBase {
+        public final ConfigBool allowDangerClose = b(true, "allowDangerClose",
+                "Whether a salvo that would land near your own guns, spotters or ships waits for a",
+                "second press of the fire button to confirm it.");
+        public final ConfigDouble confirmSeconds = d(5, 1, 30, "confirmSeconds",
+                "[in seconds]", "How long after the warning a second press fires the salvo.");
+        public final DangerZones zones = nested(0, DangerZones::new,
+                "How far from where each kind of shell bursts is dangerous");
+
+        @Override
+        public String getName() {
+            return "dangerClose";
+        }
+    }
+
+    public static class DangerZones extends CDCConfigBase {
+        public final ConfigDouble armorPiercingRadius = d(8, 0, 64, "armorPiercingRadius",
+                "[in blocks]", "How far from where it bursts an armour-piercing shell is dangerous.");
+        public final ConfigDouble fluidShellRadius = d(9, 0, 64, "fluidShellRadius",
+                "[in blocks]", "How far from where it bursts a fluid shell is dangerous.");
+        public final ConfigDouble highExplosiveRadius = d(13, 0, 64, "highExplosiveRadius",
+                "[in blocks]", "How far from where it bursts a high-explosive shell (or mortar shell) is dangerous.");
+        public final ConfigDouble otherShellRadius = d(3, 0, 64, "otherShellRadius",
+                "[in blocks]", "How far from where it lands anything without a burst is dangerous",
+                "(solid and armour-piercing shot, mortar stones, smoke, grapeshot).");
+        public final ConfigDouble shrapnelConeAngle = d(30, 1, 90, "shrapnelConeAngle",
+                "[in degrees]", "How wide the cone of balls a shrapnel shell throws forward is, either side of its path.");
+        public final ConfigDouble shrapnelConeLength = d(32, 0, 256, "shrapnelConeLength",
+                "[in blocks]", "How far forward of its burst a shrapnel shell's balls are dangerous.");
+
+        @Override
+        public String getName() {
+            return "zones";
         }
     }
 

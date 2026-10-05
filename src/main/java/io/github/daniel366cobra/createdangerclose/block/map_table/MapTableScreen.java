@@ -112,8 +112,9 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
 
                 pose.pushPose();
                 pose.translate(cellX, cellY, 1);
-                pose.scale(cell / 128f, cell / 128f, 1);
-                // The map quad faces away from the GUI camera; draw both sides.
+                // Depth flipped: the map quad faces away from the GUI camera, and vanilla stacks the
+                // markers just behind the map's face, which here would hide them under the paper.
+                pose.scale(cell / 128f, cell / 128f, -1);
                 RenderSystem.disableCull();
                 MapTableMaps.render(pose, graphics.bufferSource(), map, LightTexture.FULL_BRIGHT);
                 graphics.flush();

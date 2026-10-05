@@ -24,6 +24,7 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
 import io.github.daniel366cobra.createdangerclose.api.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.Direction;
@@ -36,14 +37,18 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.saveddata.maps.MapId;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaterniond;
 import org.joml.Quaterniondc;
@@ -57,6 +62,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YAW;
@@ -139,7 +145,17 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private final Map<BlockPos, Double> passengerRange = new HashMap<>();
 
     /** What a salvo order did: guns fired, and guns held back (no solution, or not yet on target). */
-    public record SalvoResult(int fired, int held) {}
+    public record SalvoResult(int fired, int held, boolean awaitingConfirmation) {
+        public SalvoResult(int fired, int held) {
+            this(fired, held, false);
+        }
+    }
+
+    // Danger close (server): the guns whose shells would land near our own side this poll,
+    // where our own side stands (world), and when a warned salvo was armed (-1: not armed).
+    private final Set<BlockPos> dangerCloseGuns = new HashSet<>();
+    private final List<Vec3> friendlies = new ArrayList<>();
+    private long dangerArmedTick = -1;
 
     // --- Sensor gates: what is present on the battle network ---
     private int gimbalCount = 0;
@@ -334,6 +350,19 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public SalvoResult fireSalvo() {
         if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
             return new SalvoResult(0, 0);
+        // Danger close: a gun about to fire would land near our own side. The first press only
+        // warns; a second within the confirmation window fires.
+        CServer.DangerClose dangerConfig = CDCConfig.server().dangerClose;
+        boolean danger = false;
+        for (BlockPos mountPos : dangerCloseGuns)
+            danger |= isOnTarget(mountPos);
+        long now = level.getGameTime();
+        if (danger && dangerConfig.allowDangerClose.get() && (dangerArmedTick < 0
+                || now - dangerArmedTick > dangerConfig.confirmSeconds.get() * 20)) {
+            dangerArmedTick = now;
+            return new SalvoResult(0, barrels.size(), true);
+        }
+        dangerArmedTick = -1;
         int fired = 0, held = 0;
         for (BlockPos mountPos : barrels.keySet()) {
             if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos))
@@ -595,11 +624,26 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         Map<BlockPos, SensorReading.Rangefinder> rangefinderReadings = new HashMap<>();
         List<RangefinderBearingBlockEntity> rangefinders = new ArrayList<>();
+        // Our own side, for danger close: the computer, and the spotters (the guns join later).
+        friendlies.clear();
+        Set<MapId> plottedMaps = new HashSet<>();
+        friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(worldPosition)));
         SensorReading.MapTarget mapTarget = null;
 
         for (KineticBlockEntity member : network.members.keySet()) {
-            if (member instanceof RangefinderBearingBlockEntity rangefinder)
+            if (member instanceof RangefinderBearingBlockEntity rangefinder) {
                 rangefinders.add(rangefinder);
+                friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(rangefinder.getBlockPos())));
+            }
+            // Every crew station (a console, a map table, a sensor) is reached through an
+            // interface: where the interfaces are, people stand. And a map table's maps say
+            // where friendlies carrying them are.
+            if (member instanceof NetworkInterfaceBlockEntity station) {
+                friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(station.getBlockPos())));
+                MapTableBlockEntity table = station.getFacedMapTable();
+                if (table != null)
+                    plottedMaps.addAll(table.getMapIds());
+            }
             if (!(member instanceof SensorReading.Provider provider)) continue;
 
             // A jostled interface reading the ship's attitude, or driving the computer, skews
@@ -674,6 +718,21 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : FireControlStatus.STANDBY);
         }
 
+        // Players carrying one of the plotted maps: plotted friendlies.
+        if (!plottedMaps.isEmpty())
+            for (Player player : level.players())
+                if (carriesAnyOf(player, plottedMaps))
+                    friendlies.add(player.position());
+    }
+
+    private static boolean carriesAnyOf(Player player, Set<MapId> maps) {
+        Inventory inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            MapId id = inventory.getItem(slot).get(DataComponents.MAP_ID);
+            if (id != null && maps.contains(id))
+                return true;
+        }
+        return false;
     }
 
     private boolean isFresh(SensorReading.Rangefinder reading) {
@@ -909,6 +968,30 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         for (Gun gun : guns)
             barrels.put(gun.pos(), gun.mount());
 
+        // Danger close: which guns would land near our own side (their pivots join the list).
+        List<SubLevel> hulls = new ArrayList<>();
+        SubLevel ownHull = level != null ? Sable.HELPER.getContaining(level, worldPosition) : null;
+        if (ownHull != null)
+            hulls.add(ownHull);
+        for (Gun gun : guns) {
+            SubLevel standsOn = subLevelOf(gun.mount());
+            if (standsOn != null && !hulls.contains(standsOn))
+                hulls.add(standsOn);
+            for (Joint joint : chains.get(gun.pos())) {
+                SubLevel under = Sable.HELPER.getContaining(level, joint.swivel().swivelPos());
+                if (under != null && !hulls.contains(under))
+                    hulls.add(under);
+            }
+            Vector3d pivot = launchPivot(gun.mount(), subLevelOf(gun.mount()));
+            friendlies.add(new Vec3(pivot.x, pivot.y, pivot.z));
+        }
+        dangerCloseGuns.clear();
+        for (Gun gun : guns) {
+            FireSolution aim = aimCache.get(gun.pos());
+            if (aim != null && aim.valid() && isDangerClose(gun.mount(), hulls))
+                dangerCloseGuns.add(gun.pos());
+        }
+
         List<BattlePlot.GunRange> ranges = new ArrayList<>();
         for (Gun gun : guns) {
             double[] elevation = elevationLimits(gun, chains.get(gun.pos()));
@@ -1113,6 +1196,57 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return new double[]{start, dial.length()};
         }
         return new double[]{0, 360};
+    }
+
+    /**
+     * Whether this gun's shell would land near our own side: within its burst radius of
+     * a friendly (our guns, spotters, the computer) or a hull we stand on. A shrapnel shell
+     * bursts at the target and throws its balls on in a cone along its path, so for it
+     * the danger is a forward cone (and a small bubble at the burst).
+     */
+    private boolean isDangerClose(ServoStatus.MountSnapshot mount, List<SubLevel> hulls) {
+        if (!hasTarget || !mount.hasShell() || mount.shellType() == null)
+            return false;
+        CServer.DangerZones config = CDCConfig.server().dangerClose.zones;
+        Vec3 target = new Vec3(targetX, targetY, targetZ);
+        String shell = mount.shellType().getPath();
+
+        Predicate<Vec3> endangered;
+        if (shell.contains("shrapnel")) {
+            Vector3d pivot = launchPivot(mount, subLevelOf(mount));
+            Vec3 path = target.subtract(pivot.x, pivot.y, pivot.z).normalize();
+            double cos = Math.cos(Math.toRadians(config.shrapnelConeAngle.get()));
+            double length = config.shrapnelConeLength.get(), bubble = config.otherShellRadius.get();
+            endangered = point -> {
+                Vec3 offset = point.subtract(target);
+                double distance = offset.length();
+                return distance <= bubble || distance <= length && offset.normalize().dot(path) >= cos;
+            };
+        } else {
+            double radius = shell.contains("he_shell") || shell.contains("mortar_shell") ? config.highExplosiveRadius.get()
+                    : shell.contains("fluid_shell") ? config.fluidShellRadius.get()
+                    : shell.contains("ap_shell") ? config.armorPiercingRadius.get()
+                    : config.otherShellRadius.get();
+            endangered = point -> point.distanceTo(target) <= radius;
+        }
+
+        for (Vec3 friendly : friendlies)
+            if (endangered.test(friendly))
+                return true;
+        for (SubLevel hull : hulls) {
+            // The hull's nearest point to the burst.
+            var bounds = hull.boundingBox();
+            Vec3 nearest = new Vec3(Mth.clamp(target.x, bounds.minX(), bounds.maxX()),
+                    Mth.clamp(target.y, bounds.minY(), bounds.maxY()), Mth.clamp(target.z, bounds.minZ(), bounds.maxZ()));
+            if (endangered.test(nearest))
+                return true;
+        }
+        return false;
+    }
+
+    /** Whether some gun's next shell would land near our own side (last poll). */
+    public boolean isDangerClose() {
+        return !dangerCloseGuns.isEmpty();
     }
 
     /** Whether this bearing lies on its side, tilting a cradle: its dial reads elevation. */
