@@ -47,7 +47,8 @@
         "plunging": "Trajectory: Plunging fire"
       },
       "no_guns": "No guns on the network",
-      "salvo": "Salvo: %s fired, %s held (no solution or not on target)",
+      "salvo": "Salvo: %s fired, %s held",
+      "danger_close": "DANGER CLOSE: Press again within %ss to confirm",
       "fuze_offset": "Fuze correction: %s s"
     },
     "navigation_console": {

@@ -48,8 +48,10 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -343,6 +345,20 @@ public class MapTableBlockEntity extends SmartBlockEntity
         for (BattlePlot.RangefinderFix fix : plot.fixes())
             forEachChartedMap(serverLevel, data -> MapCharting.chart(serverLevel, data, fix.x(), fix.z(),
                     Math.max(1, Mth.ceil((double) radius / (1 << data.scale))), -1));
+    }
+
+    /** The maps laid on this table (controller). */
+    public Set<MapId> getMapIds() {
+        Set<MapId> ids = new HashSet<>();
+        for (int dx = 0; dx < width; dx++) {
+            for (int dz = 0; dz < width; dz++) {
+                MapTableBlockEntity part = partAt(dx, dz);
+                MapId id = part != null ? part.getMap().get(DataComponents.MAP_ID) : null;
+                if (id != null)
+                    ids.add(id);
+            }
+        }
+        return ids;
     }
 
     private void forEachChartedMap(ServerLevel serverLevel, Consumer<MapItemSavedData> action) {

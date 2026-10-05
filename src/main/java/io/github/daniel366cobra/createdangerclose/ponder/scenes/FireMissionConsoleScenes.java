@@ -201,6 +201,29 @@ public final class FireMissionConsoleScenes {
         fire(scene, util, TRAVERSE_DEG + RETRAIN_DEG, DIRECT_DEG);
         scene.idle(30);
 
+        // Danger close: the first press only warns, the second fires.
+        scene.overlay().showControls(fireButton, Pointing.DOWN, 30).rightClick();
+        pressFireButton(scene, console);
+        scene.idle(10);
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.RED)
+                .pointAt(fireButton)
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("Danger close: if a salvo would land near your own guns, spotters or ships, the first press only warns");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showControls(fireButton, Pointing.DOWN, 30).rightClick();
+        pressFireButton(scene, console);
+        scene.idle(10);
+        fire(scene, util, TRAVERSE_DEG + RETRAIN_DEG, DIRECT_DEG);
+        scene.overlay().showText(PonderTiming.TEXT)
+                .colored(PonderPalette.GREEN)
+                .pointAt(fireButton)
+                .placeNearTarget()
+                .text("Press again within a few seconds to confirm, and it fires");
+        scene.idle(PonderTiming.AFTER_TEXT);
+
         // The fuze correction.
         scene.overlay().showControls(fuzeKnob, Pointing.DOWN, 40).scroll();
         scene.idle(10);

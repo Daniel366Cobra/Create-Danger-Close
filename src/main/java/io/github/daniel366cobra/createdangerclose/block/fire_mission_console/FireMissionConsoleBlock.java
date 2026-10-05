@@ -4,8 +4,10 @@ import com.mojang.serialization.MapCodec;
 import com.simibubi.create.foundation.block.IBE;
 import io.github.daniel366cobra.createdangerclose.block.HorizontalFacedBlock;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import net.createmod.catnip.math.VoxelShaper;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -99,7 +101,12 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
             level.blockEvent(pos, this, FireMissionConsoleBlockEntity.BUTTON_PRESS_EVENT, 0);
             BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo();
             level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
-            if (salvo.fired() + salvo.held() == 0)
+            if (salvo.awaitingConfirmation()) {
+                // Danger close: warn, and wait for a second press to confirm.
+                level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
+                player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.danger_close",
+                        Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
+            } else if (salvo.fired() + salvo.held() == 0)
                 status(player, "no_guns");
             else
                 player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.salvo",
