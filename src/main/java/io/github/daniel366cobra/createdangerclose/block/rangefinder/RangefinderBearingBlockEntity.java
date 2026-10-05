@@ -10,13 +10,20 @@ import com.simibubi.create.content.contraptions.bearing.IBearingBlockEntity;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.utility.ServerSpeedProvider;
 import dev.ryanhcode.sable.Sable;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
+import io.github.daniel366cobra.createdangerclose.api.damage.BattleDamageable;
+import io.github.daniel366cobra.createdangerclose.api.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.damage.BattleDamage;
+import io.github.daniel366cobra.createdangerclose.damage.LensDust;
 import net.createmod.catnip.math.AngleHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
@@ -26,8 +33,11 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -35,7 +45,9 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 /**
  * Trains a rangefinder tube in yaw.
@@ -51,7 +63,7 @@ import java.util.List;
  * degrees relative to the heading it was assembled at.
  */
 public class RangefinderBearingBlockEntity extends KineticBlockEntity
-        implements IBearingBlockEntity, IDisplayAssemblyExceptions, SensorReading.Provider {
+        implements IBearingBlockEntity, IDisplayAssemblyExceptions, SensorReading.Provider, BattleDamageable {
 
     // Top traverse speed: a quarter of CBC's cannon mount scale (0.0375°/tick
     // per RPM), i.e. 6°/s at 32 RPM, 48°/s at 256 RPM.
@@ -86,6 +98,13 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private static final double UNMERGED_ERROR_FACTOR = 5;
     // Error multiplier for each cracked lens (both cracked: squared).
     private static final double CRACKED_LENS_ERROR_FACTOR = 4;
+    // Error multiplier for a lens caked in dust (half as dusty: half as much more).
+    private static final double DUSTY_LENS_ERROR_FACTOR = 2;
+    private static final int DUST_INTERVAL_TICKS = 20;
+    // Dust on each lens (0 clean to 1 caked), by its place in the tube's lens list. Saved, synced.
+    private final float[] lensDust = new float[2];
+    // A blast cracks a lens within 1.5 times its radius: severity at least this.
+    private static final double LENS_CRACK_SEVERITY = 1 - 1.5 / BattleDamage.BLAST_REACH;
     private static final int MIN_VELOCITY_SAMPLES = 3;
 
     private final RangefinderSteadiness steadiness = new RangefinderSteadiness();
@@ -256,6 +275,11 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         super.tick();
         prevAngle = angle;
 
+        if (level.isClientSide)
+            emitDust();
+        else
+            tickDust();
+
         if (!level.isClientSide) {
             int signal = level.getBestNeighborSignal(worldPosition);
             if (signal != illumination) {
@@ -284,11 +308,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
         applyRotation();
 
-        if (!level.isClientSide) {
+        if (!level.isClientSide)
             tickRanging(operator);
-            if (movedContraption != null && movedContraption.getContraption() instanceof RangefinderContraption rc)
-                RangefinderDamage.checkProjectiles(this, movedContraption, rc);
-        }
     }
 
     // --- Damage ---
@@ -297,13 +318,114 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     public void initialize() {
         super.initialize();
         if (level != null && !level.isClientSide)
-            RangefinderDamage.track(this);
+            BattleDamage.track(this);
     }
 
     @Override
     public void invalidate() {
         super.invalidate();
-        RangefinderDamage.untrack(this);
+        BattleDamage.untrack(this);
+    }
+
+    // --- Dust (see LensDust) ---
+
+    /** Lets the weather work on the assembled tube's lenses, once a second. */
+    private void tickDust() {
+        if (level.getGameTime() % DUST_INTERVAL_TICKS != 0 || movedContraption == null
+                || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
+            return;
+        List<BlockPos> lenses = tube.getLenses();
+        boolean changed = false;
+        for (int i = 0; i < Math.min(lenses.size(), lensDust.length); i++) {
+            BlockPos lensWorld = BlockPos.containing(RangefinderOptics.toWorld(level,
+                    movedContraption.toGlobalVector(lenses.get(i).getCenter(), 1f)));
+            float before = lensDust[i];
+            lensDust[i] = LensDust.weather(level, lensWorld, before, DUST_INTERVAL_TICKS);
+            // Sent on in whole percent: the drift between is too slow to matter.
+            changed |= (int) (before * 100) != (int) (lensDust[i] * 100);
+        }
+        if (changed) {
+            setChanged();
+            sendData();
+        }
+    }
+
+    /** A few motes drifting off a dusty lens (client). */
+    private void emitDust() {
+        if (movedContraption == null || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
+            return;
+        List<BlockPos> lenses = tube.getLenses();
+        for (int i = 0; i < Math.min(lenses.size(), lensDust.length); i++) {
+            if (lensDust[i] < LensDust.DUSTY || level.random.nextInt(40) != 0)
+                continue;
+            Vec3 at = movedContraption.toGlobalVector(lenses.get(i).getCenter(), 0)
+                    .add(level.random.nextGaussian() * 0.3, 0.3, level.random.nextGaussian() * 0.3);
+            level.addParticle(new BlockParticleOption(ParticleTypes.FALLING_DUST, Blocks.SAND.defaultBlockState()),
+                    at.x, at.y, at.z, 0, 0, 0);
+        }
+    }
+
+    /** Dust on a lens, 0 to 1, by its place in the tube's lens list. */
+    public float getLensDust(int index) {
+        return index >= 0 && index < lensDust.length ? lensDust[index] : 0;
+    }
+
+    /** A lens's place in the assembled tube's lens list (local position), or -1. */
+    public int lensIndex(BlockPos lens) {
+        return movedContraption != null && movedContraption.getContraption() instanceof RangefinderContraption tube
+                ? tube.getLenses().indexOf(lens) : -1;
+    }
+
+    /** Wipes a lens of the assembled tube clean (local position). Returns whether it was dusty at all. */
+    public boolean cleanLens(BlockPos lens) {
+        if (movedContraption == null || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
+            return false;
+        int index = tube.getLenses().indexOf(lens);
+        if (index < 0 || index >= lensDust.length || lensDust[index] < 0.01f)
+            return false;
+        lensDust[index] = 0;
+        setChanged();
+        sendData();
+        return true;
+    }
+
+    // An assembled tube's lenses: blast or a hit cracks them (see BattleDamage).
+
+    @Override
+    @Nullable
+    public Level damageLevel() {
+        return isRemoved() ? null : level;
+    }
+
+    @Override
+    public List<DamagePart> damageParts() {
+        if (level == null || movedContraption == null
+                || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
+            return List.of();
+        ControlledContraptionEntity tubeEntity = movedContraption;
+        // World -> ship -> tube: in the tube's own frame, each lens is a unit box at its local position.
+        SubLevel ship = Sable.HELPER.getContaining(level, worldPosition);
+        UnaryOperator<Vec3> worldToTube = world -> tubeEntity.toLocalVector(
+                ship != null ? ship.logicalPose().transformPositionInverse(world) : world, 1f);
+        List<DamagePart> parts = new ArrayList<>();
+        for (BlockPos lens : tube.getLenses()) {
+            if (tube.isLensCracked(lens))
+                continue;
+            Vec3 centre = RangefinderOptics.toWorld(level, tubeEntity.toGlobalVector(lens.getCenter(), 1f));
+            parts.add(new DamagePart(lens, DamagePart.PartKind.LENS, new AABB(lens), centre, worldToTube));
+        }
+        return parts;
+    }
+
+    @Override
+    public void onBlast(DamagePart part, double severity) {
+        if (severity >= LENS_CRACK_SEVERITY)
+            crackLens((BlockPos) part.id());
+    }
+
+    @Override
+    public void onHit(DamagePart part) {
+        crackLens((BlockPos) part.id());
     }
 
     /** Cracks a lens of the assembled tube (local position), from blast or a hit. */
@@ -394,7 +516,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         double convergence = 1 + (UNMERGED_ERROR_FACTOR - 1)
                 * steadiness.getSeparation() / RangefinderSteadiness.RANGING_SEPARATION;
         double sigma = trueRange * trueRange * SIGMA_THETA_RAD / tube.getBaseline() * convergence
-                * Math.pow(CRACKED_LENS_ERROR_FACTOR, tube.getCrackedLensCount());
+                * Math.pow(CRACKED_LENS_ERROR_FACTOR, tube.getCrackedLensCount())
+                * (1 + (DUSTY_LENS_ERROR_FACTOR - 1) * lensDust[0]) * (1 + (DUSTY_LENS_ERROR_FACTOR - 1) * lensDust[1]);
         double measuredRange = Math.max(1, trueRange + level.random.nextGaussian() * sigma);
 
         tracker.update(sight.origin().add(sight.direction().scale(measuredRange)), level.getGameTime(), sigma);
@@ -612,6 +735,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         compound.putFloat("Angle", angle);
         compound.putFloat("AngularVelocity", angularVelocity);
         compound.putInt("Illumination", illumination);
+        compound.putFloat("LensDust0", lensDust[0]);
+        compound.putFloat("LensDust1", lensDust[1]);
         compound.putBoolean("HasRange", hasRange);
         compound.putFloat("Range", range);
         compound.putBoolean("HasVelocity", hasVelocity);
@@ -637,6 +762,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         angle = compound.getFloat("Angle");
         angularVelocity = compound.getFloat("AngularVelocity");
         illumination = compound.getInt("Illumination");
+        lensDust[0] = compound.getFloat("LensDust0");
+        lensDust[1] = compound.getFloat("LensDust1");
         hasRange = compound.getBoolean("HasRange");
         range = compound.getFloat("Range");
         hasVelocity = compound.getBoolean("HasVelocity");
@@ -695,6 +822,14 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                         CDCLang.builder()
                                 .add(Component.literal(line.trim()))
                                 .style(ChatFormatting.RED)
+                                .forGoggles(tooltip);
+                }
+                if (Math.max(lensDust[0], lensDust[1]) >= LensDust.DUSTY) {
+                    for (String line : Component.translatable("createdangerclose.error.dusty_lens")
+                            .getString().split("\n"))
+                        CDCLang.builder()
+                                .add(Component.literal(line.trim()))
+                                .style(ChatFormatting.GOLD)
                                 .forGoggles(tooltip);
                 }
             }

@@ -17,6 +17,7 @@ import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
+import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
 import io.github.daniel366cobra.createdangerclose.api.ballistics.BallisticSolver;
@@ -131,6 +132,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private static final double PARALLEL_AXES_COS = 0.98;
     // A barrel this close to a bearing's axis (squared sine) cannot be swung by it.
     private static final double ALONG_AXIS_SQ = 1e-4;
+    // The computer's health record, and the bias its jostled cabinets and interfaces add to
+    // every aim (degrees; found anew each poll).
+    private EquipmentHealth health;
+    private float bankBiasYaw, bankBiasPitch;
     // A gun is on target when its barrel points within this of its solution.
     private static final double ON_TARGET_DEG = 0.5;
     // A gun riding bearings laid for another gun (side by side on one cradle) fires when
@@ -241,7 +246,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     @Override
-    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.MECHANISM, true)
+                .lubricated(() -> panelNetworkRpm, () -> isPowered)
+                .sharingLubricationWith(() -> ComputerBank.scan(level, worldPosition).members()));
+    }
 
     /**
      * The battle network: that of the interface driving this computer. Looked
@@ -276,7 +285,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         lastLinkTick = level.getGameTime();
         isPowered = true;
         scanBank();
-        if (bankConflict) {
+        // A broken or seized computer works out nothing.
+        if (bankConflict || health.isOutOfOrder()) {
             invalidateData();
             clearServos();
         } else {
@@ -294,6 +304,16 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         modules.clear();
         modules.addAll(scan.modules());
         bankConflict = scan.cores().size() > 1;
+        // Every jostled cabinet throws the computation off a little: their biases add up.
+        bankBiasYaw = 0;
+        bankBiasPitch = 0;
+        for (BlockPos member : scan.members()) {
+            EquipmentHealth memberHealth = EquipmentHealth.at(level, member);
+            if (memberHealth != null) {
+                bankBiasYaw += memberHealth.biasYaw();
+                bankBiasPitch += memberHealth.biasPitch();
+            }
+        }
     }
 
     // --- Fire mission (from Fire Mission Consoles) ---
@@ -501,6 +521,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     /** Eases the panel's moving parts towards the synced readings (client). */
     private void tickPanel() {
+        // Broken or seized: the dials stand frozen where they stopped.
+        if (health.isOutOfOrder()) {
+            for (LerpedFloat value : new LerpedFloat[]{bearingNeedle, rangeCounter, camAngle, camFollower})
+                ComputerModuleBlockEntity.hold(value);
+            return;
+        }
         bearingNeedle.chase(panelBearingDeg, PANEL_CHASE_SPEED, LerpedFloat.Chaser.EXP);
         rangeCounter.chase(panelRange, PANEL_CHASE_SPEED, LerpedFloat.Chaser.EXP);
         camAngle.chase(panelElevationDeg, PANEL_CHASE_SPEED, LerpedFloat.Chaser.EXP);
@@ -573,6 +599,16 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             if (member instanceof RangefinderBearingBlockEntity rangefinder)
                 rangefinders.add(rangefinder);
             if (!(member instanceof SensorReading.Provider provider)) continue;
+
+            // A jostled interface reading the ship's attitude, or driving the computer, skews
+            // every aim as a jostled cabinet does.
+            if (member instanceof NetworkInterfaceBlockEntity networkInterface
+                    && (provider.getSensorReading() instanceof SensorReading.Gimbal
+                    || provider.getSensorReading() instanceof SensorReading.NavHeading
+                    || provider.getSensorReading() instanceof SensorReading.Computer)) {
+                bankBiasYaw += networkInterface.getHealth().biasYaw();
+                bankBiasPitch += networkInterface.getHealth().biasPitch();
+            }
 
             switch (provider.getSensorReading()) {
                 case SensorReading.Gimbal ignored -> gimbalCount++;
@@ -1405,6 +1441,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         Vector3d shipDir = shipToWorld.transformInverse(worldDir, new Vector3d());
         double shipPitchDeg = pitchOf(shipDir);
         double shipYawDeg = yawOf(shipDir);
+        // Jostled cabinets put every aim off by their bias.
+        shipPitchDeg += bankBiasPitch;
+        shipYawDeg += bankBiasYaw;
 
         boolean outOfArc = ownPitchDrive && (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()
                 || !pitchServo.limits().containsElevation(shipPitchDeg));
@@ -1672,6 +1711,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         CDCLang.builder()
                 .add(Component.translatable("createdangerclose.ballistic_computer.title"))
                 .forGoggles(tooltip);
+        health.addToGoggleTooltip(tooltip);
 
         if (!isPowered) {
             CDCLang.builder()

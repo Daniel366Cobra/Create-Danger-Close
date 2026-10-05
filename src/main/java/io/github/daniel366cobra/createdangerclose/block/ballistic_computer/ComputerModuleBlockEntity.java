@@ -1,9 +1,13 @@
 package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
+import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import io.github.daniel366cobra.createdangerclose.CDCLang;
+import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import net.createmod.catnip.animation.LerpedFloat;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -16,7 +20,7 @@ import java.util.List;
  * follows the Ballistic Computer of its bank and animates what that computer
  * is doing; the server never ticks it for anything.
  */
-public class ComputerModuleBlockEntity extends SmartBlockEntity {
+public class ComputerModuleBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
 
     // How often the module looks its computer up again (the bank may change).
     private static final int COMPUTER_LOOKUP_INTERVAL_TICKS = 10;
@@ -57,6 +61,7 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity {
     private static final float RING_SECONDS_PER_TURN = 30;
     private static final float RING_EASING = 0.2f;
 
+    private EquipmentHealth health;
     @Nullable private BlockPos computerPos;
     private int ticksToLookup;
 
@@ -81,7 +86,26 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity {
     }
 
     @Override
-    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        // Turned by the bank's computer: worn, and able to seize, as fast as it runs.
+        behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.MECHANISM, true)
+                .lubricated(() -> {
+                    BallisticComputerBlockEntity computer = ComputerBank.findComputer(level, worldPosition);
+                    return computer != null ? computer.getNetworkRpm() : 0f;
+                }, () -> {
+                    BallisticComputerBlockEntity computer = ComputerBank.findComputer(level, worldPosition);
+                    return computer != null && computer.isPowered();
+                })
+                .sharingLubricationWith(() -> ComputerBank.scan(level, worldPosition).members()));
+    }
+
+    /** The module's name and condition. */
+    @Override
+    public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+        CDCLang.builder().add(getBlockState().getBlock().getName()).forGoggles(tooltip);
+        health.addConditionToGoggleTooltip(tooltip);
+        return true;
+    }
 
     @Override
     public void tick() {
@@ -93,6 +117,11 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity {
             ticksToLookup = COMPUTER_LOOKUP_INTERVAL_TICKS;
             BallisticComputerBlockEntity found = ComputerBank.findComputer(level, worldPosition);
             computerPos = found != null ? found.getBlockPos() : null;
+        }
+        // Broken or seized: the mechanism stands frozen where it stopped.
+        if (health.isOutOfOrder()) {
+            freeze();
+            return;
         }
         BallisticComputerBlockEntity computer = computerPos != null
                 && level.getBlockEntity(computerPos) instanceof BallisticComputerBlockEntity be ? be : null;
@@ -213,6 +242,21 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity {
     }
 
     /** A part that keeps turning: its angle, kept within ±180° and interpolated the short way. */
+    /** Holds every moving part where it is (client). */
+    private void freeze() {
+        for (Spinner spinner : new Spinner[]{differential, disk, ball, outputShaft})
+            spinner.turn(0);
+        for (LerpedFloat value : new LerpedFloat[]{differentialRate, trackingFlag, carriage, holdNeedle,
+                coincidenceSpread, fuzeTime})
+            hold(value);
+    }
+
+    /** Keeps a chased value where it is: chasing itself, it stops. */
+    static void hold(LerpedFloat value) {
+        value.chase(value.getValue(), 1, LerpedFloat.Chaser.EXP);
+        value.tickChaser();
+    }
+
     private static final class Spinner {
         private float angle, previous;
 

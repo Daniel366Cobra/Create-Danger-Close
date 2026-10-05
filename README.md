@@ -18,7 +18,7 @@ Create Danger Close (CDC) implements the following gameplay mechanics:
 
 ## Usage
 
-This addon is best used for PvP multiplayer combat: just like in real life, effective gunnery requires coordination. CDC aims to preserve the thrill of it while avoiding the tedium.
+This addon is best used for PvP multiplayer combat: just like in real life, effective gunnery requires coordination and cooperation. CDC aims to preserve the thrill of it while avoiding the tedium.
 
 ## Dependencies
 

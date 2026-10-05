@@ -1,5 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
+import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
@@ -7,8 +8,10 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 
@@ -25,8 +28,9 @@ public final class ComputerBank {
     /**
      * @param modules the kinds of module in the bank
      * @param cores   the Ballistic Computers touching it; more than one is a conflict
+     * @param members every block of the bank: its modules, and the computers touching them
      */
-    public record Scan(Set<ComputerModule> modules, Set<BlockPos> cores) {}
+    public record Scan(Set<ComputerModule> modules, Set<BlockPos> cores, List<BlockPos> members) {}
 
     private ComputerBank() {}
 
@@ -39,6 +43,7 @@ public final class ComputerBank {
     public static Scan scan(Level level, BlockPos start) {
         Set<ComputerModule> modules = EnumSet.noneOf(ComputerModule.class);
         Set<BlockPos> cores = new HashSet<>();
+        List<BlockPos> members = new ArrayList<>();
         Set<BlockPos> visited = new HashSet<>();
         Queue<BlockPos> frontier = new ArrayDeque<>();
         frontier.add(start);
@@ -51,12 +56,17 @@ public final class ComputerBank {
             boolean isCore = state.getBlock() instanceof BallisticComputerBlock;
             if (isCore) {
                 cores.add(pos);
+                members.add(pos);
                 if (!pos.equals(start))
                     continue;
             } else if (state.getBlock() instanceof ComputerModuleBlock module) {
                 if (++moduleCount > MAX_MODULES)
                     break;
-                modules.add(module.getModule());
+                members.add(pos);
+                // A broken or seized module does not count: its capability is lost.
+                EquipmentHealth health = EquipmentHealth.at(level, pos);
+                if (health == null || !health.isOutOfOrder())
+                    modules.add(module.getModule());
             } else {
                 continue;
             }
@@ -66,7 +76,7 @@ public final class ComputerBank {
                     frontier.add(next);
             }
         }
-        return new Scan(modules, cores);
+        return new Scan(modules, cores, members);
     }
 
     /**

@@ -70,7 +70,7 @@ public class CannonServoInputBlockEntity extends KineticBlockEntity implements C
     }
 
     @Nullable
-    private CannonServoOutputBlockEntity getAdjacentOutput() {
+    public CannonServoOutputBlockEntity getAdjacentOutput() {
         if (level == null) return null;
         BlockPos outputPos = worldPosition.relative(getBlockState().getValue(FACING));
         return level.getBlockEntity(outputPos) instanceof CannonServoOutputBlockEntity out ? out : null;

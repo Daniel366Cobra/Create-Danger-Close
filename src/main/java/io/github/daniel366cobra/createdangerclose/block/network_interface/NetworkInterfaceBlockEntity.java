@@ -21,6 +21,8 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonReading;
+import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
@@ -55,11 +57,24 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
     public static final float MIN_OPERATING_RPM = 32.0f;
 
+    private EquipmentHealth health;
     private SensorReading reading = new SensorReading.None();
     private boolean isPowered = false;
 
     public NetworkInterfaceBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
+    }
+
+    @Override
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        super.addBehaviours(behaviours);
+        behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.COG, true)
+                .lubricated(() -> Math.abs(getSpeed()), () -> isPowered));
+    }
+
+    /** Its health record: a jostled interface skews what it passes on (see the computer). */
+    public EquipmentHealth getHealth() {
+        return health;
     }
 
     @Override
@@ -91,6 +106,11 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     }
 
     void pollSensor() {
+        // Broken or seized: passes nothing on, and drives nothing.
+        if (health.isOutOfOrder()) {
+            setSensorReading(new SensorReading.None());
+            return;
+        }
         BlockPos checkPos = worldPosition.relative(getBlockState().getValue(FACING));
         if (!level.isLoaded(checkPos)) {
             setSensorReading(new SensorReading.None());
@@ -163,7 +183,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     @Nullable
     public ServoStatus getServoStatus() {
         FixedCannonMountBlockEntity mount = facedFixedMount();
-        if (mount == null)
+        if (mount == null || health.isOutOfOrder())
             return null;
         ServoStatus.MountSnapshot gun = CannonReading.readFixedGun(mount, level.registryAccess());
         return new ServoStatus(worldPosition, ServoAxis.FIXED_GUN, isPowered,
@@ -352,6 +372,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         CDCLang.builder()
                 .add(Component.translatable("createdangerclose.network_interface.title"))
                 .forGoggles(tooltip);
+        health.addToGoggleTooltip(tooltip);
 
         CDCLang.builder()
                 .add(Component.translatable("createdangerclose.network_interface.attached_sensor"))

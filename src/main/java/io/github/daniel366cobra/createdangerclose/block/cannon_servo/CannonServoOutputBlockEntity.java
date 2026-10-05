@@ -17,6 +17,9 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
+import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -73,7 +76,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     // speeds. Its sign covers gearboxes and gearshifts, its magnitude any
     // gearing. NaN until first measured.
     private float transmissionRatio = Float.NaN;
-    private float lastError = 0f;
 
     public static final class SlavedMount {
         public final BlockPos mountPos;
@@ -140,11 +142,22 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     private int swivelSense = 1;
     // Where what this servo drives stands on its dial now (synced), for the dial's needle.
     private float dialAngle;
+    private EquipmentHealth health;
     private ServoAxis detectedAxis = ServoAxis.NONE;
     private boolean isPowered = false;
 
     public CannonServoOutputBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
+    }
+
+    @Override
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        super.addBehaviours(behaviours);
+        // Its gears span both halves, the input and this output.
+        behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.COG, false)
+                .lubricated(() -> Math.abs(getInputSpeed()), () -> isPowered)
+                .withBox(() -> new AABB(worldPosition).minmax(
+                        new AABB(worldPosition.relative(getBlockState().getValue(FACING).getOpposite())))));
     }
 
     @Override
@@ -211,6 +224,14 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     }
 
     private void applyControl() {
+        // A broken cog: the servo drives nothing, and the mount stays locked where it is.
+        if (health.isOutOfOrder()) {
+            for (SlavedMount sm : slavedMounts)
+                if (sm.iface != null)
+                    sm.iface.setSequencedAngleLimit(0);
+            applyGeneratedSpeed(0);
+            return;
+        }
         CannonServoInputBlockEntity input = getAdjacentInput();
         FireSolution command = (input != null) ? input.getCurrentCommand() : null;
 
@@ -241,7 +262,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     // ------------------------------------------------------------------
 
     private void applyIdleControl() {
-        lastError = 0f;
         for (SlavedMount sm : slavedMounts) {
             if (sm.iface != null) {
                 sm.iface.setSequencedAngleLimit(0);
@@ -282,7 +302,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 rate = 0;
             error = sign * arc.turnWithin(sign * current, sign * target);
         }
-        lastError = error;
         if (Math.abs(error) < SNAP_THRESHOLD_DEG && Math.abs(rate) < HOLD_RATE_DEG_PER_TICK) {
             applyGeneratedSpeed(0);
             return;
@@ -365,7 +384,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 rate = 0;
             error = arc.turnWithin(sm.currentAngle - sm.facingYaw, target - sm.facingYaw);
         }
-        lastError = error;
 
         // On target and not tracking: lock the mount.
         if (Math.abs(error) < SNAP_THRESHOLD_DEG && Math.abs(rate) < HOLD_RATE_DEG_PER_TICK) {
@@ -518,8 +536,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         compound.putBoolean("IsPowered", isPowered);
         compound.putInt("detectedAxis", detectedAxis.ordinal());
-        compound.putFloat("TransmissionRatio", transmissionRatio);
-        compound.putFloat("LastError", lastError);
         compound.putFloat("SwivelAngle", shownSwivelAngle);
         compound.putFloat("SwivelTarget", shownSwivelTarget);
         compound.putBoolean("SwivelSeen", swivelSeen);
@@ -576,10 +592,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         this.swivelSeen = compound.getBoolean("SwivelSeen");
         this.dialAngle = compound.getFloat("DialAngle");
         this.swivelTilts = compound.getBoolean("SwivelTilts");
-
-        this.transmissionRatio = compound.contains("TransmissionRatio")
-                ? compound.getFloat("TransmissionRatio") : Float.NaN;
-        this.lastError = compound.getFloat("LastError");
 
         this.slavedMounts.clear();
         if (!compound.contains("Slaves")) return;
@@ -721,6 +733,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         CDCLang.builder()
                 .add(Component.translatable("createdangerclose.cannon_servo_output.title"))
                 .forGoggles(tooltip);
+        health.addToGoggleTooltip(tooltip);
 
         if (!isPowered) {
             CDCLang.builder()
@@ -775,14 +788,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         for (SlavedMount sm : slavedMounts) {
             renderMount(tooltip, sm, index++);
         }
-
-        // Debug: measured drivetrain ratio and current tracking error.
-        CDCLang.builder()
-                .add(Component.literal(Float.isNaN(transmissionRatio)
-                        ? "  [ratio: -- err: --]"
-                        : String.format("  [ratio: %.2f err: %.2f°]", transmissionRatio, lastError)))
-                .style(ChatFormatting.DARK_GRAY)
-                .forGoggles(tooltip);
 
         return true;
     }

@@ -23,7 +23,7 @@ import net.minecraft.world.phys.BlockHitResult;
  * distance between the two lenses of a tube is the rangefinder's baseline.
  *
  * <p>A lens can be {@link #CRACKED} by blast or by a shell or shrapnel ball
- * striking it (see {@link RangefinderDamage}), which badly hurts the tube's
+ * striking it (see {@link io.github.daniel366cobra.createdangerclose.damage.BattleDamage}), which badly hurts the tube's
  * accuracy until it is repaired with a glass pane. The crack is part of the
  * block state, so it survives assembling and disassembling the tube.
  */

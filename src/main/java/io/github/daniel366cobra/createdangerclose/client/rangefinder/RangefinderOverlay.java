@@ -39,6 +39,7 @@ public final class RangefinderOverlay {
 
     private static final ResourceLocation MASK = CreateDangerClose.asResource("textures/gui/rangefinder/scope_overlay.png");
     private static final ResourceLocation CRACKS = CreateDangerClose.asResource("textures/gui/rangefinder/scope_overlay_cracks.png");
+    private static final ResourceLocation DUST = CreateDangerClose.asResource("textures/gui/rangefinder/scope_overlay_dust.png");
     private static final ResourceLocation RETICLE =CreateDangerClose.asResource("textures/gui/rangefinder/scope_reticle.png");
     private static final ResourceLocation MARKER = CreateDangerClose.asResource("textures/gui/rangefinder/scope_marker.png");
     private static final ResourceLocation BRACKETS = CreateDangerClose.asResource("textures/gui/rangefinder/scope_brackets.png");
@@ -91,6 +92,18 @@ public final class RangefinderOverlay {
         // cracks as drawn, the other's mirrored left to right.
         RangefinderContraption tube = RangefinderSight.getOperatedTube();
         List<BlockPos> lenses = tube != null ? tube.getLenses() : List.of();
+        // Dust first, as thick as it lies on each lens (the second mirrored), the cracks over it.
+        RangefinderBearingBlockEntity bearing = RangefinderSight.getOperatedBearing();
+        for (int i = 0; i < lenses.size() && bearing != null; i++) {
+            float dust = bearing.getLensDust(i);
+            if (dust <= 0)
+                continue;
+            boolean mirrored = i == 1;
+            graphics.setColor(1, 1, 1, dust);
+            graphics.blit(DUST, 0, 0, MASK_PX, MASK_PX, mirrored ? MASK_PX : 0, 0,
+                    mirrored ? -MASK_PX : MASK_PX, MASK_PX, MASK_PX, MASK_PX);
+        }
+        graphics.setColor(1, 1, 1, 1);
         for (int i = 0; i < lenses.size(); i++) {
             if (!tube.isLensCracked(lenses.get(i)))
                 continue;

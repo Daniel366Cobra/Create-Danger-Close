@@ -5,11 +5,17 @@
 
     "error": {
       "network_too_slow": "This equipment's network is not rotating fast enough.",
-      "jostled_case": "This equipment has been jostled. Accuracy is reduced. \nHit with Wrench to realign.",
+      "jostled_case": "This equipment has been jostled. Accuracy is reduced. \nLeft-click with Wrench to realign.",
       "broken_cogwheel": "This equipment has a broken cog. It is out of order. \nRMB with Cogwheel to repair.",
       "broken_mechanism": "This equipment has a broken mechanism. It is out of order. \nRMB with Precision Mechanism to repair.",
       "broken_lens": "This equipment has a cracked lens. Accuracy is severely reduced. \nRMB with Glass Pane to repair.",
-      "dusty_lens": "This equipment has a dusty lens. Accuracy is reduced. \nRMB with Water Bucket to clean."
+      "dusty_lens": "This equipment has a dusty lens. Accuracy is reduced. \nRMB with Water Bucket to clean.",
+      "seized": "This mechanism has seized for want of lubrication. It is out of order. \nRMB with Honeycomb to free it."
+    },
+
+    "equipment": {
+      "working_order": "In working order",
+      "lubrication": "Lubrication: %s%%"
     },
 
     "network_interface": {
