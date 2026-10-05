@@ -3,9 +3,12 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.config.CClient;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.world.item.DyeColor;
 import org.joml.Matrix4f;
 
 /**
@@ -19,11 +22,10 @@ public final class MapTablePlot {
     // Uncertainty circles are drawn at 2σ: the fix is within them ~95% of the time.
     private static final double SIGMA_CIRCLE = 2;
 
-    private static final int RANGEFINDER_COLOR = 0xE02B5FD9;
-    private static final int GUN_COLOR = 0xE0B02E26;
+    // Line opacity; their colours are each player's (client config).
+    private static final int LINE_ALPHA = 0xE0;
 
-    // In line pixels (see render): stroke width, and dash / gap lengths along the circle.
-    private static final float LINE_WIDTH = 1;
+    // In line pixels (see render): dash / gap lengths along the circle (the stroke width: config).
     private static final float DOT = 1, DOT_GAP = 2;
     private static final float DASH = 4, DASH_GAP = 3;
     // Aim lines (a rangefinder's line of sight, a barrel's bearing): short, tight dashes.
@@ -51,10 +53,14 @@ public final class MapTablePlot {
         // World blocks to pose units.
         double scale = sheetSize / (sheet.sizeInPixels() * sheet.blocksPerPixel());
         Pen pen = new Pen(buffers.getBuffer(RenderType.textBackground()), pose.last().pose(),
-                sheetSize, lift, pixel * LINE_WIDTH, packedLight);
+                sheetSize, lift, pixel * CDCConfig.client().lineWidth.getF(), packedLight);
 
+        CClient colours = CDCConfig.client();
+        int gunRangeColor = lineColor(colours.gunRangeColor.get());
+        int gunAimColor = lineColor(colours.gunAimColor.get());
+        int rangefinderColor = lineColor(colours.rangefinderColor.get());
         for (BattlePlot.GunRange gun : plot.guns()) {
-            pen.color = GUN_COLOR;
+            pen.color = gunRangeColor;
             double x = sheet.pixelX(gun.x()) / sheet.sizeInPixels() * sheetSize;
             double y = sheet.pixelY(gun.z()) / sheet.sizeInPixels() * sheetSize;
             double radius = gun.radius() * scale;
@@ -72,12 +78,14 @@ public final class MapTablePlot {
                             pixel * DASH, pixel * DASH_GAP);
             }
             // Where the barrel points, out to the edge of its reach.
-            if (gun.hasAim())
+            if (gun.hasAim()) {
+                pen.color = gunAimColor;
                 pen.line(x, y, x + gun.aimX() * radius, y + gun.aimZ() * radius,
                         pixel * AIM_DASH, pixel * AIM_GAP);
+            }
         }
         for (BattlePlot.RangefinderFix fix : plot.fixes()) {
-            pen.color = RANGEFINDER_COLOR;
+            pen.color = rangefinderColor;
             double x = sheet.pixelX(fix.x()) / sheet.sizeInPixels() * sheetSize;
             double y = sheet.pixelY(fix.z()) / sheet.sizeInPixels() * sheetSize;
             pen.circle(x, y, SIGMA_CIRCLE * fix.sigma() * scale, pixel * DOT, pixel * DOT_GAP);
@@ -86,6 +94,11 @@ public final class MapTablePlot {
                     sheet.pixelY(fix.originZ()) / sheet.sizeInPixels() * sheetSize,
                     x, y, pixel * AIM_DASH, pixel * AIM_GAP);
         }
+    }
+
+    /** A dye's colour as a plot line: its map-friendly shade (as dyed wool and banners), slightly see-through. */
+    private static int lineColor(DyeColor dye) {
+        return LINE_ALPHA << 24 | dye.getTextureDiffuseColor() & 0xFFFFFF;
     }
 
     /** Emits thin quads, both sides, clipped to the sheet piece by piece. */

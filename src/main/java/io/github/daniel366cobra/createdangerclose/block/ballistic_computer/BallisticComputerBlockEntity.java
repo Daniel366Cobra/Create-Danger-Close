@@ -17,6 +17,8 @@ import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
+import io.github.daniel366cobra.createdangerclose.config.CServer;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
@@ -111,9 +113,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Re-solves from the muzzle where the last solve aimed the barrel: each pass
     // shrinks the launch point's error roughly by the change in aim, so two settle it.
     private static final int MUZZLE_REFINEMENT_PASSES = 2;
-    // Height difference to an absolute target a ship can still engage without an
-    // Altitude Sensor (roughly level with the target), blocks.
-    private static final double UNKNOWN_ALTITUDE_TOLERANCE = 16;
     // The frame of a gun ashore: the world itself.
     private static final Quaterniondc WORLD_FRAME = new Quaterniond();
 
@@ -136,12 +135,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // every aim (degrees; found anew each poll).
     private EquipmentHealth health;
     private float bankBiasYaw, bankBiasPitch;
-    // A gun is on target when its barrel points within this of its solution.
-    private static final double ON_TARGET_DEG = 0.5;
-    // A gun riding bearings laid for another gun (side by side on one cradle) fires when
-    // its shell would land this close to the target: the salvo's spread, about the
-    // guns' spacing, which no bearing can take out of both at once. Blocks.
-    private static final double SALVO_SPREAD = 3;
     // Per gun riding bearings laid for another gun: its range to the target, blocks.
     private final Map<BlockPos, Double> passengerRange = new HashMap<>();
 
@@ -334,8 +327,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     /**
      * Fires every gun that is ready: it has a firing solution, and its barrel
-     * has settled on it (within {@link #ON_TARGET_DEG}, whatever turns it; a gun riding
-     * bearings laid for another gun, within {@link #SALVO_SPREAD} of the target). The rest hold fire.
+     * has settled on it (within the on-target tolerance, whatever turns it; a gun riding
+     * bearings laid for another gun, within the salvo spread of the target: config). The rest hold fire.
      * Uses the last poll's solutions and barrel angles.
      */
     public SalvoResult fireSalvo() {
@@ -377,10 +370,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 : aimDirection(barrel.currentAngle(), barrel.mountYaw());
         Vector3d wanted = aimDirection(solution.pitchDeg(), solution.yawDeg());
         double off = pointing.angle(wanted);
-        if (Math.toDegrees(off) <= ON_TARGET_DEG)
+        // A gun riding bearings laid for another gun (side by side on one cradle) fires when its
+        // shell would land within the salvo spread: about the guns' spacing, which no bearing
+        // can take out of both at once.
+        CServer.FireControl config = CDCConfig.server().fireControl;
+        if (Math.toDegrees(off) <= config.onTargetTolerance.getF())
             return true;
         Double range = passengerRange.get(mountPos);
-        return range != null && off * range <= SALVO_SPREAD;
+        return range != null && off * range <= config.salvoSpread.getF();
     }
 
     /**
@@ -558,6 +555,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /** The battle network's speed, RPM; 0 while unpowered (client). */
+    /** Ponder only: the network speed its modules' mechanisms show (there is no real network there). */
+    public void setPonderNetworkRpm(float rpm) {
+        panelNetworkRpm = rpm;
+    }
+
     public float getNetworkRpm() {
         return panelNetworkRpm;
     }
@@ -1400,7 +1402,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         // ashore stands at a surveyed height, so neither needs one.
         boolean absoluteTarget = targetSource == TargetSource.MAP_TABLE || targetSource == TargetSource.NAV_TABLE;
         if (onShip(mount) && absoluteTarget && altitudeCount == 0
-                && Math.abs(targetWorld.y - pivotWorld.y) > UNKNOWN_ALTITUDE_TOLERANCE) {
+                && Math.abs(targetWorld.y - pivotWorld.y) > CDCConfig.server().fireControl.altitudeGate.getF()) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_ALTITUDE));
             return null;

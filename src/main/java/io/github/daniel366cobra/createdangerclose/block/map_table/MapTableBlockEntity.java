@@ -5,6 +5,7 @@ import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
 import net.minecraft.ChatFormatting;
 import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -309,7 +310,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         if (level == null)
             return;
         lastLinkTick = level.getGameTime();
-        if (level instanceof ServerLevel serverLevel)
+        if (level instanceof ServerLevel serverLevel && CDCConfig.server().mapTable.allowChartingAroundFixes.get())
             chartRangedTargets(serverLevel, plot);
         if (!linked || !plot.equals(this.plot)) {
             linked = true;
@@ -323,8 +324,6 @@ public class MapTableBlockEntity extends SmartBlockEntity
     // around itself, as a player holding the maps there would, and around each
     // target being ranged, as seen through the rangefinder. Unloaded ground stays stale.
 
-    /** Around each fresh rangefinder fix: the patch seen through the optics, blocks. */
-    private static final int RANGED_CHART_RADIUS = 32;
     private int chartStep;
 
     /** Draws a sixteenth of the area around the table each tick, as vanilla does for a held map. */
@@ -335,11 +334,15 @@ public class MapTableBlockEntity extends SmartBlockEntity
                 MapCharting.chart(serverLevel, data, here.x, here.z, MapCharting.holderRadius(serverLevel, data), step));
     }
 
-    /** Draws the patch around each target being ranged, all at once (once per poll). */
+    /**
+     * Draws the patch around each target being ranged, all at once (once per poll): the
+     * ground seen through the optics, out to the configured radius.
+     */
     private void chartRangedTargets(ServerLevel serverLevel, BattlePlot plot) {
+        int radius = CDCConfig.server().mapTable.rangefinderChartRadius.get();
         for (BattlePlot.RangefinderFix fix : plot.fixes())
             forEachChartedMap(serverLevel, data -> MapCharting.chart(serverLevel, data, fix.x(), fix.z(),
-                    Math.max(1, Mth.ceil((double) RANGED_CHART_RADIUS / (1 << data.scale))), -1));
+                    Math.max(1, Mth.ceil((double) radius / (1 << data.scale))), -1));
     }
 
     private void forEachChartedMap(ServerLevel serverLevel, Consumer<MapItemSavedData> action) {

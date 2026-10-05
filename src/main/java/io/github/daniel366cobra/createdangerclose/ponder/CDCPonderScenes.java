@@ -3,6 +3,7 @@ package io.github.daniel366cobra.createdangerclose.ponder;
 import com.tterrag.registrate.util.entry.ItemProviderEntry;
 import com.tterrag.registrate.util.entry.RegistryEntry;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.BallisticComputerScenes;
+import io.github.daniel366cobra.createdangerclose.ponder.scenes.BattleDamageScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.CannonServoScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.FireMissionConsoleScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.MapTableScenes;
@@ -39,12 +40,18 @@ public final class CDCPonderScenes {
         HELPER.forComponents(CDCBlocks.CANNON_SERVO_INPUT)
                 .addStoryBoard("cannon_servo", CannonServoScenes::cannonServo, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.RANGEFINDER_BEARING, CDCBlocks.RANGEFINDER_LENS, CDCBlocks.RANGEFINDER_EYEPIECE)
-                .addStoryBoard("rangefinder", RangefinderScenes::rangefinder, CDCPonderTags.FIRE_CONTROL);
+                .addStoryBoard("rangefinder", RangefinderScenes::rangefinder, CDCPonderTags.FIRE_CONTROL)
+                .addStoryBoard("rangefinder", RangefinderScenes::rangefinderUpkeep, CDCPonderTags.DAMAGE_AND_MAINTENANCE);
         HELPER.forComponents(CDCBlocks.NAVIGATION_CONSOLE)
                 .addStoryBoard("navigation_console", NavigationConsoleScenes::navigationConsole, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.FIRE_MISSION_CONSOLE)
                 .addStoryBoard("fire_mission_console", FireMissionConsoleScenes::fireMissionConsole, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.MAP_TABLE)
                 .addStoryBoard("map_table", MapTableScenes::mapTable, CDCPonderTags.FIRE_CONTROL);
+
+        // After each block's own scene: battle damage, repairs and upkeep.
+        HELPER.forComponents(CDCBlocks.BALLISTIC_COMPUTER, CDCBlocks.DIFFERENTIATOR, CDCBlocks.INTEGRATOR,
+                        CDCBlocks.CORRELATOR, CDCBlocks.FUZE_COMPUTER, CDCBlocks.NETWORK_INTERFACE, CDCBlocks.CANNON_SERVO_INPUT)
+                .addStoryBoard("battle_damage", BattleDamageScenes::battleDamage, CDCPonderTags.DAMAGE_AND_MAINTENANCE);
     }
 }

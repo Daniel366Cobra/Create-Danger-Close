@@ -17,6 +17,7 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import net.minecraft.world.phys.AABB;
@@ -50,7 +51,6 @@ import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YA
 public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         implements IHaveGoggleInformation, SensorReading.Provider {
 
-    public static final float MIN_OPERATING_RPM = 32.0f;
     private static final float KEEP_ALIVE_RPM = 1.0f;
     private static final int CLIENT_SYNC_INTERVAL_TICKS = 10;
 
@@ -66,7 +66,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     // multiplied by the cannon's elevationSign.
     private static final float PITCH_AXIS_SIGN = 1f;
     private static final float YAW_AXIS_SIGN = -1f;
-    private static final float MAX_DRIVE_RPM = 32f;
     // Fraction of the remaining error closed per tick, on top of feed-forward.
     private static final float CORRECTION_GAIN = 0.25f;
     // Below this commanded rate the mount is locked once on target.
@@ -132,8 +131,6 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     private boolean swivelSeen;
     // How far a swivel's target angle turns per tick per cog RPM (Create's convertToAngular).
     private static final float SWIVEL_DEG_PER_TICK_PER_RPM = 0.3f;
-    // A turret turns no faster than a cannon mount at the servo's full drive (1.2°/tick).
-    private static final float MAX_TRAVERSE_DEG_PER_TICK = MOUNT_DEG_PER_TICK_PER_RPM * MAX_DRIVE_RPM;
     // The limits set on the dial (synced), or null for none: see getLimits.
     @Nullable private ServoLimits limits;
     // The swivel lies on its side, tilting a cradle (synced): its dial reads elevation.
@@ -180,7 +177,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         }
 
         float inputSpeed = Math.abs(getInputSpeed());
-        isPowered = inputSpeed >= MIN_OPERATING_RPM;
+        isPowered = inputSpeed >= CDCConfig.server().fireControl.minOperatingRpm.get();
 
         pollCannonNetwork();
         measureTransmission();
@@ -309,11 +306,12 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         float facingSign = swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxisDirection()
                 == Direction.AxisDirection.POSITIVE ? 1 : -1;
         // No faster than a cannon mount traverses at full drive.
-        float angleRate = Mth.clamp(rate + CORRECTION_GAIN * error, -MAX_TRAVERSE_DEG_PER_TICK, MAX_TRAVERSE_DEG_PER_TICK);
+        float maxTraverse = MOUNT_DEG_PER_TICK_PER_RPM * maxDriveRpm();
+        float angleRate = Mth.clamp(rate + CORRECTION_GAIN * error, -maxTraverse, maxTraverse);
         float cogRpm = angleRate / (SWIVEL_DEG_PER_TICK_PER_RPM * facingSign);
         // Until the cog has turned once the transmission is unknown: start as if direct, then correct.
         float ratio = Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f ? 1 : transmissionRatio;
-        applyGeneratedSpeed(Mth.clamp(cogRpm / ratio, -MAX_DRIVE_RPM, MAX_DRIVE_RPM));
+        applyGeneratedSpeed(Mth.clamp(cogRpm / ratio, -maxDriveRpm(), maxDriveRpm()));
     }
 
     /**
@@ -335,6 +333,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         Quaterniond relative = hullOrientation.mul(bearingFacing).conjugate()
                 .mul(new Quaterniond(turret.logicalPose().orientation()).mul(plateFacing));
         return Math.toDegrees(2 * Math.atan2(relative.y(), relative.w()));
+    }
+
+    /** The fastest it drives (config); a turret traverses no faster than a mount at this speed. */
+    private static float maxDriveRpm() {
+        return CDCConfig.server().fireControl.maxServoRpm.get();
     }
 
     private void applyGeneratedSpeed(float rpm) {
@@ -406,7 +409,7 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         float angleRate = rate + CORRECTION_GAIN * error;
         float axisSign = pitch ? PITCH_AXIS_SIGN * sm.elevationSign : YAW_AXIS_SIGN;
         float mountRpm = angleRate / (MOUNT_DEG_PER_TICK_PER_RPM * axisSign);
-        float generated = Mth.clamp(mountRpm / transmissionRatio, -MAX_DRIVE_RPM, MAX_DRIVE_RPM);
+        float generated = Mth.clamp(mountRpm / transmissionRatio, -maxDriveRpm(), maxDriveRpm());
         applyGeneratedSpeed(generated);
     }
 

@@ -9,6 +9,8 @@ import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.damage.BattleDamageable;
 import io.github.daniel366cobra.createdangerclose.api.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.api.damage.Fault;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
+import io.github.daniel366cobra.createdangerclose.config.CServer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -46,11 +48,8 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
 
     public static final BehaviourType<EquipmentHealth> TYPE = new BehaviourType<>();
 
-    // A blast this severe (1 at its centre, 0 at the edge of its reach) breaks, rather than
-    // jostles: within 0.9 of its radius, about where it craters blocks.
-    private static final double BREAKING_SEVERITY = 1 - 0.9 / BattleDamage.BLAST_REACH;
-    // A jostle throws the equipment off by this much, degrees (a random direction).
-    private static final float MIN_BIAS_DEG = 0.4f, MAX_BIAS_DEG = 1.0f;
+    // A jostle throws the equipment off by between this share of the most (config) and the most.
+    private static final float MIN_BIAS_SHARE = 0.4f;
 
     /** What a heavy blow breaks in this equipment. */
     public enum Breaks { COG, MECHANISM }
@@ -62,14 +61,10 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     private final Set<Fault> faults = EnumSet.noneOf(Fault.class);
 
     // --- Lubrication: only for equipment given its network speed (see lubricated) ---
-    // It dries out over 16 days at rest, 8 at full speed (linear in RPM between), to
-    // reward powering a ship down and make high readiness cost upkeep.
+    // It dries out faster the faster its network turns (linear in RPM, to full speed), to
+    // reward powering a ship down and make high readiness cost upkeep (rates: config).
     private static final float TICKS_PER_DAY = 24000;
-    private static final float DAYS_DRY_AT_REST = 16, DAYS_DRY_AT_FULL_SPEED = 8;
     private static final float FULL_SPEED_RPM = 256;
-    // Below this, running equipment may seize: up to this often (per minute) when dry.
-    private static final float SEIZE_BELOW = 0.5f;
-    private static final float SEIZES_PER_MINUTE_DRY = 0.1f;
     private static final int MAINTENANCE_INTERVAL_TICKS = 20;
     @Nullable private Supplier<Float> networkRpm;
     private BooleanSupplier running = () -> false;
@@ -155,7 +150,8 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
             return;
         Level level = getWorld();
         float direction = level.random.nextFloat() * Mth.TWO_PI;
-        float size = Mth.lerp(level.random.nextFloat(), MIN_BIAS_DEG, MAX_BIAS_DEG);
+        float maxBias = CDCConfig.server().battleDamage.maxJostleBias.getF();
+        float size = maxBias * Mth.lerp(level.random.nextFloat(), MIN_BIAS_SHARE, 1);
         biasYaw = size * Mth.cos(direction);
         biasPitch = size * Mth.sin(direction);
         faults.add(Fault.JOSTLED);
@@ -180,6 +176,14 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         return true;
     }
 
+    /** Ponder only: sets or clears a fault quietly (no sound, nothing to sync). */
+    public void setPonderFault(Fault fault, boolean present) {
+        if (present)
+            faults.add(fault);
+        else
+            faults.remove(fault);
+    }
+
     private void changed() {
         blockEntity.setChanged();
         blockEntity.sendData();
@@ -192,11 +196,12 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         super.tick();
         Level level = getWorld();
         if (!level.isClientSide) {
-            if (networkRpm != null && level.getGameTime() % MAINTENANCE_INTERVAL_TICKS == 0)
+            if (networkRpm != null && level.getGameTime() % MAINTENANCE_INTERVAL_TICKS == 0
+                    && CDCConfig.server().maintenance.lubrication.allowWearAndSeizing.get())
                 wearLubrication();
             return;
         }
-        if (faults.isEmpty())
+        if (faults.isEmpty() || !CDCConfig.client().damageParticles.get())
             return;
         RandomSource random = level.random;
         AABB part = box.get();
@@ -219,11 +224,13 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     /** Dries a little, by its network's speed; running dry, it may seize. */
     private void wearLubrication() {
         float rpm = Math.min(Math.abs(networkRpm.get()), FULL_SPEED_RPM);
-        float daysDry = Mth.lerp(rpm / FULL_SPEED_RPM, DAYS_DRY_AT_REST, DAYS_DRY_AT_FULL_SPEED);
+        CServer.Lubrication config = CDCConfig.server().maintenance.lubrication;
+        float daysDry = Mth.lerp(rpm / FULL_SPEED_RPM, config.daysDryAtRest.getF(), config.daysDryAtFullSpeed.getF());
+        float seizeBelow = config.seizeBelow.getF();
         float before = lubrication;
         lubrication = Math.max(0, lubrication - MAINTENANCE_INTERVAL_TICKS / (daysDry * TICKS_PER_DAY));
-        if (running.getAsBoolean() && lubrication < SEIZE_BELOW && !faults.contains(Fault.SEIZED)) {
-            float perMinute = SEIZES_PER_MINUTE_DRY * (SEIZE_BELOW - lubrication) / SEIZE_BELOW;
+        if (running.getAsBoolean() && lubrication < seizeBelow && !faults.contains(Fault.SEIZED)) {
+            float perMinute = config.seizesPerMinuteDry.getF() * (seizeBelow - lubrication) / seizeBelow;
             if (getWorld().random.nextFloat() < perMinute * MAINTENANCE_INTERVAL_TICKS / 1200f)
                 seize();
         }
@@ -336,7 +343,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
 
     @Override
     public void onBlast(DamagePart part, double severity) {
-        if (severity > BREAKING_SEVERITY)
+        if (BattleDamage.radiiFromCentre(severity) <= CDCConfig.server().battleDamage.breakDistance.getF())
             breakDown();
         else
             jostle();
@@ -351,11 +358,11 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
 
     /** Its lubrication, if it takes any: gold once low enough to seize. */
     private void addLubricationToGoggleTooltip(List<Component> tooltip) {
-        if (!isLubricated())
+        if (!isLubricated() || !CDCConfig.server().maintenance.lubrication.allowWearAndSeizing.get())
             return;
         CDCLang.builder()
                 .add(Component.translatable("createdangerclose.equipment.lubrication", Math.round(lubrication * 100)))
-                .style(lubrication < SEIZE_BELOW ? ChatFormatting.GOLD : ChatFormatting.GRAY)
+                .style(lubrication < CDCConfig.server().maintenance.lubrication.seizeBelow.getF() ? ChatFormatting.GOLD : ChatFormatting.GRAY)
                 .forGoggles(tooltip);
     }
 

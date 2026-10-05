@@ -8,6 +8,7 @@ import com.simibubi.create.foundation.item.KineticStats;
 import com.simibubi.create.foundation.item.TooltipModifier;
 import com.tterrag.registrate.providers.ProviderType;
 import com.tterrag.registrate.util.nullness.NonNullSupplier;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import io.github.daniel366cobra.createdangerclose.registries.CDCContraptionTypes;
@@ -18,6 +19,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.CreativeModeTab;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLLoadCompleteEvent;
 import net.neoforged.neoforge.registries.RegisterEvent;
@@ -37,7 +39,8 @@ public class CreateDangerClose {
                                     .andThen(TooltipModifier.mapNull(KineticStats.create(item))))
     );
 
-    public CreateDangerClose(IEventBus eventBus) {
+    public CreateDangerClose(IEventBus eventBus, ModContainer container) {
+        CDCConfig.register(container);
         // Registrate: blocks, items, block entities, menus, and their generated data.
         getRegistrate().addDataGenerator(ProviderType.LANG, CDCLang::registrateLang);
         getRegistrate().registerEventListeners(eventBus);

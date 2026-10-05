@@ -15,6 +15,8 @@ import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.api.damage.BattleDamageable;
 import io.github.daniel366cobra.createdangerclose.api.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
+import io.github.daniel366cobra.createdangerclose.config.CServer;
 import io.github.daniel366cobra.createdangerclose.damage.BattleDamage;
 import io.github.daniel366cobra.createdangerclose.damage.LensDust;
 import net.createmod.catnip.math.AngleHelper;
@@ -90,21 +92,11 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     // --- Ranging ---
     // Tube counts as caught up with the operator's look within this, degrees.
     private static final float ON_TARGET_DEG = 0.5f;
-    private static final double MAX_RANGE = 1024;
-    // Angular resolution of the optics, radians: range error at best is
-    // R²·σθ / baseline, e.g. ~5 blocks at 300 blocks with an 8-block baseline.
-    private static final double SIGMA_THETA_RAD = 4.4e-4;
     // Error multiplier at the ranging threshold, falling to 1 when merged.
     private static final double UNMERGED_ERROR_FACTOR = 5;
-    // Error multiplier for each cracked lens (both cracked: squared).
-    private static final double CRACKED_LENS_ERROR_FACTOR = 4;
-    // Error multiplier for a lens caked in dust (half as dusty: half as much more).
-    private static final double DUSTY_LENS_ERROR_FACTOR = 2;
     private static final int DUST_INTERVAL_TICKS = 20;
     // Dust on each lens (0 clean to 1 caked), by its place in the tube's lens list. Saved, synced.
     private final float[] lensDust = new float[2];
-    // A blast cracks a lens within 1.5 times its radius: severity at least this.
-    private static final double LENS_CRACK_SEVERITY = 1 - 1.5 / BattleDamage.BLAST_REACH;
     private static final int MIN_VELOCITY_SAMPLES = 3;
 
     private final RangefinderSteadiness steadiness = new RangefinderSteadiness();
@@ -331,7 +323,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     /** Lets the weather work on the assembled tube's lenses, once a second. */
     private void tickDust() {
-        if (level.getGameTime() % DUST_INTERVAL_TICKS != 0 || movedContraption == null
+        if (level.getGameTime() % DUST_INTERVAL_TICKS != 0 || !CDCConfig.server().maintenance.dust.allowDust.get()
+                || movedContraption == null
                 || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
             return;
         List<BlockPos> lenses = tube.getLenses();
@@ -352,7 +345,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     /** A few motes drifting off a dusty lens (client). */
     private void emitDust() {
-        if (movedContraption == null || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
+        if (!CDCConfig.client().damageParticles.get() || movedContraption == null || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
             return;
         List<BlockPos> lenses = tube.getLenses();
         for (int i = 0; i < Math.min(lenses.size(), lensDust.length); i++) {
@@ -419,7 +412,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     @Override
     public void onBlast(DamagePart part, double severity) {
-        if (severity >= LENS_CRACK_SEVERITY)
+        if (BattleDamage.radiiFromCentre(severity) <= CDCConfig.server().battleDamage.lensCrackDistance.getF())
             crackLens((BlockPos) part.id());
     }
 
@@ -505,7 +498,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 || tube.getBaseline() <= 0)
             return;
 
-        Vec3 end = sight.origin().add(sight.direction().scale(MAX_RANGE));
+        Vec3 end = sight.origin().add(sight.direction().scale(CDCConfig.server().rangefinder.maxRange.get()));
         BlockHitResult hit = level.clip(new ClipContext(sight.origin(), end,
                 ClipContext.Block.OUTLINE, ClipContext.Fluid.SOURCE_ONLY, CollisionContext.empty()));
         if (hit.getType() == HitResult.Type.MISS)
@@ -515,9 +508,14 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         double trueRange = RangefinderOptics.toWorld(level, hit.getLocation()).distanceTo(sight.origin());
         double convergence = 1 + (UNMERGED_ERROR_FACTOR - 1)
                 * steadiness.getSeparation() / RangefinderSteadiness.RANGING_SEPARATION;
-        double sigma = trueRange * trueRange * SIGMA_THETA_RAD / tube.getBaseline() * convergence
-                * Math.pow(CRACKED_LENS_ERROR_FACTOR, tube.getCrackedLensCount())
-                * (1 + (DUSTY_LENS_ERROR_FACTOR - 1) * lensDust[0]) * (1 + (DUSTY_LENS_ERROR_FACTOR - 1) * lensDust[1]);
+        // Range error at best is R²·σθ / baseline (σθ the optics' angular resolution, config,
+        // in milliradians): e.g. ~5 blocks at 300 blocks with an 8-block baseline. Each cracked
+        // lens multiplies it; dust adds to it in proportion (half as dusty, half as much more).
+        CServer.Rangefinder config = CDCConfig.server().rangefinder;
+        double dusty = config.dustyLensFactor.getF() - 1;
+        double sigma = trueRange * trueRange * config.rangingError.getF() * 1e-3 / tube.getBaseline() * convergence
+                * Math.pow(config.crackedLensFactor.getF(), tube.getCrackedLensCount())
+                * (1 + dusty * lensDust[0]) * (1 + dusty * lensDust[1]);
         double measuredRange = Math.max(1, trueRange + level.random.nextGaussian() * sigma);
 
         tracker.update(sight.origin().add(sight.direction().scale(measuredRange)), level.getGameTime(), sigma);

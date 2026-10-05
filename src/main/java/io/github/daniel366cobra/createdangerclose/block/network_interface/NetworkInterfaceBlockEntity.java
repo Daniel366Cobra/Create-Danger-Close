@@ -21,6 +21,7 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonReading;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
@@ -55,7 +56,6 @@ import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.
 public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         implements IHaveGoggleInformation, SensorReading.Provider, ComputerServo {
 
-    public static final float MIN_OPERATING_RPM = 32.0f;
 
     private EquipmentHealth health;
     private SensorReading reading = new SensorReading.None();
@@ -87,7 +87,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
         float currentSpeed = Math.abs(getSpeed());
         boolean wasPowered = isPowered;
-        isPowered = currentSpeed >= MIN_OPERATING_RPM;
+        isPowered = currentSpeed >= CDCConfig.server().fireControl.minOperatingRpm.get();
         if (isPowered != wasPowered)
             notifyUpdate();
 
@@ -459,7 +459,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                     .style(ChatFormatting.RED)
                     .forGoggles(tooltip);
             CDCLang.builder()
-                    .add(Component.literal(String.format("  %.1f / %.0f RPM", speed, MIN_OPERATING_RPM)))
+                    .add(Component.literal(String.format("  %.1f / %d RPM", speed, CDCConfig.server().fireControl.minOperatingRpm.get())))
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }

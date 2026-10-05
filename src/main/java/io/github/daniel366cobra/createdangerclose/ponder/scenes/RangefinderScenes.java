@@ -12,8 +12,11 @@ import net.createmod.ponder.api.scene.SceneBuildingUtil;
 import net.createmod.ponder.api.scene.Selection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -26,7 +29,7 @@ public final class RangefinderScenes {
     private static final int SHOWCASE_TICKS = 160;
     // How long the Super Glue selection box takes to grow over the tube.
     private static final int GLUE_TICKS = 40;
-    // Before the damage part: turn the lenses to face the viewer.
+    // In the upkeep scene: turn the lenses to face the viewer.
     private static final float LENS_TURN_DEG = 180;
     private static final int LENS_TURN_TICKS = 60;
 
@@ -127,7 +130,7 @@ public final class RangefinderScenes {
                 .text("Glue the tube together with Super Glue");
         scene.idle(PonderTiming.AFTER_TEXT);
 
-        // Assemble, then show the tube all the way round.
+        // Assemble, take the seat, then show the tube all the way round.
         scene.overlay().showControls(util.vector().blockSurface(bearing, Direction.WEST), Pointing.LEFT, 30)
                 .rightClick();
         scene.idle(10);
@@ -138,14 +141,6 @@ public final class RangefinderScenes {
                 .text("Right-click the bearing to assemble the tube");
         scene.idle(PonderTiming.AFTER_TEXT);
 
-        scene.world().rotateBearing(bearing, 360, SHOWCASE_TICKS);
-        scene.world().rotateSection(tube, 0, 360, 0, SHOWCASE_TICKS);
-        scene.overlay().showText(PonderTiming.TEXT)
-                .pointAt(util.vector().topOf(bearing))
-                .placeNearTarget()
-                .text("It turns faster the faster its network runs");
-        scene.idle(SHOWCASE_TICKS + PonderTiming.GAP);
-
         scene.overlay().showControls(util.vector().blockSurface(eyepiece, Direction.NORTH), Pointing.DOWN, 30)
                 .rightClick();
         scene.idle(10);
@@ -155,6 +150,14 @@ public final class RangefinderScenes {
                 .attachKeyFrame()
                 .text("Right-click the eyepiece to take the seat: the tube follows where you look");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.world().rotateBearing(bearing, 360, SHOWCASE_TICKS);
+        scene.world().rotateSection(tube, 0, 360, 0, SHOWCASE_TICKS);
+        scene.overlay().showText(PonderTiming.TEXT)
+                .pointAt(util.vector().topOf(bearing))
+                .placeNearTarget()
+                .text("It turns faster the faster its network runs");
+        scene.idle(SHOWCASE_TICKS + PonderTiming.GAP);
 
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .pointAt(util.vector().blockSurface(eyepiece, Direction.NORTH))
@@ -173,11 +176,40 @@ public final class RangefinderScenes {
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .pointAt(util.vector().blockSurface(eastLens, Direction.SOUTH))
                 .placeNearTarget()
-                .text("Map Tables on the network chart the ground around what it ranges onto their maps");
+                .text("Map Tables on the network chart the ground around the aim point");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
-        // Damage and repair, on the assembled tube: first turn it so the lenses
-        // face the viewer. The pointers then follow the lens to where it turned.
+    }
+
+    /**
+     * Structure {@code rangefinder.nbt} again (see {@link #rangefinder}): looking after
+     * the lenses, on the assembled tube turned to face the viewer. Cracks from battle and
+     * dust from the weather, and what puts each right.
+     */
+    public static void rangefinderUpkeep(SceneBuilder builder, SceneBuildingUtil util) {
+        CreateSceneBuilder scene = new CreateSceneBuilder(builder);
+        scene.title("rangefinder_upkeep", "Looking after a Rangefinder's lenses");
+        scene.configureBasePlate(0, 0, 6);
+
+        BlockPos bearing = util.grid().at(2, 2, 4);
+        BlockPos eastLens = util.grid().at(4, 4, 4);
+
+        Selection base = util.select().fromTo(0, 0, 0, 5, 0, 5)
+                .add(util.select().fromTo(6, 0, 4, 6, 1, 4))
+                .add(util.select().fromTo(2, 1, 4, 5, 1, 4))
+                .add(util.select().fromTo(4, 1, 0, 4, 1, 3)).add(util.select().fromTo(4, 2, 0, 4, 2, 1))
+                .add(util.select().position(bearing));
+        // The tube: mast, girders, lenses and eyepiece.
+        Selection tubeBlocks = util.select().fromTo(2, 3, 4, 2, 4, 4)
+                .add(util.select().fromTo(0, 4, 4, 4, 4, 4))
+                .add(util.select().position(2, 3, 3));
+
+        scene.world().showSection(base, Direction.UP);
+        ElementLink<WorldSectionElement> tube = scene.world().showIndependentSection(tubeBlocks, Direction.DOWN);
+        scene.world().configureCenterOfRotation(tube, util.vector().centerOf(2, 3, 4));
+        scene.idle(20);
+
+        // Turn the lenses to face the viewer. The pointers then follow the lens to where it turned.
         scene.world().rotateBearing(bearing, LENS_TURN_DEG, LENS_TURN_TICKS);
         scene.world().rotateSection(tube, 0, LENS_TURN_DEG, 0, LENS_TURN_TICKS);
         scene.idle(LENS_TURN_TICKS + PonderTiming.GAP);
@@ -189,13 +221,20 @@ public final class RangefinderScenes {
         Vec3 lensFront = lensCenter.add(lensFacing.scale(0.5));
         Vec3 lensTop = lensCenter.add(0, 0.5, 0);
 
+        // Cracks: a shell bursts a little way in front of the lens.
+        Vec3 burst = lensFront.add(lensFacing.scale(1.5));
+        scene.effects().emitParticles(burst, scene.effects().particleEmitterWithinBlockSpace(
+                ParticleTypes.EXPLOSION, Vec3.ZERO), 1, 1);
+        scene.effects().emitParticles(burst, scene.effects().particleEmitterWithinBlockSpace(
+                ParticleTypes.LARGE_SMOKE, new Vec3(0, 0.05, 0)), 3, 6);
+        scene.idle(4);
         scene.world().modifyBlock(eastLens, state -> state.setValue(RangefinderLensBlock.CRACKED, true), false);
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .colored(PonderPalette.RED)
                 .pointAt(lensFront)
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Blasts and hits crack lenses, which makes the range far less accurate");
+                .text("Blasts, shells and shrapnel crack lenses: the range becomes far less accurate");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
         scene.overlay().showControls(lensTop, Pointing.DOWN, 40)
@@ -208,6 +247,36 @@ public final class RangefinderScenes {
                 .pointAt(lensFront)
                 .placeNearTarget()
                 .text("Right-click a cracked lens with a Glass Pane to repair it");
+        scene.idle(PonderTiming.AFTER_TEXT);
+
+        // Dust: a few motes drift off the lens while it is dusty.
+        int dustyTicks = PonderTiming.AFTER_LONG_TEXT + PonderTiming.AFTER_TEXT;
+        scene.effects().emitParticles(lensTop, scene.effects().particleEmitterWithinBlockSpace(
+                new BlockParticleOption(ParticleTypes.FALLING_DUST, Blocks.SAND.defaultBlockState()), Vec3.ZERO),
+                0.15f, dustyTicks);
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.RED)
+                .pointAt(lensFront)
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("Dust settles on lenses over the days, fastest in hot, dry places: the view clouds over and ranging suffers");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.TEXT)
+                .pointAt(lensTop)
+                .placeNearTarget()
+                .text("Rain washes it off, where the lens is open to the sky");
+        scene.idle(PonderTiming.AFTER_TEXT);
+
+        scene.overlay().showControls(lensTop, Pointing.DOWN, 40)
+                .rightClick()
+                .withItem(new ItemStack(Items.WATER_BUCKET));
+        scene.idle(20);
+        scene.overlay().showText(PonderTiming.TEXT)
+                .colored(PonderPalette.GREEN)
+                .pointAt(lensFront)
+                .placeNearTarget()
+                .text("Or wipe it clean: right-click it with a Water Bucket");
         scene.idle(PonderTiming.AFTER_TEXT);
     }
 

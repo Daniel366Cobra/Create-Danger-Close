@@ -3,6 +3,7 @@ package io.github.daniel366cobra.createdangerclose.damage;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.api.damage.BattleDamageable;
 import io.github.daniel366cobra.createdangerclose.api.damage.DamagePart;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ClipContext;
@@ -45,8 +46,6 @@ import java.util.WeakHashMap;
 @EventBusSubscriber(modid = CreateDangerClose.MOD_ID)
 public final class BattleDamage {
 
-    // A blast reaches parts out to this many times its radius (severity 0 there, 1 at its centre).
-    public static final double BLAST_REACH = 3;
     // The line-of-sight check stops this far short of the blast centre, which
     // often lies on or inside the block the shell struck.
     private static final double BLAST_SIGHT_MARGIN = 0.75;
@@ -80,18 +79,28 @@ public final class BattleDamage {
         return found;
     }
 
+    /** How far a blast reaches, in its radii (severity 0 there, 1 at its centre). */
+    private static double blastReach() {
+        return CDCConfig.server().battleDamage.blastReach.getF();
+    }
+
+    /** How far from a blast's centre a part it reached with this severity is, in the blast's radii. */
+    public static double radiiFromCentre(double severity) {
+        return blastReach() * (1 - severity);
+    }
+
     // --- Blast ---
 
     @SubscribeEvent
     static void onExplosion(ExplosionEvent.Detonate event) {
         Level level = event.getLevel();
-        if (level.isClientSide)
+        if (level.isClientSide || !CDCConfig.server().battleDamage.allowBattleDamage.get())
             return;
         Explosion explosion = event.getExplosion();
         // CBC's explosions reach entities further than they break blocks.
         float radius = explosion instanceof CustomExplosion custom
                 ? Math.max(explosion.radius(), custom.getEntityRadius()) : explosion.radius();
-        double reach = radius * BLAST_REACH;
+        double reach = radius * blastReach();
         Vec3 center = explosion.center();
 
         for (BattleDamageable equipment : loadedIn(level)) {
@@ -124,7 +133,8 @@ public final class BattleDamage {
 
     @SubscribeEvent
     static void onLevelTick(LevelTickEvent.Post event) {
-        if (!(event.getLevel() instanceof ServerLevel level))
+        if (!(event.getLevel() instanceof ServerLevel level) || !CDCConfig.server().battleDamage.allowBattleDamage.get()
+                || !CDCConfig.server().battleDamage.allowDirectHits.get())
             return;
         List<BattleDamageable> equipment = loadedIn(level);
         if (equipment.isEmpty())
