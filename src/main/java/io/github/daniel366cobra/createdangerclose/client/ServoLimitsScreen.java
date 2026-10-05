@@ -43,17 +43,21 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
     private static final ResourceLocation ELEVATION_LIT = texture("elevation_lit");
     // 16 x 32: the grabber, and below it the grabber held or hovered.
     private static final ResourceLocation GRABBER = texture("grabber");
+    // 16 x 64, drawn pointing straight up with its pivot at the bottom centre; and the
+    // 16 x 16 hub drawn over its root at the dial's centre.
+    private static final ResourceLocation NEEDLE = texture("needle");
+    private static final ResourceLocation CENTER = texture("center");
 
     private static final int DIAL = 128;
     private static final int HALF = DIAL / 2;
     private static final int GRABBER_SIZE = 16;
     private static final int GRAB_RADIUS = 60;
     private static final int LABEL_RADIUS = 78;
-    private static final int NEEDLE_LENGTH = 56;
     private static final float SECTOR_STEP_DEG = 2;
     private static final int TEXT = 0xFFEEE3CC;
     private static final int TEXT_DIM = 0xFFA89A82;
-    private static final int NEEDLE = 0xFFE0B040;
+    private static final int NOW_TEXT = 0xFFE0B040;
+    private static final int NEEDLE_WIDTH = 16, NEEDLE_LENGTH = 64, CENTER_SIZE = 16;
 
     private enum Drag { NONE, START, END, EITHER_END, BOTH }
 
@@ -180,7 +184,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
                 : Component.translatable("createdangerclose.gui.servo_limits.arc", Math.round(limits.length()));
         graphics.drawCenteredString(font, state, cx, cy - LABEL_RADIUS - 15, TEXT_DIM);
         graphics.drawCenteredString(font, Component.translatable("createdangerclose.gui.servo_limits.now",
-                Math.round(needle.getValue(partialTicks))), cx, cy + LABEL_RADIUS + 12, NEEDLE);
+                Math.round(needle.getValue(partialTicks))), cx, cy + LABEL_RADIUS + 12, NOW_TEXT);
         graphics.drawCenteredString(font, Component.translatable("createdangerclose.gui.servo_limits.hint"),
                 cx, cy + LABEL_RADIUS + 24, TEXT_DIM);
     }
@@ -213,16 +217,16 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
     }
 
     private void renderNeedle(GuiGraphics graphics, int cx, int cy, float dial) {
+        RenderSystem.enableBlend();
         PoseStack pose = graphics.pose();
         pose.pushPose();
         pose.translate(cx, cy, 0);
-        // Drawn pointing up (ring) or right (elevation), then turned to the angle.
-        pose.mulPose(Axis.ZP.rotationDegrees(elevation ? -dial : dial));
-        if (elevation)
-            graphics.fill(0, -1, NEEDLE_LENGTH, 1, NEEDLE);
-        else
-            graphics.fill(-1, -NEEDLE_LENGTH, 1, 0, NEEDLE);
+        // Drawn pointing up, turned clockwise to the angle: the ring's 0 is up, elevation's is to the right.
+        pose.mulPose(Axis.ZP.rotationDegrees(elevation ? 90 - dial : dial));
+        graphics.blit(NEEDLE, -NEEDLE_WIDTH / 2, -NEEDLE_LENGTH, 0, 0, NEEDLE_WIDTH, NEEDLE_LENGTH, NEEDLE_WIDTH, NEEDLE_LENGTH);
         pose.popPose();
+        graphics.blit(CENTER, cx - CENTER_SIZE / 2, cy - CENTER_SIZE / 2, 0, 0, CENTER_SIZE, CENTER_SIZE, CENTER_SIZE, CENTER_SIZE);
+        RenderSystem.disableBlend();
     }
 
     private void renderGrabber(GuiGraphics graphics, float dial, boolean lit) {
