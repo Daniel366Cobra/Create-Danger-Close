@@ -3,7 +3,8 @@
   "package": "io.github.daniel366cobra.createdangerclose.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "AbstractContraptionEntityMixin"
+    "AbstractContraptionEntityMixin",
+    "AutocannonBreechMixin"
   ],
   "client": [
     "client.CameraMixin",

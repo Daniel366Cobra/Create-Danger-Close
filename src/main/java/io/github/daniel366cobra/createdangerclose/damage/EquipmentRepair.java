@@ -6,6 +6,8 @@ import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.api.damage.Fault;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoInputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerInputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerOutputBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -82,12 +84,16 @@ public final class EquipmentRepair {
 
     /**
      * The health record a click on this block reaches: its own, or for a cannon servo's
-     * input half, the servo's (kept by its output half).
+     * or coupler's input half, the one kept by its output half.
      */
     @Nullable
     private static EquipmentHealth healthAt(Level level, BlockPos pos) {
         if (level.getBlockEntity(pos) instanceof CannonServoInputBlockEntity input) {
             CannonServoOutputBlockEntity output = input.getAdjacentOutput();
+            return output != null ? EquipmentHealth.of(output) : null;
+        }
+        if (level.getBlockEntity(pos) instanceof CouplerInputBlockEntity input) {
+            CouplerOutputBlockEntity output = input.getAdjacentOutput();
             return output != null ? EquipmentHealth.of(output) : null;
         }
         return EquipmentHealth.at(level, pos);

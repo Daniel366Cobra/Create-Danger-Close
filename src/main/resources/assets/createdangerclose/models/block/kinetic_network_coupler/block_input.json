@@ -1,0 +1,54 @@
+{
+	"format_version": "1.21.11",
+	"credit": "Made with Blockbench",
+	"parent": "block/block",
+	"ambientocclusion": false,
+	"render_type": "minecraft:cutout_mipped",
+	"textures": {
+		"1": "createdangerclose:block/kinetic_network_coupler/coupler_input_back",
+		"2": "createdangerclose:block/kinetic_network_coupler/coupler_input_back_frame",
+		"7": "createdangerclose:block/kinetic_network_coupler/coupler_input_side",
+		"particle": "createdangerclose:block/kinetic_network_coupler/coupler_input_side"
+	},
+	"elements": [
+		{
+			"name": "body",
+			"from": [0, 0, 0],
+			"to": [16, 16, 16],
+			"rotation": {"angle": 0, "axis": "x", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [0, 0, 16, 16], "texture": "#7"},
+				"east": {"uv": [0, 0, 16, 16], "texture": "#7"},
+				"south": {"uv": [0, 0, 16, 16], "texture": "#7"},
+				"west": {"uv": [16, 0, 0, 16], "texture": "#7"},
+				"down": {"uv": [0, 0, 16, 16], "texture": "#2"}
+			}
+		},
+		{
+			"name": "backplate",
+			"from": [2, 1, 2],
+			"to": [14, 0, 14],
+			"rotation": {"angle": 0, "axis": "x", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [2, 14, 14, 15], "rotation": 180, "texture": "#1"},
+				"east": {"uv": [14, 2, 15, 14], "rotation": 270, "texture": "#1"},
+				"south": {"uv": [2, 1, 14, 2], "texture": "#1"},
+				"west": {"uv": [1, 2, 2, 14], "rotation": 90, "texture": "#1"},
+				"down": {"uv": [2, 2, 14, 14], "texture": "#1"}
+			}
+		},
+		{
+			"name": "cage",
+			"from": [0, 16, 0],
+			"to": [16, 8, 16],
+			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
+			"faces": {
+				"north": {"uv": [0, 0, 16, 8], "rotation": 180, "texture": "#7"},
+				"east": {"uv": [0, 0, 16, 8], "rotation": 180, "texture": "#7"},
+				"south": {"uv": [0, 0, 16, 8], "rotation": 180, "texture": "#7"},
+				"west": {"uv": [0, 0, 16, 8], "rotation": 180, "texture": "#7"},
+				"up": {"uv": [0, 0, 16, 16], "texture": "#1"}
+			}
+		}
+	]
+}

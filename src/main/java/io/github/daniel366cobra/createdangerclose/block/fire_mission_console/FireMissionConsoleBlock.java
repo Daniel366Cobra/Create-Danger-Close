@@ -98,27 +98,39 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
         }
 
         if (control == Control.FIRE_BUTTON) {
-            level.blockEvent(pos, this, FireMissionConsoleBlockEntity.BUTTON_PRESS_EVENT, 0);
-            BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo();
-            level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
-            if (salvo.awaitingConfirmation()) {
-                // Danger close: warn, and wait for a second press to confirm.
-                level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
-                player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.danger_close",
-                        Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
-            } else if (salvo.fired() + salvo.held() == 0)
-                status(player, "no_guns");
-            else
-                player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.salvo",
-                        salvo.fired(), salvo.held()), true);
+            pressFireButton(level, pos, player, console, computer);
         } else {
-            boolean plunging = !computer.isPlungingFire();
-            computer.setPlungingFire(plunging);
-            level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.4f, plunging ? 0.6f : 0.5f);
-            status(player, plunging ? "mode.plunging" : "mode.direct");
+            throwLever(level, pos, player, console, computer);
         }
         console.refreshFromComputer();
         return InteractionResult.SUCCESS;
+    }
+
+    /** The fire button: a salvo from every big cannon on target (danger close: the second press). */
+    protected void pressFireButton(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
+                                   BallisticComputerBlockEntity computer) {
+        level.blockEvent(pos, this, FireMissionConsoleBlockEntity.BUTTON_PRESS_EVENT, 0);
+        BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo();
+        level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
+        if (salvo.awaitingConfirmation()) {
+            // Danger close: warn, and wait for a second press to confirm.
+            level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
+            player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.danger_close",
+                    Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
+        } else if (salvo.fired() + salvo.held() == 0)
+            status(player, "no_guns");
+        else
+            player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.salvo",
+                    salvo.fired(), salvo.held()), true);
+    }
+
+    /** The middle lever: direct or plunging fire, for the whole computer. */
+    protected void throwLever(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
+                              BallisticComputerBlockEntity computer) {
+        boolean plunging = !computer.isPlungingFire();
+        computer.setPlungingFire(plunging);
+        level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.4f, plunging ? 0.6f : 0.5f);
+        status(player, plunging ? "mode.plunging" : "mode.direct");
     }
 
     /** Block events reach the block entity (and, on the server, go out to clients). */
@@ -133,7 +145,7 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
         return SHAPE.get(state.getValue(FACING));
     }
 
-    private static void status(Player player, String key) {
+    protected static void status(Player player, String key) {
         player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console." + key), true);
     }
 

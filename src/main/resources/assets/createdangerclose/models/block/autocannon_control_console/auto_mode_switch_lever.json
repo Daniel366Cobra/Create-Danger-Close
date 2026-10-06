@@ -1,0 +1,102 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"render_type": "minecraft:cutout",
+	"textures": {
+		"6": "createdangerclose:block/autocannon_control_console/autocannon_control_console_controls"
+	},
+	"elements": [
+		{
+			"name": "auto_mode_switch_lever1",
+			"from": [8.4, 16.25, 7],
+			"to": [9.4, 18.25, 8],
+			"rotation": {"angle": 45, "axis": "x", "origin": [8.9, 15.75, 7.5]},
+			"faces": {
+				"north": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"east": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"south": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"west": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"up": {"uv": [9, 0, 10, 1], "texture": "#6"}
+			}
+		},
+		{
+			"name": "auto_mode_switch_lever2",
+			"from": [6.6, 16.25, 7],
+			"to": [7.6, 18.25, 8],
+			"rotation": {"angle": 45, "axis": "x", "origin": [7.1, 15.75, 7.5]},
+			"faces": {
+				"north": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"east": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"south": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"west": {"uv": [9, 1, 10, 3], "texture": "#6"},
+				"up": {"uv": [9, 0, 10, 1], "texture": "#6"}
+			}
+		},
+		{
+			"name": "auto_mode_switch_handle",
+			"from": [6, 18.25, 7],
+			"to": [10, 19.25, 8],
+			"rotation": {"angle": 45, "axis": "x", "origin": [8, 15.75, 7.5]},
+			"faces": {
+				"north": {"uv": [7, 6, 11, 7], "rotation": 180, "texture": "#6"},
+				"east": {"uv": [10, 6, 11, 7], "texture": "#6"},
+				"south": {"uv": [7, 6, 11, 7], "rotation": 90, "texture": "#6"},
+				"west": {"uv": [7, 6, 8, 7], "texture": "#6"},
+				"up": {"uv": [7, 6, 11, 7], "texture": "#6"},
+				"down": {"uv": [7, 6, 11, 7], "texture": "#6"}
+			}
+		}
+	],
+	"display": {
+		"thirdperson_righthand": {
+			"rotation": [75, 45, 0],
+			"translation": [0, 2.5, 0],
+			"scale": [0.375, 0.375, 0.375]
+		},
+		"thirdperson_lefthand": {
+			"rotation": [75, 45, 0],
+			"translation": [0, 2.5, 0],
+			"scale": [0.375, 0.375, 0.375]
+		},
+		"firstperson_righthand": {
+			"rotation": [0, 135, 0],
+			"scale": [0.4, 0.4, 0.4]
+		},
+		"firstperson_lefthand": {
+			"rotation": [0, 135, 0],
+			"scale": [0.4, 0.4, 0.4]
+		},
+		"ground": {
+			"translation": [0, 3, 0],
+			"scale": [0.25, 0.25, 0.25]
+		},
+		"gui": {
+			"rotation": [30, -135, 0],
+			"translation": [0, -1, 0],
+			"scale": [0.55, 0.55, 0.55]
+		},
+		"fixed": {
+			"scale": [0.5, 0.5, 0.5]
+		},
+		"on_shelf": {
+			"rotation": [0, -180, 0]
+		}
+	},
+	"groups": [
+		{
+			"name": "auto_mode_switch",
+			"origin": [8.5, 11.75, 9.5],
+			"scope": 0,
+			"color": 0,
+			"children": [
+				{
+					"name": "auto_mode_switch_lever",
+					"origin": [8.5, 15.75, 7.5],
+					"scope": 0,
+					"color": 0,
+					"children": [0, 1, 2]
+				}
+			]
+		}
+	]
+}

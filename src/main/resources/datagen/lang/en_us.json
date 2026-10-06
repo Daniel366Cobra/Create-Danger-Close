@@ -15,7 +15,8 @@
 
     "equipment": {
       "working_order": "In working order",
-      "lubrication": "Lubrication: %s%%"
+      "lubrication": "Lubrication: %s%%",
+      "power_balance": "Output requesting %s su, input providing %s su"
     },
 
     "network_interface": {
@@ -37,6 +38,16 @@
       "fixed_gun": "Fixed cannon mount: loaded",
       "fixed_gun_empty": "Fixed cannon mount: empty"
     },
+    "autocannon_control_console": {
+      "title": "Autocannon Control Console",
+      "mode.auto": "Weapons free: autocannons fire by themselves while on a target being ranged",
+      "mode.manual": "Manual: autocannons fire while the trigger is held",
+      "fire_mode.auto": "Fire mode: Auto (weapons free)",
+      "fire_mode.manual": "Fire mode: Manual",
+      "no_autocannons": "No autocannons on this network",
+      "danger_close": "DANGER CLOSE: release and press again within %ss to confirm"
+    },
+
     "fire_mission_console": {
       "title": "Fire Mission Console",
       "not_connected": "Not connected. Needs a powered Battle Network Interface facing it.",
@@ -49,7 +60,7 @@
       "no_guns": "No guns on the network",
       "salvo": "Salvo: %s fired, %s held",
       "danger_close": "DANGER CLOSE: Press again within %ss to confirm",
-      "fuze_offset": "Fuze correction: %s s"
+      "fuze_offset": "Fuze correction: %s"
     },
     "navigation_console": {
       "title": "Navigation Console",
@@ -103,11 +114,20 @@
         "degenerate": "Invalid geometry",
         "too_close": "Too close for plunging fire",
         "no_altitude": "Own altitude unknown: needs an Altitude Sensor",
-        "redundant_drives": "Too many drives aim this gun"
+        "redundant_drives": "Too many drives aim this gun",
+        "round_expires": "Out of reach: the round expires before it gets there"
       }
     },
       "cannon_servo": {
         "not_enough_space": "Not enough space to place Servo Output"
+      },
+      "kinetic_network_coupler": {
+        "title": "Kinetic Network Coupler",
+        "not_enough_space": "Not enough space to place the Coupler's output half",
+        "running": "Passing %s RPM",
+        "geared_down": "Geared down to %s RPM: the input side cannot spare more",
+        "overstressed": "Output network overstressed: the input side cannot spare enough",
+        "unpowered": "No rotation from the input side"
       },
       "cannon_servo_output": {
         "title": "Cannon Servo Output",
@@ -115,6 +135,8 @@
         "too_many_mounts": "Too many cannon mounts on network",
         "invalid_swivel": "A Swivel Bearing must be the only thing this servo drives",
         "swivel_angle": "Bearing: %s° (turning to %s°)",
+        "power_limited": "Driving slower: not enough power on the battle network",
+        "power_starved": "Cannon network overstressed: not enough power on the battle network",
         "no_slaves": "No slaved mounts found",
         "axis": "Axis: %s",
         "axis.pitch": "Pitch",
@@ -239,7 +261,7 @@
         "condition1": "When a powered Battle Network Interface faces it:",
         "behaviour1": "Shows the _target_, the _trajectory_ and each gun's _firing solution_ through Goggles.",
         "condition2": "When scrolling over the knob on the left:",
-        "behaviour2": "Sets a _fuze correction_ from -2 to +2 seconds, added to timed fuzes: early for an _airburst_ short of the target, late so a base-fuzed _armour-piercing_ shell bursts _inside_ after piercing. On _delayed impact_ and _delayed inertia_ fuzes it sets the delay after impact instead. Hold _Shift_ for fine steps; _right-click_ the knob to zero it.",
+        "behaviour2": "Sets a _fuze correction_ from -40 to +40 ticks (2 seconds), added to timed fuzes: early for an _airburst_ short of the target, late so a base-fuzed _armour-piercing_ shell bursts _inside_ after piercing. On _delayed impact_ and _delayed inertia_ fuzes it sets the delay after impact instead. Scrolling turns it 5 ticks a notch, or 1 with _Shift_ held; _right-click_ the knob to zero it.",
         "condition3": "When the lever in the middle is right-clicked:",
         "behaviour3": "Switches between _direct_ and _plunging_ fire.",
         "condition4": "When the button on the right is right-clicked:",

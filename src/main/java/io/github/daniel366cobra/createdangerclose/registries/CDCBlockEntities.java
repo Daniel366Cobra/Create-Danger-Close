@@ -6,12 +6,15 @@ import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.tterrag.registrate.util.entry.BlockEntityEntry;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.*;
+import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerInputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerOutputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerRenderer;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.AutocannonControlConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
@@ -58,6 +61,24 @@ public class CDCBlockEntities {
                     .renderer(() -> CannonServoRenderer::output)
                     .register();
 
+    public static final BlockEntityEntry<CouplerInputBlockEntity> KINETIC_NETWORK_COUPLER =
+            REGISTRATE.blockEntity("kinetic_network_coupler", CouplerInputBlockEntity::new)
+                    .visual(() -> (ctx, blockEntity, partialTick) -> new CannonServoVisual(ctx, blockEntity, partialTick, false,
+                            CDCPartialModels.COUPLER_INPUT_COUPLER, CDCPartialModels.COUPLER_OUTPUT_COUPLER,
+                            CDCPartialModels.COUPLER_TRANSFER_COUPLER), false)
+                    .validBlocks(CDCBlocks.KINETIC_NETWORK_COUPLER)
+                    .renderer(() -> CannonServoRenderer::couplerInput)
+                    .register();
+
+    public static final BlockEntityEntry<CouplerOutputBlockEntity> KINETIC_NETWORK_COUPLER_OUTPUT =
+            REGISTRATE.blockEntity("kinetic_network_coupler_output", CouplerOutputBlockEntity::new)
+                    .visual(() -> (ctx, blockEntity, partialTick) -> new CannonServoVisual(ctx, blockEntity, partialTick, true,
+                            CDCPartialModels.COUPLER_INPUT_COUPLER, CDCPartialModels.COUPLER_OUTPUT_COUPLER,
+                            CDCPartialModels.COUPLER_TRANSFER_COUPLER), false)
+                    .validBlocks(CDCBlocks.KINETIC_NETWORK_COUPLER_OUTPUT)
+                    .renderer(() -> CannonServoRenderer::couplerOutput)
+                    .register();
+
     public static final BlockEntityEntry<RangefinderBearingBlockEntity> RANGEFINDER_BEARING = REGISTRATE
             .blockEntity("rangefinder_bearing", RangefinderBearingBlockEntity::new)
             .visual(() -> BearingVisual::new)
@@ -81,6 +102,12 @@ public class CDCBlockEntities {
             .blockEntity("fire_mission_console", FireMissionConsoleBlockEntity::new)
             .validBlocks(CDCBlocks.FIRE_MISSION_CONSOLE)
             .renderer(() -> FireMissionConsoleRenderer::new)
+            .register();
+
+    public static final BlockEntityEntry<AutocannonControlConsoleBlockEntity> AUTOCANNON_CONTROL_CONSOLE = REGISTRATE
+            .blockEntity("autocannon_control_console", AutocannonControlConsoleBlockEntity::new)
+            .validBlocks(CDCBlocks.AUTOCANNON_CONTROL_CONSOLE)
+            .renderer(() -> FireMissionConsoleRenderer::autocannon)
             .register();
 
     /** Loads this class, which registers its entries. */

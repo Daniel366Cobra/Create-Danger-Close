@@ -206,6 +206,10 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         if (solution == null || !solution.valid() || mount == null || level.isClientSide())
             return;
         ServoStatus.MountSnapshot gun = CannonReading.readFixedGun(mount, level.registryAccess());
+        // An autocannon's breech sets each round as it fires it (see CannonReading.orderAutocannonFuzes).
+        if (gun != null && gun.autocannon())
+            CannonReading.orderAutocannonFuzes(mount.getContraption(),
+                    solution.fuzeTicks(), solution.impactDelayTicks(), level.getGameTime());
         if (gun == null || !gun.hasShell())
             return;
         boolean delayed = CannonReading.isDelayedImpactFuze(gun.fuzeStack());

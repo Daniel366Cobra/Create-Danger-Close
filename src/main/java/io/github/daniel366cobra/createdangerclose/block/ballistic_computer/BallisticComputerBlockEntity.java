@@ -114,6 +114,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Console: of several consoles, the most recently set one wins.
     private int fuzeOffsetTicks = 0;
     private long fuzeOffsetSetTick = Long.MIN_VALUE;
+    // The same for the autocannons, set at an Autocannon Control Console: rounds and shells
+    // are corrected apart, each by its own console's knob.
+    private int autocannonFuzeOffsetTicks = 0;
+    private long autocannonFuzeOffsetSetTick = Long.MIN_VALUE;
     // Shortest fuze it sets, ticks: a fuze set to burst at once would go off in the barrel.
     private static final int MIN_FUZE_TICKS = 1;
     // Re-solves from the muzzle where the last solve aimed the barrel: each pass
@@ -151,6 +155,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
     }
 
+    // Autocannons this computer has set firing, and when a console last ordered them to fire:
+    // with no order for a moment (trigger released, weapons free off) they cease fire.
+    private final Set<BlockPos> autocannonsFiring = new HashSet<>();
+    private long autocannonOrderTick;
+    private static final int AUTOCANNON_ORDER_TIMEOUT_TICKS = 2;
+
     // Danger close (server): the guns whose shells would land near our own side this poll,
     // where our own side stands (world), and when a warned salvo was armed (-1: not armed).
     private final Set<BlockPos> dangerCloseGuns = new HashSet<>();
@@ -185,6 +195,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private double targetVelZ = 0;
     // Age and 1σ range error of the rangefinder reading, for the tooltip.
     private long targetAgeTicks = 0;
+    // When the directing rangefinder took its reading (server), for telling a live target from a held one.
+    private long targetSampleTick;
     private double targetSigma = 0;
     // How many rangefinders' readings went into the target (1 = just the directing one).
     private int mergedRangefinders = 0;
@@ -207,6 +219,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private List<BattlePlot.RangefinderFix> plotFixes = List.of();
 
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new HashMap<>();
+    // Which of those lines are autocannons' (synced): each console lists only its own guns.
+    private final Set<BlockPos> autocannonReports = new HashSet<>();
 
     // Ship-frame solution per mount position, shared by its pitch and yaw servos.
     private final Map<BlockPos, FireSolution> aimCache = new HashMap<>();
@@ -355,16 +369,18 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         CServer.DangerClose dangerConfig = CDCConfig.server().dangerClose;
         boolean danger = false;
         for (BlockPos mountPos : dangerCloseGuns)
-            danger |= isOnTarget(mountPos);
+            danger |= !isAutocannon(mountPos) && isOnTarget(mountPos);
         long now = level.getGameTime();
         if (danger && dangerConfig.allowDangerClose.get() && (dangerArmedTick < 0
                 || now - dangerArmedTick > dangerConfig.confirmSeconds.get() * 20)) {
             dangerArmedTick = now;
-            return new SalvoResult(0, barrels.size(), true);
+            return new SalvoResult(0, bigCannonCount(), true);
         }
         dangerArmedTick = -1;
         int fired = 0, held = 0;
         for (BlockPos mountPos : barrels.keySet()) {
+            if (isAutocannon(mountPos))
+                continue;
             if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos))
                 fired++;
             else
@@ -375,13 +391,108 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     /** The guns that would fire right now (as fired) and those that would hold (server). */
     public SalvoResult gunsOnTarget() {
-        if (!isPowered || bankConflict)
-            return new SalvoResult(0, barrels.size());
-        int ready = 0;
-        for (BlockPos mountPos : barrels.keySet())
-            if (isOnTarget(mountPos))
+        return onTarget(false);
+    }
+
+    /** The autocannons that would fire right now, and those that would hold (server). */
+    public SalvoResult autocannonsOnTarget() {
+        return onTarget(true);
+    }
+
+    private SalvoResult onTarget(boolean autocannons) {
+        int ready = 0, total = 0;
+        for (BlockPos mountPos : barrels.keySet()) {
+            if (isAutocannon(mountPos) != autocannons)
+                continue;
+            total++;
+            if (isPowered && !bankConflict && isOnTarget(mountPos))
                 ready++;
-        return new SalvoResult(ready, barrels.size() - ready);
+        }
+        return new SalvoResult(ready, total - ready);
+    }
+
+    /**
+     * Fires every autocannon on target, one round each as its breech allows (called every
+     * tick while firing; the breech keeps its own rate). Danger-close ones only once
+     * confirmed. Returns how many fired.
+     */
+    public int fireAutocannons(boolean dangerCloseConfirmed) {
+        if (!(level instanceof ServerLevel serverLevel))
+            return 0;
+        autocannonOrderTick = level.getGameTime();
+        boolean checkDanger = CDCConfig.server().dangerClose.allowDangerClose.get() && !dangerCloseConfirmed;
+        int firing = 0;
+        for (BlockPos mountPos : barrels.keySet()) {
+            if (!isAutocannon(mountPos))
+                continue;
+            boolean fire = isPowered && !bankConflict && isOnTarget(mountPos)
+                    && !(checkDanger && dangerCloseGuns.contains(mountPos));
+            setAutocannonFiring(serverLevel, mountPos, fire);
+            if (fire)
+                firing++;
+        }
+        return firing;
+    }
+
+    /** Puts an autocannon at full rate of fire, or ceases its fire (only changes are sent). */
+    private void setAutocannonFiring(ServerLevel serverLevel, BlockPos mountPos, boolean fire) {
+        if (fire == autocannonsFiring.contains(mountPos))
+            return;
+        if (fire)
+            autocannonsFiring.add(mountPos);
+        else
+            autocannonsFiring.remove(mountPos);
+        CannonFiring.setAutocannonFireRate(serverLevel, mountPos, fire ? CannonFiring.AUTOCANNON_FULL_RATE : 0);
+    }
+
+    /** Broken or picked up: the autocannons it set firing cease fire. */
+    @Override
+    public void remove() {
+        if (level instanceof ServerLevel serverLevel)
+            ceaseAutocannonFire(serverLevel);
+        super.remove();
+    }
+
+    /** Ceases fire on every autocannon this computer set firing. */
+    private void ceaseAutocannonFire(ServerLevel serverLevel) {
+        for (BlockPos mountPos : new ArrayList<>(autocannonsFiring))
+            setAutocannonFiring(serverLevel, mountPos, false);
+    }
+
+    /**
+     * Whether the target is being ranged right now (server): a rangefinder's reading no older
+     * than two of its intervals (readings, like polls, come at the network's pace), or a map or
+     * navigation table's target, which stands. Not a solution the Integrator is only holding.
+     */
+    public boolean isTargetLive() {
+        if (!hasTarget || level == null)
+            return false;
+        if (targetSource != TargetSource.RANGEFINDER)
+            return true;
+        float rpm = Math.max(1, panelNetworkRpm);
+        long window = 2L * Math.round(640f / rpm) + 5;
+        return level.getGameTime() - targetSampleTick <= window;
+    }
+
+    /** Whether an autocannon on target would land near our own side (last poll). */
+    public boolean isAutocannonDangerClose() {
+        for (BlockPos mountPos : dangerCloseGuns)
+            if (isAutocannon(mountPos) && isOnTarget(mountPos))
+                return true;
+        return false;
+    }
+
+    private boolean isAutocannon(BlockPos mountPos) {
+        ServoStatus.MountSnapshot mount = barrels.get(mountPos);
+        return mount != null && mount.autocannon();
+    }
+
+    private int bigCannonCount() {
+        int count = 0;
+        for (BlockPos mountPos : barrels.keySet())
+            if (!isAutocannon(mountPos))
+                count++;
+        return count;
     }
 
     /**
@@ -410,30 +521,43 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Takes a Fire Mission Console's fuze correction, if it was set more
-     * recently than the one in use (server).
+     * Takes a console's fuze correction, if it was set more recently than the one in use
+     * (server): a Fire Mission Console's for the big cannons, an Autocannon Control
+     * Console's for the autocannons.
      */
-    public void offerFuzeOffset(int ticks, long setTick) {
-        if (setTick < fuzeOffsetSetTick || (setTick == fuzeOffsetSetTick && ticks == fuzeOffsetTicks))
+    public void offerFuzeOffset(int ticks, long setTick, boolean autocannons) {
+        long inUseTick = autocannons ? autocannonFuzeOffsetSetTick : fuzeOffsetSetTick;
+        int inUse = autocannons ? autocannonFuzeOffsetTicks : fuzeOffsetTicks;
+        if (setTick < inUseTick || (setTick == inUseTick && ticks == inUse))
             return;
-        fuzeOffsetSetTick = setTick;
-        if (fuzeOffsetTicks != ticks) {
-            fuzeOffsetTicks = ticks;
+        if (autocannons)
+            autocannonFuzeOffsetSetTick = setTick;
+        else
+            fuzeOffsetSetTick = setTick;
+        if (inUse != ticks) {
+            if (autocannons)
+                autocannonFuzeOffsetTicks = ticks;
+            else
+                fuzeOffsetTicks = ticks;
             setChanged();
         }
     }
 
-    /** A time of flight with the fuze correction added, as set on the shells, ticks. */
-    private int correctedFuze(int timeOfFlightTicks) {
-        return Math.max(MIN_FUZE_TICKS, timeOfFlightTicks + fuzeOffsetTicks);
+    private int fuzeOffset(boolean autocannon) {
+        return autocannon ? autocannonFuzeOffsetTicks : fuzeOffsetTicks;
+    }
+
+    /** A time of flight with the fuze correction added, as set on the shells or rounds, ticks. */
+    private int correctedFuze(int timeOfFlightTicks, boolean autocannon) {
+        return Math.max(MIN_FUZE_TICKS, timeOfFlightTicks + fuzeOffset(autocannon));
     }
 
     /**
      * The delay for delayed impact and inertia fuzes, ticks: the fuze correction
      * itself (they count from impact, not launch), never below none.
      */
-    private int impactDelay() {
-        return Math.max(0, fuzeOffsetTicks);
+    private int impactDelay(boolean autocannon) {
+        return Math.max(0, fuzeOffset(autocannon));
     }
 
     /** Whether the bank has this module, i.e. the computer has its capability. */
@@ -462,6 +586,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return;
         }
         if (level == null) return;
+
+        // No console ordering the autocannons any more: cease fire.
+        if (!autocannonsFiring.isEmpty() && level instanceof ServerLevel serverLevel
+                && level.getGameTime() - autocannonOrderTick > AUTOCANNON_ORDER_TIMEOUT_TICKS)
+            ceaseAutocannonFire(serverLevel);
 
         // The interface stopped polling (unpowered, turned away, removed): go idle.
         if (isPowered && !isLinkFresh()) {
@@ -542,7 +671,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 .findFirst()
                 .orElse(null);
         panelElevationDeg = firstSolution != null ? (float) firstSolution.pitchDeg() : 0;
-        panelFuzeTicks = firstSolution != null ? correctedFuze(firstSolution.fuzeTicks()) : 0;
+        panelFuzeTicks = firstSolution != null ? correctedFuze(firstSolution.fuzeTicks(), false) : 0;
     }
 
     /** Eases the panel's moving parts towards the synced readings (client). */
@@ -830,6 +959,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         hasTarget = true;
         targetSource = TargetSource.RANGEFINDER;
         targetAgeTicks = level.getGameTime() - directing.sampleTick();
+        targetSampleTick = directing.sampleTick();
         targetSigma = 1 / Math.sqrt(positionWeight);
         mergedRangefinders = 1 + merged.size();
         return merged;
@@ -884,6 +1014,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (network == null) return;
 
         lastPitchResults.clear();
+        autocannonReports.clear();
         aimCache.clear();
         directsShipGuns = false;
         jointByPlate.clear();
@@ -926,6 +1057,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         Map<BlockPos, List<Joint>> chains = new HashMap<>();
         for (Gun gun : guns) {
             List<Joint> chain = chainOf(gun.mount());
+            if (gun.mount().autocannon())
+                autocannonReports.add(gun.reportPos());
             chains.put(gun.pos(), chain);
             if (onShip(gun.mount()))
                 directsShipGuns = true;
@@ -1223,7 +1356,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 return distance <= bubble || distance <= length && offset.normalize().dot(path) >= cos;
             };
         } else {
-            double radius = shell.contains("he_shell") || shell.contains("mortar_shell") ? config.highExplosiveRadius.get()
+            double radius = shell.contains("flak_autocannon") ? config.flakRadius.get()
+                    : shell.contains("he_shell") || shell.contains("mortar_shell") ? config.highExplosiveRadius.get()
                     : shell.contains("fluid_shell") ? config.fluidShellRadius.get()
                     : shell.contains("ap_shell") ? config.armorPiercingRadius.get()
                     : config.otherShellRadius.get();
@@ -1390,8 +1524,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : level.getSeaLevel();
         }
 
+        int flightTicks = mount.maxFlightTicks() > 0 ? mount.maxFlightTicks() : Integer.MAX_VALUE;
         double radius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
-                Math.min(45, maxElevation), referenceY - muzzleWorld.y);
+                Math.min(45, maxElevation), referenceY - muzzleWorld.y, flightTicks);
         if (radius <= 0)
             return null;
 
@@ -1409,7 +1544,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         // gun: the lowest the barrel depresses still lands this far out.
         double minRadius = 0;
         double relativeY = referenceY - muzzleWorld.y;
-        if (plungingFire) {
+        if (plungingFire && !mount.autocannon()) {
             if (maxElevation > 45)
                 minRadius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
                         BallisticSolver.steepestPlungingPitch(maxElevation), relativeY);
@@ -1555,17 +1690,22 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         BallisticSolver.Result result = BallisticSolver.solve(
                 muzzleWorld, targetWorld, targetVel, inheritedVelocity,
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
-                90.0, -90.0, plungingFire);
+                90.0, -90.0, plungingFire && !mount.autocannon());
         for (int pass = 0; pass < MUZZLE_REFINEMENT_PASSES && result.valid() && mount.muzzleDistance() > 0; pass++) {
             muzzleWorld = muzzleAt(pivotWorld, aimDirection(result.pitchDeg(), result.yawDeg()), mount);
             result = BallisticSolver.solve(
                     muzzleWorld, targetWorld, targetVel, inheritedVelocity,
                     muzzleVelocity, gravity, drag, isQuadraticDrag,
-                    90.0, -90.0, plungingFire);
+                    90.0, -90.0, plungingFire && !mount.autocannon());
         }
 
         if (!result.valid()) {
             lastPitchResults.put(servoPos, result);
+            return null;
+        }
+        // An autocannon's round expires after its lifetime: out of reach if it would not get there.
+        if (mount.maxFlightTicks() > 0 && result.timeOfFlightTicks() > mount.maxFlightTicks()) {
+            lastPitchResults.put(servoPos, BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.ROUND_EXPIRES));
             return null;
         }
 
@@ -1597,8 +1737,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         // Setting fuzes takes a Fuze Computer: without one, fuzes stay as loaded (0 and -1).
         boolean setsFuzes = has(ComputerModule.FUZE_COMPUTER);
         FireSolution solution = new FireSolution(shipPitchDeg, shipYawDeg,
-                setsFuzes ? correctedFuze(result.fuzeTicks()) : 0,
-                setsFuzes ? impactDelay() : -1, true);
+                setsFuzes ? correctedFuze(result.fuzeTicks(), mount.autocannon()) : 0,
+                setsFuzes ? impactDelay(mount.autocannon()) : -1, true);
         aimCache.put(mount.mountPos(), solution);
         return solution;
     }
@@ -1724,9 +1864,18 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         this.isPowered = compound.getBoolean("IsPowered");
         this.bankConflict = compound.getBoolean("BankConflict");
         this.plungingFire = compound.getBoolean("PlungingFire");
+        if (!clientPacket) {
+            autocannonsFiring.clear();
+            for (long pos : compound.getLongArray("AutocannonsFiring"))
+                autocannonsFiring.add(BlockPos.of(pos));
+        }
         this.fuzeOffsetTicks = compound.getInt("FuzeOffset");
         if (!clientPacket)
             this.fuzeOffsetSetTick = compound.contains("FuzeOffsetSet") ? compound.getLong("FuzeOffsetSet") : Long.MIN_VALUE;
+        this.autocannonFuzeOffsetTicks = compound.getInt("AutocannonFuzeOffset");
+        if (!clientPacket)
+            this.autocannonFuzeOffsetSetTick = compound.contains("AutocannonFuzeOffsetSet")
+                    ? compound.getLong("AutocannonFuzeOffsetSet") : Long.MIN_VALUE;
         this.panelBearingDeg = compound.getFloat("PanelBearing");
         this.panelRange = compound.getFloat("PanelRange");
         this.panelRangeFraction = compound.getFloat("PanelRangeFraction");
@@ -1770,6 +1919,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         if (clientPacket) {
             this.lastPitchResults.clear();
+            this.autocannonReports.clear();
             ListTag results = compound.getList("PitchResults", Tag.TAG_COMPOUND);
             for (int i = 0; i < results.size(); i++) {
                 CompoundTag t = results.getCompound(i);
@@ -1781,6 +1931,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                         t.getInt("Fuze"), 0, t.getInt("Fuze"))
                         : BallisticSolver.Result.invalid(reason);
                 this.lastPitchResults.put(pos, r);
+                if (t.getBoolean("Autocannon"))
+                    this.autocannonReports.add(pos);
             }
         }
     }
@@ -1791,9 +1943,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         compound.putBoolean("IsPowered", isPowered);
         compound.putBoolean("BankConflict", bankConflict);
         compound.putBoolean("PlungingFire", plungingFire);
+        if (!clientPacket)
+            compound.putLongArray("AutocannonsFiring", autocannonsFiring.stream().mapToLong(BlockPos::asLong).toArray());
         compound.putInt("FuzeOffset", fuzeOffsetTicks);
         if (!clientPacket)
             compound.putLong("FuzeOffsetSet", fuzeOffsetSetTick);
+        compound.putInt("AutocannonFuzeOffset", autocannonFuzeOffsetTicks);
+        if (!clientPacket)
+            compound.putLong("AutocannonFuzeOffsetSet", autocannonFuzeOffsetSetTick);
         compound.putFloat("PanelBearing", panelBearingDeg);
         compound.putFloat("PanelRange", panelRange);
         compound.putFloat("PanelRangeFraction", panelRangeFraction);
@@ -1841,6 +1998,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             t.putInt("Reason", r.reason().ordinal());
             t.putDouble("Pitch", r.pitchDeg());
             t.putInt("Fuze", r.fuzeTicks());
+            t.putBoolean("Autocannon", autocannonReports.contains(e.getKey()));
             results.add(t);
         }
         compound.put("PitchResults", results);
@@ -1924,13 +2082,15 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
      * each gun's solution. Shown by Fire Mission Consoles, which read it from
      * this computer (client side, from its synced data).
      */
-    public void addFireMissionTooltip(List<Component> tooltip) {
-        CDCLang.builder()
-                .add(Component.translatable(plungingFire
-                        ? "createdangerclose.fire_mission_console.mode.plunging"
-                        : "createdangerclose.fire_mission_console.mode.direct"))
-                .style(ChatFormatting.AQUA)
-                .forGoggles(tooltip);
+    public void addFireMissionTooltip(List<Component> tooltip, boolean autocannons) {
+        // Autocannons always fire direct: their console shows its own fire mode instead.
+        if (!autocannons)
+            CDCLang.builder()
+                    .add(Component.translatable(plungingFire
+                            ? "createdangerclose.fire_mission_console.mode.plunging"
+                            : "createdangerclose.fire_mission_console.mode.direct"))
+                    .style(ChatFormatting.AQUA)
+                    .forGoggles(tooltip);
 
         if (hasTarget) {
             CDCLang.builder()
@@ -1982,6 +2142,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     .forGoggles(tooltip);
 
             for (Map.Entry<BlockPos, BallisticSolver.Result> entry : lastPitchResults.entrySet()) {
+                // Only the guns this console orders.
+                if (autocannonReports.contains(entry.getKey()) != autocannons)
+                    continue;
                 BallisticSolver.Result r = entry.getValue();
                 String reasonKey = "createdangerclose.ballistic_computer.reason."
                         + r.reason().name().toLowerCase();

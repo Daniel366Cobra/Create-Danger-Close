@@ -11,6 +11,7 @@ import dev.engine_room.flywheel.api.visual.TickableVisual;
 import dev.engine_room.flywheel.lib.model.Models;
 import dev.engine_room.flywheel.lib.visual.SimpleTickableVisual;
 import io.github.daniel366cobra.createdangerclose.registries.CDCPartialModels;
+import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
@@ -37,6 +38,13 @@ public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEnti
     private final boolean isOutput;
 
     public CannonServoVisual(VisualizationContext context, KineticBlockEntity blockEntity, float partialTick, boolean isOutput) {
+        this(context, blockEntity, partialTick, isOutput, CDCPartialModels.SERVO_INPUT_COUPLER,
+                CDCPartialModels.SERVO_OUTPUT_COUPLER, CDCPartialModels.SERVO_TRANSFER_COUPLER);
+    }
+
+    /** With other transmission parts drawn in the same place (the Kinetic Network Coupler's). */
+    public CannonServoVisual(VisualizationContext context, KineticBlockEntity blockEntity, float partialTick, boolean isOutput,
+                             PartialModel inputPart, PartialModel outputPart, PartialModel transferPart) {
         super(context, blockEntity, partialTick);
         this.isOutput = isOutput;
 
@@ -56,7 +64,7 @@ public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEnti
                 .createInstance();
         gizmo = instancerProvider()
                 .instancer(AllInstanceTypes.ROTATING,
-                        Models.partial(isOutput ? CDCPartialModels.SERVO_OUTPUT_COUPLER : CDCPartialModels.SERVO_INPUT_COUPLER))
+                        Models.partial(isOutput ? outputPart : inputPart))
                 .createInstance();
 
         shaft.setup(blockEntity)
@@ -78,7 +86,7 @@ public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEnti
         if (isOutput) {
             carrierSpeed = computeCarrierSpeed();
             carrier = instancerProvider()
-                    .instancer(AllInstanceTypes.ROTATING, Models.partial(CDCPartialModels.SERVO_TRANSFER_COUPLER))
+                    .instancer(AllInstanceTypes.ROTATING, Models.partial(transferPart))
                     .createInstance();
             carrier.setup(blockEntity, carrierSpeed)
                     .setPosition(inputBlock)

@@ -40,14 +40,39 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
     private static final float READOUT_FRONT = 2, READOUT_BACK = 4, READOUT_HEIGHT = 15.75f, READOUT_FILL = 0.9f;
     private static final PanelText FUZE_READOUT = PanelText.top(11, 14, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
     private static final PanelText TRAJECTORY_READOUT = PanelText.top(7, 10, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
+    // The autocannon console's mode readout: four characters, centred.
+    private static final PanelText AUTO_MODE_READOUT = PanelText.top(6, 10, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
     private static final PanelText READY_READOUT = PanelText.top(2, 5, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
     // Single digits keep "ready/total" to three characters.
     private static final int MAX_GUNS_SHOWN = 9;
 
+    /**
+     * What a console carries: its three controls, and the readout in front of the middle one
+     * (with the widest text it shows, which sets the text's size).
+     */
+    private record Layout(PartialModel knob, PartialModel lever, PartialModel button, PanelText modeReadout,
+                          String widestMode) {}
+
+    private static final Layout FIRE_MISSION = new Layout(CDCPartialModels.CONSOLE_FUZE_KNOB,
+            CDCPartialModels.CONSOLE_TRAJECTORY_LEVER, CDCPartialModels.CONSOLE_FIRE_BUTTON, TRAJECTORY_READOUT, "PLG");
+    private static final Layout AUTOCANNON = new Layout(CDCPartialModels.AA_CONSOLE_FUZE_KNOB,
+            CDCPartialModels.AA_CONSOLE_AUTO_SWITCH, CDCPartialModels.AA_CONSOLE_FIRE_BUTTON, AUTO_MODE_READOUT, "AUTO");
+
     private final Font font;
+    private final Layout layout;
 
     public FireMissionConsoleRenderer(BlockEntityRendererProvider.Context context) {
+        this(context, FIRE_MISSION);
+    }
+
+    private FireMissionConsoleRenderer(BlockEntityRendererProvider.Context context, Layout layout) {
         this.font = context.getFont();
+        this.layout = layout;
+    }
+
+    /** The Autocannon Control Console: the same desk, with an auto switch in place of the lever. */
+    public static FireMissionConsoleRenderer autocannon(BlockEntityRendererProvider.Context context) {
+        return new FireMissionConsoleRenderer(context, AUTOCANNON);
     }
 
     @Override
@@ -61,7 +86,7 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
         float faceTurn = (float) Math.toRadians(-(front.toYRot() + 180));
         VertexConsumer vb = buffer.getBuffer(RenderType.cutoutMipped());
 
-        part(CDCPartialModels.CONSOLE_FUZE_KNOB, state, faceTurn)
+        part(layout.knob(), state, faceTurn)
                 .translate(KNOB_PIVOT_X * PX, 0, KNOB_PIVOT_Z * PX)
                 // About +Y: positive is anticlockwise seen from above.
                 .rotate(rad(-KNOB_MAX_DEG * be.getKnobTurn(partialTicks)), Direction.UP)
@@ -69,23 +94,23 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
                 .light(deckLight)
                 .renderInto(ms, vb);
 
-        part(CDCPartialModels.CONSOLE_TRAJECTORY_LEVER, state, faceTurn)
+        part(layout.lever(), state, faceTurn)
                 .translate(0, LEVER_PIVOT_Y * PX, LEVER_PIVOT_Z * PX)
                 .rotate(rad(LEVER_DOWN_DEG * be.getLeverThrow(partialTicks)), Direction.EAST)
                 .translate(0, -LEVER_PIVOT_Y * PX, -LEVER_PIVOT_Z * PX)
                 .light(deckLight)
                 .renderInto(ms, vb);
 
-        part(CDCPartialModels.CONSOLE_FIRE_BUTTON, state, faceTurn)
+        part(layout.button(), state, faceTurn)
                 .translate(0, -BUTTON_TRAVEL_PX * PX * be.getButtonPress(partialTicks), 0)
                 .light(deckLight)
                 .renderInto(ms, vb);
 
         boolean connected = be.showsMission();
         FUZE_READOUT.draw(font, ms, buffer, front,
-                FireMissionConsoleBlockEntity.formatFuzeOffset(be.getFuzeOffsetTicks()), "+0.0", deckLight);
-        TRAJECTORY_READOUT.draw(font, ms, buffer, front,
-                !connected ? "---" : be.isPlunging() ? "PLG" : "DIR", "PLG", deckLight);
+                be.fuzeText(), be.widestFuzeText(), deckLight);
+        layout.modeReadout().draw(font, ms, buffer, front,
+                !connected ? "-".repeat(layout.widestMode().length()) : be.modeText(), layout.widestMode(), deckLight);
         READY_READOUT.draw(font, ms, buffer, front, !connected ? "-/-"
                 : Math.min(be.getGunsReady(), MAX_GUNS_SHOWN) + "/" + Math.min(be.getGunsTotal(), MAX_GUNS_SHOWN),
                 "0/0", deckLight);

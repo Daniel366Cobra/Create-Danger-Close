@@ -19,9 +19,13 @@ import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.Compu
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlock;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlock;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableCTBehaviour;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.AutocannonControlConsoleBlock;
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlock;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlock;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
+import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerBlockItem;
+import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerInputBlock;
+import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerOutputBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderEyepieceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensBlock;
@@ -143,6 +147,27 @@ public class CDCBlocks {
             .lang("Fire Mission Console")
             .register();
 
+    public static final BlockEntry<AutocannonControlConsoleBlock> AUTOCANNON_CONTROL_CONSOLE = REGISTRATE
+            .block("autocannon_control_console", AutocannonControlConsoleBlock::new)
+            .initialProperties(SharedProperties::softMetal)
+            // A desk, not a full block: neighbours and light must show around it.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
+            .transform(axeOrPickaxe())
+            .blockstate((c, p) -> p.horizontalBlock(c.get(),
+                    p.models().getExistingFile(p.modLoc("block/autocannon_control_console/block"))))
+            .item()
+            .transform(customItemModel("autocannon_control_console/item"))
+            .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
+                    .requires(AllBlocks.BRASS_CASING)
+                    .requires(AllItems.PRECISION_MECHANISM)
+                    .requires(Items.STONE_BUTTON)
+                    .requires(Items.LEVER)
+                    .requires(Items.REDSTONE)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.PRECISION_MECHANISM))
+                    .save(p))
+            .lang("Autocannon Control Console")
+            .register();
+
     /**
      * A computer module: a casing-sided block whose face turns in yaw. Crafted
      * from a brass casing, a precision mechanism and one part of its own.
@@ -178,9 +203,7 @@ public class CDCBlocks {
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .blockstate(BlockStateGen.directionalBlockProvider(true))
             .transform(axeOrPickaxe())
-            .onRegister(block -> {
-                BlockStressValues.IMPACTS.register(block, () -> 4.0);
-            })
+            // No fixed stress impact: it charges the battle network for what its cannon side draws.
             .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
                 if (!(state.getBlock() instanceof CannonServoInputBlock))
                     return BlockMovementChecks.CheckResult.PASS;
@@ -216,9 +239,6 @@ public class CDCBlocks {
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .blockstate(BlockStateGen.directionalBlockProvider(true))
             .transform(axeOrPickaxe())
-            .onRegister(block -> {
-                BlockStressValues.IMPACTS.register(block, () -> 4.0);
-            })
             .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
                 if (!(state.getBlock() instanceof CannonServoOutputBlock))
                     return BlockMovementChecks.CheckResult.PASS;
@@ -233,6 +253,60 @@ public class CDCBlocks {
             }))
             .blockstate((c, p) -> p.directionalBlock(c.get(),
                     $ -> p.models().getExistingFile(p.modLoc("block/cannon_servo/block_output"))))
+            .register();
+
+    public static final BlockEntry<CouplerInputBlock> KINETIC_NETWORK_COUPLER = REGISTRATE.block("kinetic_network_coupler", CouplerInputBlock::new)
+            .initialProperties(SharedProperties::softMetal)
+            // Open model (inspection windows), as the servo's.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
+            .transform(axeOrPickaxe())
+            // No fixed stress impact: it charges the engine side what its battle network draws.
+            .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
+                if (!(state.getBlock() instanceof CouplerInputBlock))
+                    return BlockMovementChecks.CheckResult.PASS;
+                if (state.getValue(CouplerInputBlock.FACING) != direction)
+                    return BlockMovementChecks.CheckResult.PASS;
+                return BlockMovementChecks.CheckResult.SUCCESS;
+            }))
+            .onRegister(b -> BlockMovementChecks.registerBrittleCheck(state -> {
+                if (!(state.getBlock() instanceof CouplerInputBlock))
+                    return BlockMovementChecks.CheckResult.PASS;
+                return BlockMovementChecks.CheckResult.SUCCESS;
+            }))
+            .blockstate((c, p) -> p.directionalBlock(c.get(),
+                    $ -> p.models().getExistingFile(p.modLoc("block/kinetic_network_coupler/block_input"))))
+            .item(CouplerBlockItem::new)
+            .transform(customItemModel("kinetic_network_coupler/item"))
+            .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
+                    .pattern(" P ")
+                    .pattern("GBG")
+                    .define('G', AllBlocks.GEARBOX)
+                    .define('B', AllBlocks.BRASS_CASING)
+                    .define('P', AllItems.PRECISION_MECHANISM)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.BRASS_INGOT))
+                    .save(p))
+            .lang("Kinetic Network Coupler")
+            .register();
+
+    public static final BlockEntry<CouplerOutputBlock> KINETIC_NETWORK_COUPLER_OUTPUT = REGISTRATE.block("kinetic_network_coupler_output", CouplerOutputBlock::new)
+            .initialProperties(SharedProperties::softMetal)
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
+            .transform(axeOrPickaxe())
+            .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
+                if (!(state.getBlock() instanceof CouplerOutputBlock))
+                    return BlockMovementChecks.CheckResult.PASS;
+                if (state.getValue(CouplerOutputBlock.FACING).getOpposite() != direction)
+                    return BlockMovementChecks.CheckResult.PASS;
+                return BlockMovementChecks.CheckResult.SUCCESS;
+            }))
+            .onRegister(b -> BlockMovementChecks.registerBrittleCheck(state -> {
+                if (!(state.getBlock() instanceof CouplerOutputBlock))
+                    return BlockMovementChecks.CheckResult.PASS;
+                return BlockMovementChecks.CheckResult.SUCCESS;
+            }))
+            .blockstate((c, p) -> p.directionalBlock(c.get(),
+                    $ -> p.models().getExistingFile(p.modLoc("block/kinetic_network_coupler/block_output"))))
+            .lang("Kinetic Network Coupler")
             .register();
 
     public static final BlockEntry<RangefinderBearingBlock> RANGEFINDER_BEARING = REGISTRATE.block("rangefinder_bearing", RangefinderBearingBlock::new)

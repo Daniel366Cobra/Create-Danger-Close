@@ -7,6 +7,9 @@ public class CDCPartialModels {
     public static final PartialModel SERVO_INPUT_COUPLER = block("cannon_servo/input_coupler");
     public static final PartialModel SERVO_OUTPUT_COUPLER = block("cannon_servo/output_coupler");
     public static final PartialModel SERVO_TRANSFER_COUPLER = block("cannon_servo/transfer_coupler");
+    public static final PartialModel COUPLER_INPUT_COUPLER = block("kinetic_network_coupler/input_coupler");
+    public static final PartialModel COUPLER_OUTPUT_COUPLER = block("kinetic_network_coupler/output_coupler");
+    public static final PartialModel COUPLER_TRANSFER_COUPLER = block("kinetic_network_coupler/transfer_coupler");
 
     // Ballistic Computer front panel.
     public static final PartialModel COMPUTER_BEARING_NEEDLE = block("computer/ballistic_computer/bearing_needle");
@@ -34,6 +37,9 @@ public class CDCPartialModels {
     public static final PartialModel CONSOLE_FUZE_KNOB = block("fire_mission_console/fuze_delay_knob");
     public static final PartialModel CONSOLE_TRAJECTORY_LEVER = block("fire_mission_console/trajectory_switch_lever");
     public static final PartialModel CONSOLE_FIRE_BUTTON = block("fire_mission_console/fire_button");
+    public static final PartialModel AA_CONSOLE_FUZE_KNOB = block("autocannon_control_console/fuze_delay_knob");
+    public static final PartialModel AA_CONSOLE_AUTO_SWITCH = block("autocannon_control_console/auto_mode_switch_lever");
+    public static final PartialModel AA_CONSOLE_FIRE_BUTTON = block("autocannon_control_console/fire_button");
 
     // Navigation Console.
     public static final PartialModel NAV_CONSOLE_BALL = block("navigation_console/nav_ball");

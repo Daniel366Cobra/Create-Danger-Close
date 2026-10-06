@@ -17,7 +17,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record FireMissionKnobPayload(BlockPos console, int deltaTicks) implements CustomPacketPayload {
 
     // Largest turn one scroll may make, ticks (a coarse notch).
-    private static final int MAX_STEP_TICKS = 2;
+    private static final int MAX_STEP_TICKS = 5;
 
     public static final Type<FireMissionKnobPayload> TYPE =
             new Type<>(CreateDangerClose.asResource("fire_mission_knob"));

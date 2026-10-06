@@ -9,13 +9,23 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import rbasamoyai.createbigcannons.cannon_control.contraption.AbstractMountedCannonContraption;
 import rbasamoyai.createbigcannons.cannon_control.contraption.MountedBigCannonContraption;
+import rbasamoyai.createbigcannons.cannon_control.contraption.MountedAutocannonContraption;
+import rbasamoyai.createbigcannons.cannons.autocannon.AutocannonBlock;
+import rbasamoyai.createbigcannons.cannons.autocannon.breech.AbstractAutocannonBreechBlockEntity;
+import rbasamoyai.createbigcannons.cannons.autocannon.material.AutocannonMaterial;
+import rbasamoyai.createbigcannons.cannons.autocannon.material.AutocannonMaterialProperties;
+import rbasamoyai.createbigcannons.munitions.autocannon.AutocannonAmmoItem;
+import rbasamoyai.createbigcannons.munitions.autocannon.AutocannonCartridgeItem;
+import rbasamoyai.createbigcannons.munitions.autocannon.ammo_container.AutocannonAmmoContainerItem;
 import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
 import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
+import rbasamoyai.createbigcannons.cannons.big_cannons.BigCannonBlock;
 import rbasamoyai.createbigcannons.cannons.big_cannons.BigCannonBehavior;
 import rbasamoyai.createbigcannons.cannons.big_cannons.IBigCannonBlockEntity;
 import rbasamoyai.createbigcannons.index.CBCDataComponents;
@@ -29,6 +39,8 @@ import rbasamoyai.createbigcannons.munitions.config.components.BallisticProperti
 import rbasamoyai.createbigcannons.munitions.fuzes.DelayedImpactFuzeItem;
 import rbasamoyai.createbigcannons.munitions.fuzes.DelayedInertiaFuzeItem;
 import rbasamoyai.createbigcannons.munitions.fuzes.TimedFuzeItem;
+
+import java.util.List;
 
 import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
 
@@ -214,6 +226,8 @@ public final class CannonReading {
      */
     static boolean setLoadedFuzeTime(@Nullable PitchOrientedContraptionEntity entity, int ticks, HolderLookup.Provider registries) {
         if (entity == null) return false;
+        if (entity.getContraption() instanceof MountedAutocannonContraption autocannon)
+            return setAutocannonFuzeTime(entity, autocannon, ticks);
         if (!(entity.getContraption() instanceof MountedBigCannonContraption mounted)) return false;
 
         for (var entry : mounted.presentBlockEntities.entrySet()) {
@@ -253,6 +267,94 @@ public final class CannonReading {
     }
 
     /**
+     * Sets the fuze timer on every round an autocannon has to fire: those queued in its
+     * breech, and those in its ammo container, main and tracer (they all go up the same
+     * barrel at the same target). Returns true if any had a timed or delayed fuze.
+     */
+    private static boolean setAutocannonFuzeTime(PitchOrientedContraptionEntity entity,
+                                                 MountedAutocannonContraption cannon, int ticks) {
+        for (var entry : cannon.presentBlockEntities.entrySet()) {
+            if (!(entry.getValue() instanceof AbstractAutocannonBreechBlockEntity breech))
+                continue;
+            boolean set = false;
+            for (ItemStack queued : breech.getInputBuffer())
+                set |= setRoundFuzeTime(queued, ticks);
+            ItemStack magazine = breech.getMagazine();
+            if (!magazine.isEmpty()) {
+                ItemStack main = AutocannonAmmoContainerItem.getMainAmmoStack(magazine);
+                if (setRoundFuzeTime(main, ticks)) {
+                    magazine.set(CBCDataComponents.AMMO, ItemContainerContents.fromItems(List.of(main)));
+                    set = true;
+                }
+                ItemStack tracers = AutocannonAmmoContainerItem.getTracerAmmoStack(magazine);
+                if (setRoundFuzeTime(tracers, ticks)) {
+                    magazine.set(CBCDataComponents.TRACERS, ItemContainerContents.fromItems(List.of(tracers)));
+                    set = true;
+                }
+            }
+            if (set) {
+                breech.setChanged();
+                StructureBlockInfo info = cannon.getBlocks().get(entry.getKey());
+                if (info != null)
+                    BigCannonBlock.writeAndSyncSingleBlockData(breech, info, entity, cannon);
+            }
+            return set;
+        }
+        return false;
+    }
+
+    /**
+     * Orders an autocannon's breech to set this fuze on each round it fires (see
+     * {@link FuzeOrderedBreech}): a timed fuze's time (0 or less: as loaded), a delayed
+     * fuze's delay (below 0: as loaded). To be renewed while the gun is laid.
+     */
+    public static void orderAutocannonFuzes(@Nullable PitchOrientedContraptionEntity entity,
+                                            int timedTicks, int delayTicks, long gameTime) {
+        if (entity == null || !(entity.getContraption() instanceof MountedAutocannonContraption cannon))
+            return;
+        for (var be : cannon.presentBlockEntities.values())
+            if (be instanceof FuzeOrderedBreech breech)
+                breech.createdangerclose$orderFuzes(timedTicks, delayTicks, gameTime);
+    }
+
+    /** Sets a round going up the barrel as ordered (see {@link #orderAutocannonFuzes}). */
+    public static void applyFuzeOrder(ItemStack ammo, int timedTicks, int delayTicks) {
+        if (ammo == null || ammo.isEmpty())
+            return;
+        ItemStack fuze = FuzedProjectileBlock.getFuzeFromItemStack(roundOf(ammo));
+        if (fuze.getItem() instanceof TimedFuzeItem && timedTicks > 0)
+            setRoundFuzeTime(ammo, timedTicks);
+        else if (isDelayedImpactFuze(fuze) && delayTicks >= 0)
+            setRoundFuzeTime(ammo, delayTicks);
+    }
+
+    /** The round itself: a cartridge holds it (the fuze is on the round), a bare round is one. */
+    private static ItemStack roundOf(ItemStack ammo) {
+        return ammo.getItem() instanceof AutocannonCartridgeItem
+                ? AutocannonCartridgeItem.getProjectileStack(ammo) : ammo;
+    }
+
+    /**
+     * Sets an autocannon round's (or cartridge's) timed or delayed fuze to this many ticks,
+     * in place. False if it has no such fuze, or already reads that.
+     */
+    private static boolean setRoundFuzeTime(ItemStack ammo, int ticks) {
+        if (ammo.isEmpty())
+            return false;
+        ItemStack round = roundOf(ammo);
+        ItemStack fuze = FuzedProjectileBlock.getFuzeFromItemStack(round);
+        if (!(fuze.getItem() instanceof TimedFuzeItem) && !isDelayedImpactFuze(fuze))
+            return false;
+        if (fuze.getOrDefault(CBCDataComponents.FUZE_TIMER, -1) == ticks)
+            return false;
+        fuze.set(CBCDataComponents.FUZE_TIMER, ticks);
+        round.set(CBCDataComponents.FUZE, ItemContainerContents.fromItems(List.of(fuze)));
+        if (round != ammo)
+            AutocannonCartridgeItem.writeProjectile(round, ammo);  // (round, cartridge)
+        return true;
+    }
+
+    /**
      * Reads a cannon's angles, barrel and launch point into this mount's record,
      * and for a pitch axis what it is loaded with.
      */
@@ -263,8 +365,93 @@ public final class CannonReading {
         sm.facingYaw = entity.getInitialOrientation().toYRot();
         readMuzzle(sm, entity);
         sm.barrel = barrel(entity);
-        if (sm.axis == PITCH)
-            readShell(sm, entity, registries);
+        sm.autocannon = entity.getContraption() instanceof MountedAutocannonContraption;
+        if (sm.axis == PITCH) {
+            if (sm.autocannon)
+                readAutocannon(sm, entity);
+            else
+                readShell(sm, entity, registries);
+        }
+    }
+
+    /**
+     * Reads an autocannon's next round and how it fires it. CBC gives the round a speed from
+     * the barrel's material: a base speed, and more for each barrel block up to a limit; and
+     * a lifetime, after which the round expires. The next round is the first in the breech's
+     * queue, or failing that the ammo container's.
+     */
+    static void readAutocannon(SlavedMount sm, PitchOrientedContraptionEntity entity) {
+        sm.hasShell = false;
+        sm.shellType = null;
+        sm.fuzeStack = ItemStack.EMPTY;
+        sm.fuzeTimer = 0;
+        sm.isTimedFuze = false;
+        sm.isDelayedImpactFuze = false;
+        sm.totalChargePower = 0;
+        sm.addedChargePower = 0;
+        sm.minimumChargePower = 0;
+        sm.maxFlightTicks = 0;
+        if (!(entity.getContraption() instanceof MountedAutocannonContraption cannon))
+            return;
+
+        Direction along = cannon.initialOrientation();
+        AbstractAutocannonBreechBlockEntity breech = null;
+        BlockPos breechPos = null;
+        for (var entry : cannon.presentBlockEntities.entrySet())
+            if (entry.getValue() instanceof AbstractAutocannonBreechBlockEntity found) {
+                breech = found;
+                breechPos = entry.getKey();
+            }
+        if (breech == null)
+            return;
+
+        // The barrel: its material, and its length past the breech.
+        AutocannonMaterial material = null;
+        int barrels = 0;
+        for (BlockPos pos = breechPos.relative(along); ; pos = pos.relative(along)) {
+            StructureBlockInfo info = cannon.getBlocks().get(pos);
+            if (info == null || !(info.state().getBlock() instanceof AutocannonBlock block))
+                break;
+            material = block.getAutocannonMaterial();
+            barrels++;
+        }
+        if (material == null && cannon.getBlocks().get(breechPos) != null
+                && cannon.getBlocks().get(breechPos).state().getBlock() instanceof AutocannonBlock block)
+            material = block.getAutocannonMaterial();
+        if (material == null)
+            return;
+        AutocannonMaterialProperties properties = material.properties();
+        sm.totalChargePower = properties.baseSpeed()
+                + properties.speedIncreasePerBarrel() * Math.min(barrels, properties.maxSpeedIncreases());
+        sm.maxFlightTicks = properties.projectileLifetime();
+
+        // The next round to fire.
+        ItemStack round = breech.getInputBuffer().isEmpty() ? ItemStack.EMPTY : breech.getInputBuffer().peek();
+        if (round.isEmpty() && !breech.getMagazine().isEmpty()
+                && AutocannonAmmoContainerItem.getTotalAmmoCount(breech.getMagazine()) > 0)
+            round = AutocannonAmmoContainerItem.getMainAmmoStack(breech.getMagazine());
+        if (round.isEmpty() || !(round.getItem() instanceof AutocannonAmmoItem ammo))
+            return;
+
+        EntityType<?> projectileType = ammo.getEntityType(round);
+        BallisticPropertiesComponent ballistics = CBCMunitionPropertiesHandlers.FLAK_AUTOCANNON
+                .getPropertiesOf(projectileType).ballistics();
+        if (ballistics.gravity() == 0)
+            ballistics = CBCMunitionPropertiesHandlers.INERT_AUTOCANNON_PROJECTILE.getPropertiesOf(projectileType).ballistics();
+        sm.hasShell = true;
+        // Named by what it fires (the cartridges themselves all look alike).
+        sm.shellType = BuiltInRegistries.ENTITY_TYPE.getKey(projectileType);
+        sm.gravity = ballistics.gravity();
+        sm.drag = ballistics.drag();
+        sm.isQuadraticDrag = ballistics.isQuadraticDrag();
+        // The fuze is on the round, which a cartridge holds.
+        ItemStack fuze = FuzedProjectileBlock.getFuzeFromItemStack(roundOf(round));
+        sm.fuzeStack = fuze;
+        sm.isTimedFuze = fuze.getItem() instanceof TimedFuzeItem;
+        sm.isDelayedImpactFuze = isDelayedImpactFuze(fuze);
+        sm.fuzeTimer = sm.isTimedFuze || sm.isDelayedImpactFuze
+                ? fuze.getOrDefault(CBCDataComponents.FUZE_TIMER, sm.isTimedFuze ? 20 : -1)
+                : 0;
     }
 
     /**
@@ -303,7 +490,7 @@ public final class CannonReading {
                 sm.fuzeStack, sm.fuzeTimer, sm.isTimedFuze,
                 sm.gravity, sm.drag, sm.isQuadraticDrag,
                 sm.addedChargePower, sm.minimumChargePower, sm.totalChargePower,
-                sm.pivot, sm.muzzleDistance, sm.barrel);
+                sm.pivot, sm.muzzleDistance, sm.barrel, sm.autocannon, sm.maxFlightTicks);
     }
 
     /**

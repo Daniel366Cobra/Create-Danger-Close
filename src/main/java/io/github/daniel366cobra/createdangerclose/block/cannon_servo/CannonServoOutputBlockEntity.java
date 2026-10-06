@@ -17,12 +17,14 @@ import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
+import io.github.daniel366cobra.createdangerclose.block.coupler.KineticLoad;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.core.HolderLookup;
@@ -107,6 +109,10 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         public double muzzleDistance;
         // Where the barrel points, a unit vector in the frame the cannon stands in; null if unassembled.
         public @Nullable Vec3 barrel;
+        // An autocannon (fires bursts; its rounds expire after a lifetime), and that lifetime
+        // in ticks (0: no limit).
+        public boolean autocannon;
+        public int maxFlightTicks;
         // The way the cannon faced when assembled (CBC yaw), where the yaw dial reads 0.
         public float facingYaw;
 
@@ -140,8 +146,33 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
     // Where what this servo drives stands on its dial now (synced), for the dial's needle.
     private float dialAngle;
     private EquipmentHealth health;
+    // Power (server; see updatePower). The share of the battle network's capacity never claimed,
+    // how much the limit may rise per update, and how often it is worked out.
+    private static final float POWER_MARGIN = 0.1f;
+    private static final float POWER_RAMP_UP = 1.25f;
+    private static final int POWER_INTERVAL_TICKS = 5;
+    private static final float CAPACITY_HEADROOM = 1.1f, MIN_CAPACITY = 0.5f;
+    // The cannon side's load per RPM of drive (su), as last measured (see KineticLoad).
+    private float mountImpact;
+    // How fast it may drive on its power share (RPM), and that share (su).
+    private float rpmLimit = Float.MAX_VALUE;
+    private float powerShare;
+    // What it offers the cannon side, per RPM.
+    private float outputCapacity = MIN_CAPACITY;
+    // This tick: whether the drive was held back by the share. For the goggles (synced):
+    // whether it was, and what it draws and may draw (su).
+    private boolean drivingLimited;
+    private boolean shownLimited;
+    // Too little power even to hold the mount: overstressed (synced as shownStarved).
+    private boolean overstressHold, shownStarved;
+    // The fastest it was asked to drive this tick (RPM), for what it requests.
+    private float requestedRpm;
+    private static final float RESUME_FACTOR = 1.1f, UNDER_OFFER = 0.99f;
+    private float shownDraw, shownShare;
     private ServoAxis detectedAxis = ServoAxis.NONE;
     private boolean isPowered = false;
+    // Whether the saved network totals left over from loading were dropped (see dropUnloadedStress).
+    private boolean unloadedDropped;
 
     public CannonServoOutputBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -180,8 +211,16 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         isPowered = inputSpeed >= CDCConfig.server().fireControl.minOperatingRpm.get();
 
         pollCannonNetwork();
+        dropUnloadedStress();
         measureTransmission();
+        if (level.getGameTime() % POWER_INTERVAL_TICKS == 0)
+            updatePower();
+        drivingLimited = false;
         applyControl();
+        commitDraw();
+        shownLimited = drivingLimited;
+        shownStarved = overstressHold;
+        shownShare = powerShare;
         swivelSeen = swivel != null;
         swivelTilts = swivel != null && swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxis() != Direction.Axis.Y;
         dialAngle = readDialAngle();
@@ -193,6 +232,21 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         // Clients only use this block's data for goggles.
         if (level.getGameTime() % CLIENT_SYNC_INTERVAL_TICKS == 0)
             notifyUpdate();
+    }
+
+    /**
+     * Once after loading, when it has found what it drives: Create rebuilds a network from
+     * its saved totals, less what each block accounts for as it loads, but CBC's mount
+     * interfaces never do, so their share would stay on as phantom stress (overstressing
+     * the cannon side until the network was rebuilt). This servo is that side's only
+     * source, and what it drives has loaded: the leftover is dropped.
+     */
+    private void dropUnloadedStress() {
+        if (unloadedDropped || !hasNetwork()
+                || detectedAxis == ServoAxis.NONE || detectedAxis == ServoAxis.INVALID)
+            return;
+        unloadedDropped = true;
+        getOrCreateNetwork().initFromTE(0, 0, 0);
     }
 
     /**
@@ -340,7 +394,88 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         return CDCConfig.server().fireControl.maxServoRpm.get();
     }
 
+    // ------------------------------------------------------------------
+    // Power: the battle network pays for what the cannon side draws
+    // ------------------------------------------------------------------
+
+    /**
+     * Works out how fast this servo may drive on its share of the battle network's spare
+     * power. The mount's load is read from the cannon side as it runs (its stress per RPM
+     * of drive, gearing included); the spare is the battle network's capacity, less a
+     * margin, less everything but the servos driving now, shared equally among those. The
+     * limit drops at once when the share shrinks, and rises gently when it grows.
+     */
+    private void updatePower() {
+        mountImpact = KineticLoad.perRpmOf(this, mountImpact);
+        CannonServoInputBlockEntity input = getAdjacentInput();
+        if (input == null || !input.hasNetwork() || mountImpact <= 0) {
+            rpmLimit = Float.MAX_VALUE;
+            powerShare = 0;
+            overstressHold = false;
+            return;
+        }
+        KineticNetwork battle = input.getOrCreateNetwork();
+        int driving = 0;
+        float drivingDraw = 0;
+        for (KineticBlockEntity member : battle.members.keySet())
+            if (member instanceof CannonServoInputBlockEntity servo && (servo == input || servo.isDriving())) {
+                driving++;
+                drivingDraw += servo.getDraw();
+            }
+        float otherLoad = input.getNetworkStress() - drivingDraw;
+        float pool = input.getNetworkCapacity() * (1 - POWER_MARGIN) - otherLoad;
+        powerShare = Math.max(0, pool / Math.max(1, driving));
+        float shareRpm = powerShare / mountImpact;
+        // Too little even to hold the mount: overstressed until the share covers it with a margin.
+        overstressHold = shareRpm < (overstressHold ? KEEP_ALIVE_RPM * RESUME_FACTOR : KEEP_ALIVE_RPM);
+        rpmLimit = Math.min(shareRpm, rpmLimit >= Float.MAX_VALUE / 2 ? shareRpm : rpmLimit * POWER_RAMP_UP + 1);
+    }
+
+    /** Charges the battle network for what the cannon side draws at the speed driven now, and offers it there. */
+    private void commitDraw() {
+        // Every tick: the speed may just have changed, and the capacity must follow at once.
+        mountImpact = KineticLoad.perRpmOf(this, mountImpact);
+        boolean overstressed = overstressHold && Math.abs(desiredGeneratedSpeed) > 1e-3f;
+        float load = mountImpact * Math.abs(desiredGeneratedSpeed);
+        // Overstressed, the cannon side does no work: the battle network pays nothing.
+        float draw = overstressed ? 0 : load;
+        CannonServoInputBlockEntity input = getAdjacentInput();
+        if (input != null)
+            input.setDrawImpact(Math.abs(input.getSpeed()) > 1e-3f ? draw / Math.abs(input.getSpeed()) : 0);
+        // A little over the load, so the cannon side never overstresses on rounding; or, starved,
+        // what the share can spare but short of the load, so Create shows it overstressed.
+        float capacity = overstressed
+                ? Math.min(powerShare, load * UNDER_OFFER) / Math.abs(desiredGeneratedSpeed)
+                : mountImpact * CAPACITY_HEADROOM + MIN_CAPACITY;
+        // Against what the network has on record for us too: it may have been rebuilt with an older figure.
+        Float recorded = hasNetwork() ? getOrCreateNetwork().sources.get(this) : null;
+        if (Math.abs(capacity - outputCapacity) > Math.max(0.01f, outputCapacity * 0.02f)
+                || (recorded != null && Math.abs(recorded - capacity) > Math.max(0.01f, capacity * 0.02f))) {
+            outputCapacity = capacity;
+            if (hasNetwork())
+                getOrCreateNetwork().updateCapacityFor(this, capacity);
+        }
+        // For the goggles: what it would need at the speed it was asked for.
+        shownDraw = mountImpact * requestedRpm;
+        requestedRpm = 0;
+    }
+
+    /** Whether it is driving its gun now, not just holding it (for sharing the battle network's power). */
+    boolean isDriving() {
+        return Math.abs(desiredGeneratedSpeed) > KEEP_ALIVE_RPM + 1e-3f;
+    }
+
     private void applyGeneratedSpeed(float rpm) {
+        // No faster than the battle network's power share allows. Too little even to hold the
+        // mount: kept turning at the keep-alive speed, but overstressed (see commitDraw).
+        requestedRpm = Math.max(requestedRpm, Math.abs(rpm));
+        if (overstressHold && rpm != 0) {
+            drivingLimited = true;
+            rpm = Math.copySign(Math.min(Math.abs(rpm), KEEP_ALIVE_RPM), rpm);
+        } else if (Math.abs(rpm) > rpmLimit) {
+            drivingLimited = true;
+            rpm = Math.copySign(rpmLimit, rpm);
+        }
         if (Math.abs(desiredGeneratedSpeed - rpm) < 1e-4f) return;
         desiredGeneratedSpeed = rpm;
         if (level != null && !level.isClientSide) {
@@ -358,6 +493,11 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         // a delayed impact or inertia fuze's delay to the correction alone.
         if (detectedAxis == ServoAxis.PITCH) {
             for (SlavedMount sm : slavedMounts) {
+                // An autocannon: its breech sets each round as it fires it (a hopper-fed one
+                // holds none long enough to be set here), so the order stands while it is laid.
+                if (sm.autocannon && sm.mount != null)
+                    CannonReading.orderAutocannonFuzes(sm.mount.getContraption(),
+                            command.fuzeTicks(), command.impactDelayTicks(), level.getGameTime());
                 int wanted = sm.isTimedFuze ? command.fuzeTicks()
                         : sm.isDelayedImpactFuze ? command.impactDelayTicks() : -1;
                 boolean leaveAsLoaded = sm.isTimedFuze ? wanted <= 0 : wanted < 0;
@@ -526,7 +666,8 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
     @Override
     public float calculateAddedStressCapacity() {
-        return 64.0f;
+        lastCapacityProvided = outputCapacity;
+        return outputCapacity;
     }
 
     // ------------------------------------------------------------------
@@ -539,10 +680,18 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
 
         compound.putBoolean("IsPowered", isPowered);
         compound.putInt("detectedAxis", detectedAxis.ordinal());
+        // What it offers the cannon side, saved so the network is rebuilt with it on load
+        // (else it is rebuilt before anything is measured, short of the mount's load).
+        compound.putFloat("OutputCapacity", outputCapacity);
+        compound.putFloat("MountImpact", mountImpact);
         compound.putFloat("SwivelAngle", shownSwivelAngle);
         compound.putFloat("SwivelTarget", shownSwivelTarget);
         compound.putBoolean("SwivelSeen", swivelSeen);
         compound.putFloat("DialAngle", dialAngle);
+        compound.putBoolean("PowerLimited", shownLimited);
+        compound.putBoolean("PowerStarved", shownStarved);
+        compound.putFloat("PowerDraw", shownDraw);
+        compound.putFloat("PowerShare", shownShare);
         compound.putBoolean("SwivelTilts", swivelTilts);
         compound.putInt("SwivelSense", swivelSense);
         if (limits != null)
@@ -585,6 +734,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         ServoAxis[] axes = ServoAxis.values();
         int ServoAxisOrd = compound.getInt("detectedAxis");
         this.detectedAxis = (ServoAxisOrd >= 0 && ServoAxisOrd < axes.length) ? axes[ServoAxisOrd] : ServoAxis.NONE;
+        if (compound.contains("OutputCapacity"))
+            outputCapacity = compound.getFloat("OutputCapacity");
+        mountImpact = compound.getFloat("MountImpact");
         this.limits = compound.contains("Limits") ? ServoLimits.read(compound.getCompound("Limits"), null) : null;
         this.swivelSense = compound.getInt("SwivelSense") < 0 ? -1 : 1;
 
@@ -594,6 +746,10 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         this.shownSwivelTarget = compound.getFloat("SwivelTarget");
         this.swivelSeen = compound.getBoolean("SwivelSeen");
         this.dialAngle = compound.getFloat("DialAngle");
+        this.shownLimited = compound.getBoolean("PowerLimited");
+        this.shownStarved = compound.getBoolean("PowerStarved");
+        this.shownDraw = compound.getFloat("PowerDraw");
+        this.shownShare = compound.getFloat("PowerShare");
         this.swivelTilts = compound.getBoolean("SwivelTilts");
 
         this.slavedMounts.clear();
@@ -737,6 +893,19 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
                 .add(Component.translatable("createdangerclose.cannon_servo_output.title"))
                 .forGoggles(tooltip);
         health.addToGoggleTooltip(tooltip);
+        if (shownLimited) {
+            CDCLang.builder()
+                    .add(Component.translatable(shownStarved
+                            ? "createdangerclose.cannon_servo_output.power_starved"
+                            : "createdangerclose.cannon_servo_output.power_limited"))
+                    .style(shownStarved ? ChatFormatting.RED : ChatFormatting.GOLD)
+                    .forGoggles(tooltip);
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.equipment.power_balance",
+                            Math.round(shownDraw), Math.round(shownShare)))
+                    .style(ChatFormatting.GRAY)
+                    .forGoggles(tooltip);
+        }
 
         if (!isPowered) {
             CDCLang.builder()
@@ -813,8 +982,12 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         if (sm.axis != PITCH) return;
 
         if (sm.hasShell && sm.shellType != null) {
-            Component shellName = Component.translatable(
-                    "block." + sm.shellType.getNamespace() + "." + sm.shellType.getPath());
+            // A shell is a block; an autocannon round is named by what it fires.
+            Component shellName = BuiltInRegistries.BLOCK.containsKey(sm.shellType)
+                    ? BuiltInRegistries.BLOCK.get(sm.shellType).getName()
+                    : BuiltInRegistries.ENTITY_TYPE.containsKey(sm.shellType)
+                    ? BuiltInRegistries.ENTITY_TYPE.get(sm.shellType).getDescription()
+                    : Component.literal(sm.shellType.toString());
 
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.cannon_servo_output.mount_shell",

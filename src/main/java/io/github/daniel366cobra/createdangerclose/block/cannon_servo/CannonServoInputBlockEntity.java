@@ -17,6 +17,9 @@ public class CannonServoInputBlockEntity extends KineticBlockEntity implements C
     @Nullable private ServoStatus cachedStatus;
     @Nullable private FireSolution currentCommand;
     private long lastCommandTick = 0;
+    // What it charges the battle network, per RPM: set by the output for what the cannon side
+    // draws (see CannonServoOutputBlockEntity.updatePower).
+    private float drawImpact;
 
     public CannonServoInputBlockEntity(BlockEntityType<?> typeIn, BlockPos pos, BlockState state) {
         super(typeIn, pos, state);
@@ -39,6 +42,41 @@ public class CannonServoInputBlockEntity extends KineticBlockEntity implements C
         if (currentCommand != null && level.getGameTime() - lastCommandTick > COMMAND_TIMEOUT) {
             currentCommand = null;
         }
+    }
+
+    /** Charges the battle network this much per RPM from now on (server). */
+    void setDrawImpact(float impact) {
+        if (Math.abs(impact - drawImpact) <= Math.max(0.01f, drawImpact * 0.02f) && (impact == 0) == (drawImpact == 0))
+            return;
+        drawImpact = impact;
+        if (hasNetwork())
+            getOrCreateNetwork().updateStressFor(this, impact);
+    }
+
+    @Override
+    public float calculateStressApplied() {
+        lastStressApplied = drawImpact;
+        return drawImpact;
+    }
+
+    /** What the battle network can carry in all, and carries now (su). */
+    float getNetworkCapacity() {
+        return capacity;
+    }
+
+    float getNetworkStress() {
+        return stress;
+    }
+
+    /** What this servo draws from the battle network now (su). */
+    float getDraw() {
+        return drawImpact * Math.abs(getSpeed());
+    }
+
+    /** Whether this servo is driving its gun (not just holding it), for sharing the network's power. */
+    boolean isDriving() {
+        CannonServoOutputBlockEntity output = getAdjacentOutput();
+        return output != null && output.isDriving();
     }
 
     @Override

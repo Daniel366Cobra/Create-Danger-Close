@@ -19,9 +19,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
 @EventBusSubscriber(modid = CreateDangerClose.MOD_ID, value = Dist.CLIENT)
 public final class FireMissionConsoleClientEvents {
 
-    // Per scroll notch, ticks: 0.1 s, or 0.05 s with shift held.
-    private static final int STEP_TICKS = 2, FINE_STEP_TICKS = 1;
-
     private FireMissionConsoleClientEvents() {}
 
     @SubscribeEvent
@@ -34,14 +31,14 @@ public final class FireMissionConsoleClientEvents {
                 != FireMissionConsoleBlock.Control.FUZE_KNOB)
             return;
         event.setCanceled(true);
-        int step = (int) Math.signum(event.getScrollDeltaY()) * (Screen.hasShiftDown() ? FINE_STEP_TICKS : STEP_TICKS);
+        if (!(mc.level.getBlockEntity(hit.getBlockPos()) instanceof FireMissionConsoleBlockEntity console))
+            return;
+        int step = (int) Math.signum(event.getScrollDeltaY()) * console.fuzeStepTicks(Screen.hasShiftDown());
         PacketDistributor.sendToServer(new FireMissionKnobPayload(hit.getBlockPos(), step));
 
         // Create's scroll-input click, like its elevator controls: rising in pitch from
         // the earliest setting to the latest, and silent once the knob is at its stop.
-        if (!(mc.level.getBlockEntity(hit.getBlockPos()) instanceof FireMissionConsoleBlockEntity console))
-            return;
-        int max = FireMissionConsoleBlockEntity.MAX_FUZE_OFFSET_TICKS;
+        int max = console.maxFuzeOffsetTicks();
         int turned = Mth.clamp(console.getFuzeOffsetTicks() + step, -max, max);
         if (turned == console.getFuzeOffsetTicks())
             return;

@@ -50,7 +50,11 @@ public record ServoStatus(
             double muzzleDistance,
             // Where the barrel points: a unit vector in the frame the cannon stands in
             // (its sub-level's, or the world's); null if unassembled.
-            @Nullable Vec3 barrel
+            @Nullable Vec3 barrel,
+            // An autocannon (fires in bursts; fired from the Autocannon Control Console), and how
+            // long its rounds fly before they expire, ticks (0: no limit).
+            boolean autocannon,
+            int maxFlightTicks
     ) {}
 
     /**

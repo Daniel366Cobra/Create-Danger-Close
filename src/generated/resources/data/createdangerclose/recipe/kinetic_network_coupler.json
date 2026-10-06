@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "B": {
+      "item": "create:brass_casing"
+    },
+    "G": {
+      "item": "create:gearbox"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    }
+  },
+  "pattern": [
+    " P ",
+    "GBG"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createdangerclose:kinetic_network_coupler"
+  }
+}

@@ -89,16 +89,16 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         linked = true;
         computerPos = found;
         if (computer != null)
-            computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick);
+            computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick, ordersAutocannons());
         if (readComputer(computer) || changed)
             sendData();
     }
 
     /** Takes the mode and the guns' readiness from the computer; whether they changed. */
-    private boolean readComputer(@Nullable BallisticComputerBlockEntity computer) {
+    protected boolean readComputer(@Nullable BallisticComputerBlockEntity computer) {
         boolean newPlunging = computer != null && computer.isPlungingFire();
         BallisticComputerBlockEntity.SalvoResult guns = computer != null
-                ? computer.gunsOnTarget() : new BallisticComputerBlockEntity.SalvoResult(0, 0);
+                ? gunsOnTarget(computer) : new BallisticComputerBlockEntity.SalvoResult(0, 0);
         int newReady = guns.fired(), newTotal = guns.fired() + guns.held();
         boolean changed = newPlunging != plunging || newReady != gunsReady || newTotal != gunsTotal;
         plunging = newPlunging;
@@ -107,8 +107,31 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         return changed;
     }
 
+    /** The guns this console orders, and how many are on target: the big cannons. */
+    protected BallisticComputerBlockEntity.SalvoResult gunsOnTarget(BallisticComputerBlockEntity computer) {
+        return computer.gunsOnTarget();
+    }
+
+    /** Where the lever stands: down (1) for plunging fire. */
+    protected boolean isLeverDown() {
+        return plunging;
+    }
+
+    /** Whether this console orders the autocannons (else the big cannons). */
+    protected boolean ordersAutocannons() {
+        return false;
+    }
+
+    /** Lines this console adds above the fire mission (none: the computer shows the trajectory). */
+    protected void addModeTooltip(List<Component> tooltip) {}
+
+    /** The goggles' title. */
+    protected String titleKey() {
+        return "createdangerclose.fire_mission_console.title";
+    }
+
     /** After an order at the console: show its effect at once rather than at the next poll (server). */
-    void refreshFromComputer() {
+    protected void refreshFromComputer() {
         if (readComputer(getComputer()))
             sendData();
     }
@@ -157,7 +180,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     void setFuzeOffset(int ticks) {
         if (level == null)
             return;
-        int clamped = Mth.clamp(ticks, -MAX_FUZE_OFFSET_TICKS, MAX_FUZE_OFFSET_TICKS);
+        int clamped = Mth.clamp(ticks, -maxFuzeOffsetTicks(), maxFuzeOffsetTicks());
         fuzeOffsetSetTick = level.getGameTime();
         if (clamped != fuzeOffsetTicks) {
             fuzeOffsetTicks = clamped;
@@ -166,18 +189,43 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         }
         BallisticComputerBlockEntity computer = getComputer();
         if (computer != null)
-            computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick);
+            computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick, ordersAutocannons());
     }
 
-    /** A fuze correction as the console prints it: signed seconds, one decimal. */
-    public static String formatFuzeOffset(int ticks) {
-        return String.format(Locale.ROOT, "%+.1f", ticks / 20f);
+    /** The knob's stop either way, ticks. */
+    public int maxFuzeOffsetTicks() {
+        return MAX_FUZE_OFFSET_TICKS;
+    }
+
+    /** Ticks per scroll notch, or with shift held. */
+    public int fuzeStepTicks(boolean fine) {
+        return fine ? 1 : 5;
+    }
+
+    /** The correction as the readout shows it: signed ticks. */
+    public String fuzeText() {
+        return String.format(Locale.ROOT, "%+dt", fuzeOffsetTicks);
+    }
+
+    /** The correction with its unit, for the goggles. */
+    protected String fuzeTooltipText() {
+        return String.format(Locale.ROOT, "%+d ticks", fuzeOffsetTicks);
+    }
+
+    /** The widest the readout gets, for laying it out. */
+    public String widestFuzeText() {
+        return "+" + maxFuzeOffsetTicks() + "t";
     }
 
     // --- Readouts and controls (client) ---
 
     public boolean isPlunging() {
         return plunging;
+    }
+
+    /** What the readout in front of the middle control shows: the trajectory mode. */
+    public String modeText() {
+        return plunging ? "PLG" : "DIR";
     }
 
     public int getGunsReady() {
@@ -189,7 +237,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     }
 
     private void tickControls() {
-        lever.chase(plunging ? 1 : 0, LEVER_EASING, LerpedFloat.Chaser.EXP);
+        lever.chase(isLeverDown() ? 1 : 0, LEVER_EASING, LerpedFloat.Chaser.EXP);
         lever.tickChaser();
         knob.chase(fuzeOffsetTicks, KNOB_EASING, LerpedFloat.Chaser.EXP);
         knob.tickChaser();
@@ -204,7 +252,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     /** The fuze knob's turn, -1 (earliest) to 1 (latest). */
     public float getKnobTurn(float partialTicks) {
-        return knob.getValue(partialTicks) / MAX_FUZE_OFFSET_TICKS;
+        return knob.getValue(partialTicks) / maxFuzeOffsetTicks();
     }
 
     /** The fire button, 0 (out) to 1 (pressed in). */
@@ -237,7 +285,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     /** Ponder scenes only: turns the knob, as scrolling would. */
     public void showFuzeOffset(int ticks) {
-        fuzeOffsetTicks = Mth.clamp(ticks, -MAX_FUZE_OFFSET_TICKS, MAX_FUZE_OFFSET_TICKS);
+        fuzeOffsetTicks = Mth.clamp(ticks, -maxFuzeOffsetTicks(), maxFuzeOffsetTicks());
     }
 
     @Override
@@ -254,7 +302,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     @Override
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(compound, registries, clientPacket);
-        fuzeOffsetTicks = Mth.clamp(compound.getInt("FuzeOffset"), -MAX_FUZE_OFFSET_TICKS, MAX_FUZE_OFFSET_TICKS);
+        fuzeOffsetTicks = Mth.clamp(compound.getInt("FuzeOffset"), -maxFuzeOffsetTicks(), maxFuzeOffsetTicks());
         if (!clientPacket) {
             fuzeOffsetSetTick = compound.contains("FuzeOffsetSet") ? compound.getLong("FuzeOffsetSet") : Long.MIN_VALUE;
             return;
@@ -288,11 +336,11 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
         CDCLang.builder()
-                .add(Component.translatable("createdangerclose.fire_mission_console.title"))
+                .add(Component.translatable(titleKey()))
                 .forGoggles(tooltip);
         CDCLang.builder()
                 .add(Component.translatable("createdangerclose.fire_mission_console.fuze_offset",
-                        formatFuzeOffset(fuzeOffsetTicks)))
+                        fuzeTooltipText()))
                 .style(ChatFormatting.GRAY)
                 .forGoggles(tooltip);
 
@@ -309,7 +357,8 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
             line(tooltip, "computer_unloaded", ChatFormatting.DARK_GRAY);
             return true;
         }
-        computer.addFireMissionTooltip(tooltip);
+        addModeTooltip(tooltip);
+        computer.addFireMissionTooltip(tooltip, ordersAutocannons());
         return true;
     }
 

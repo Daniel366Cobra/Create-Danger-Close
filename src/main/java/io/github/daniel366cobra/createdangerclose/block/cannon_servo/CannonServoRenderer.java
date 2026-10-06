@@ -3,6 +3,7 @@ package io.github.daniel366cobra.createdangerclose.block.cannon_servo;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.simibubi.create.AllPartialModels;
+import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
@@ -22,10 +23,20 @@ import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.
 public class CannonServoRenderer extends KineticBlockEntityRenderer<KineticBlockEntity> {
 
     private final boolean isOutput;
+    private final PartialModel inputPart, outputPart, transferPart;
 
-    private CannonServoRenderer(BlockEntityRendererProvider.Context context, boolean isOutput) {
+    private CannonServoRenderer(BlockEntityRendererProvider.Context context, boolean isOutput,
+                                PartialModel inputPart, PartialModel outputPart, PartialModel transferPart) {
         super(context);
         this.isOutput = isOutput;
+        this.inputPart = inputPart;
+        this.outputPart = outputPart;
+        this.transferPart = transferPart;
+    }
+
+    private CannonServoRenderer(BlockEntityRendererProvider.Context context, boolean isOutput) {
+        this(context, isOutput, CDCPartialModels.SERVO_INPUT_COUPLER, CDCPartialModels.SERVO_OUTPUT_COUPLER,
+                CDCPartialModels.SERVO_TRANSFER_COUPLER);
     }
 
     public static CannonServoRenderer input(BlockEntityRendererProvider.Context ctx) {
@@ -34,6 +45,17 @@ public class CannonServoRenderer extends KineticBlockEntityRenderer<KineticBlock
 
     public static CannonServoRenderer output(BlockEntityRendererProvider.Context ctx) {
         return new CannonServoRenderer(ctx, true);
+    }
+
+    /** The Kinetic Network Coupler: the same transmission, its own parts. */
+    public static CannonServoRenderer couplerInput(BlockEntityRendererProvider.Context ctx) {
+        return new CannonServoRenderer(ctx, false, CDCPartialModels.COUPLER_INPUT_COUPLER,
+                CDCPartialModels.COUPLER_OUTPUT_COUPLER, CDCPartialModels.COUPLER_TRANSFER_COUPLER);
+    }
+
+    public static CannonServoRenderer couplerOutput(BlockEntityRendererProvider.Context ctx) {
+        return new CannonServoRenderer(ctx, true, CDCPartialModels.COUPLER_INPUT_COUPLER,
+                CDCPartialModels.COUPLER_OUTPUT_COUPLER, CDCPartialModels.COUPLER_TRANSFER_COUPLER);
     }
 
     @Override
@@ -54,7 +76,7 @@ public class CannonServoRenderer extends KineticBlockEntityRenderer<KineticBlock
         // z 0..16, output block at z -16..0), anchored at the input block: same
         // orientation for both, the output's drawn one block back towards the input.
         SuperByteBuffer gizmo = CachedBuffers.partialFacing(
-                isOutput ? CDCPartialModels.SERVO_OUTPUT_COUPLER : CDCPartialModels.SERVO_INPUT_COUPLER,
+                isOutput ? outputPart : inputPart,
                 be.getBlockState(),
                 direction.getOpposite());
 
@@ -74,7 +96,7 @@ public class CannonServoRenderer extends KineticBlockEntityRenderer<KineticBlock
             float offset = getRotationOffsetForPosition(be, be.getBlockPos(), axis);
             float angle = ((time * speed * 3f / 10 + offset) % 360) / 180 * (float) Math.PI;
             SuperByteBuffer carrier = CachedBuffers.partialFacing(
-                    CDCPartialModels.SERVO_TRANSFER_COUPLER, be.getBlockState(), direction.getOpposite());
+                    transferPart, be.getBlockState(), direction.getOpposite());
             kineticRotationTransform(carrier, be, axis, angle, lightBehind).renderInto(ms, vb);
         }
         ms.popPose();

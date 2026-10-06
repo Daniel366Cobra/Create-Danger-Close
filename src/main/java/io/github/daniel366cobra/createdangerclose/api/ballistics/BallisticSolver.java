@@ -74,7 +74,9 @@ public final class BallisticSolver {
             NO_ALTITUDE,
             // More drives aim a gun than it has ways to turn: two turn it about the same
             // axis, or there are more than two.
-            REDUNDANT_DRIVES
+            REDUNDANT_DRIVES,
+            // An autocannon round would expire before getting there.
+            ROUND_EXPIRES
         }
 
         public static Result invalid(Reason reason) {
@@ -358,13 +360,24 @@ public final class BallisticSolver {
             double muzzleVelocity, double gravity, double drag, boolean isQuadraticDrag,
             double pitchDeg, double relativeY
     ) {
+        return maxRange(muzzleVelocity, gravity, drag, isQuadraticDrag, pitchDeg, relativeY, MAX_TICKS);
+    }
+
+    /**
+     * As {@link #maxRange(double, double, double, boolean, double, double)}, for a round that
+     * only flies this many ticks (an autocannon's expires): no further than it gets by then.
+     */
+    public static double maxRange(
+            double muzzleVelocity, double gravity, double drag, boolean isQuadraticDrag,
+            double pitchDeg, double relativeY, int maxTicks
+    ) {
         if (muzzleVelocity <= 0 || gravity >= 0) return 0;
         double pitchRad = Math.toRadians(pitchDeg);
         double vx = muzzleVelocity * Math.cos(pitchRad);
         double vy = muzzleVelocity * Math.sin(pitchRad);
         double px = 0, py = 0;
 
-        for (int tick = 1; tick <= MAX_TICKS; tick++) {
+        for (int tick = 1; tick <= Math.min(maxTicks, MAX_TICKS); tick++) {
             double speed = Math.sqrt(vx * vx + vy * vy);
             double dragForce = drag * DENSITY * speed;
             if (isQuadraticDrag) dragForce *= speed;
