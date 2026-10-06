@@ -2,6 +2,7 @@ package io.github.daniel366cobra.createdangerclose.ponder;
 
 import com.tterrag.registrate.util.entry.ItemProviderEntry;
 import com.tterrag.registrate.util.entry.RegistryEntry;
+import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.BallisticComputerScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.BattleDamageScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.CannonServoScenes;
@@ -30,6 +31,9 @@ public final class CDCPonderScenes {
     private CDCPonderScenes() {}
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
+        // Looking up the oil explains what it is for.
+        helper.forComponents(CreateDangerClose.asResource("spindle_oil_bucket"))
+                .addStoryBoard("piped_lubrication", BattleDamageScenes::pipedLubrication, CDCPonderTags.DAMAGE_AND_MAINTENANCE);
         PonderSceneRegistrationHelper<ItemProviderEntry<?, ?>> HELPER = helper.withKeyFunction(RegistryEntry::getId);
 
         HELPER.forComponents(CDCBlocks.NETWORK_INTERFACE)
@@ -52,6 +56,7 @@ public final class CDCPonderScenes {
         // After each block's own scene: battle damage, repairs and upkeep.
         HELPER.forComponents(CDCBlocks.BALLISTIC_COMPUTER, CDCBlocks.DIFFERENTIATOR, CDCBlocks.INTEGRATOR,
                         CDCBlocks.CORRELATOR, CDCBlocks.FUZE_COMPUTER, CDCBlocks.NETWORK_INTERFACE, CDCBlocks.CANNON_SERVO_INPUT)
-                .addStoryBoard("battle_damage", BattleDamageScenes::battleDamage, CDCPonderTags.DAMAGE_AND_MAINTENANCE);
+                .addStoryBoard("battle_damage", BattleDamageScenes::battleDamage, CDCPonderTags.DAMAGE_AND_MAINTENANCE)
+                .addStoryBoard("piped_lubrication", BattleDamageScenes::pipedLubrication, CDCPonderTags.DAMAGE_AND_MAINTENANCE);
     }
 }

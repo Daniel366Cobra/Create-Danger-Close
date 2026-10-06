@@ -258,7 +258,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.MECHANISM, true)
                 .lubricated(() -> panelNetworkRpm, () -> isPowered)
-                .sharingLubricationWith(() -> ComputerBank.scan(level, worldPosition).members()));
+                .sharingLubricationWith(() -> ComputerBank.lubricationGroup(level, worldPosition)));
     }
 
     /**
@@ -1688,6 +1688,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public boolean hasTarget() { return hasTarget; }
 
     public boolean isPowered() { return isPowered; }
+
+    /** The network interface driving this computer, if one is (server). */
+    @Nullable
+    public BlockPos getLinkedInterface() {
+        return isLinkFresh() ? linkedInterface : null;
+    }
 
     /** Whether the computer is leading a tracked, moving target (a velocity estimate exists). */
     public boolean isTrackingTarget() {

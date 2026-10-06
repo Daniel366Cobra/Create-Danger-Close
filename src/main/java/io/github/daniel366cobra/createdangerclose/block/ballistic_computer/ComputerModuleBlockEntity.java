@@ -96,7 +96,7 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity implements IHave
                     BallisticComputerBlockEntity computer = ComputerBank.findComputer(level, worldPosition);
                     return computer != null && computer.isPowered();
                 })
-                .sharingLubricationWith(() -> ComputerBank.scan(level, worldPosition).members()));
+                .sharingLubricationWith(() -> ComputerBank.lubricationGroup(level, worldPosition)));
     }
 
     /** The module's name and condition. */

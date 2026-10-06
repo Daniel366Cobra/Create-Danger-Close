@@ -75,6 +75,11 @@ public class CServer extends CDCConfigBase {
                 "Whether mechanisms dry out and, running dry, may seize until lubricated with honeycomb.");
         public final ConfigDouble daysDryAtFullSpeed = d(8, 0.5, 365, "daysDryAtFullSpeed",
                 "[in days]", "How long a full mechanism takes to dry out at full speed (256 RPM).");
+        public final ConfigInt lubricantPerBlock = i(250, 1, 10000, "lubricantPerBlock",
+                "[in millibuckets]", "How much lubricating oil (spindle oil, lubrication oil) fills one block's lubrication",
+                "from its reservoir.");
+        public final ConfigInt plantOilPerBlock = i(500, 1, 10000, "plantOilPerBlock",
+                "[in millibuckets]", "How much plant or seed oil fills one block's lubrication from its reservoir.");
         public final ConfigDouble daysDryAtRest = d(16, 0.5, 365, "daysDryAtRest",
                 "[in days]", "How long it takes with its network at rest; in between, in proportion.");
         public final ConfigDouble seizeBelow = d(0.5, 0, 1, "seizeBelow",

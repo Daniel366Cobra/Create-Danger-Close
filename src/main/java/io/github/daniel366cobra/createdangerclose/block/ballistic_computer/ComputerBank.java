@@ -80,6 +80,24 @@ public final class ComputerBank {
     }
 
     /**
+     * The blocks sharing a bank's lubrication: every cabinet, and the network interface
+     * driving its computer (part of the same machinery).
+     */
+    public static List<BlockPos> lubricationGroup(Level level, BlockPos pos) {
+        Scan scan = scan(level, pos);
+        Set<BlockPos> members = new HashSet<>(scan.members());
+        // A scan stops at a computer it did not start from: from each, the cabinets on its far side.
+        for (BlockPos core : scan.cores())
+            members.addAll(scan(level, core).members());
+        List<BlockPos> group = new ArrayList<>(members);
+        for (BlockPos core : scan.cores())
+            if (level.getBlockEntity(core) instanceof BallisticComputerBlockEntity computer
+                    && computer.getLinkedInterface() != null)
+                group.add(computer.getLinkedInterface());
+        return group;
+    }
+
+    /**
      * The Ballistic Computer of the bank a block belongs to, for a network
      * interface facing any block of it. Null if the block is not part of a
      * bank, or the bank has no computer.

@@ -1,0 +1,10 @@
+{
+  "values": [
+    "createdangerclose:flowing_spindle_oil",
+    "createdangerclose:spindle_oil",
+    {
+      "id": "#c:lubrication_oil",
+      "required": false
+    }
+  ]
+}

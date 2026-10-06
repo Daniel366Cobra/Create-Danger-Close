@@ -1,5 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.damage;
 
+import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BehaviourType;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -11,6 +12,7 @@ import io.github.daniel366cobra.createdangerclose.api.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.api.damage.Fault;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.config.CServer;
+import io.github.daniel366cobra.createdangerclose.registries.CDCFluids;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -27,6 +29,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -70,6 +75,17 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     private BooleanSupplier running = () -> false;
     private Supplier<Collection<BlockPos>> lubricationGroup = () -> List.of(getPos());
     private float lubrication = 1;
+    // A small oil reservoir, filled by pipe: it tops up its lubrication group by itself.
+    private static final int RESERVOIR_MB = 1000;
+    private final FluidTank reservoir = new FluidTank(RESERVOIR_MB, EquipmentHealth::isLubricant) {
+        @Override
+        protected void onContentsChanged() {
+            blockEntity.setChanged();
+            reservoirChanged = true;
+        }
+    };
+    // Sent on with the next maintenance tick rather than at every drop a pipe moves.
+    private boolean reservoirChanged;
     // The jostle's bias (degrees), while jostled.
     private float biasYaw, biasPitch;
 
@@ -234,9 +250,13 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
             if (getWorld().random.nextFloat() < perMinute * MAINTENANCE_INTERVAL_TICKS / 1200f)
                 seize();
         }
+        drawFromReservoir();
         // Sent on in whole percent, for the goggles.
         if ((int) (before * 100) != (int) (lubrication * 100))
             changed();
+        else if (reservoirChanged)
+            changed();
+        reservoirChanged = false;
     }
 
     private void seize() {
@@ -261,9 +281,8 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
      *
      * @return whether anything was done
      */
-    public boolean lubricate(Player player, ItemStack held) {
-        if (!isLubricated())
-            return false;
+    /** The lubricated equipment sharing its lubrication (itself among them). */
+    private List<EquipmentHealth> lubricationGroup() {
         List<EquipmentHealth> group = new ArrayList<>();
         for (BlockPos pos : lubricationGroup.get()) {
             EquipmentHealth member = at(getWorld(), pos);
@@ -272,7 +291,92 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         }
         if (!group.contains(this))
             group.add(this);
+        return group;
+    }
 
+    // --- The reservoir ---
+
+    private static boolean isLubricant(FluidStack fluid) {
+        return fluid.is(CDCFluids.LUBRICANTS) || fluid.is(CDCFluids.WEAK_LUBRICANTS);
+    }
+
+    /** How much of the reservoir's fluid fills one block's lubrication, mB. */
+    private int fluidPerBlock() {
+        CServer.Lubrication config = CDCConfig.server().maintenance.lubrication;
+        return reservoir.getFluid().is(CDCFluids.LUBRICANTS) ? config.lubricantPerBlock.get() : config.plantOilPerBlock.get();
+    }
+
+    /**
+     * Tops up its group from the reservoir, as far as the oil goes: below full by at least
+     * a percent, a member takes what it needs (a seized one is freed by it).
+     */
+    private void drawFromReservoir() {
+        if (reservoir.isEmpty())
+            return;
+        int perBlock = fluidPerBlock();
+        for (EquipmentHealth member : lubricationGroup()) {
+            float need = 1 - member.lubrication;
+            if (need < 0.01f && !member.faults.contains(Fault.SEIZED))
+                continue;
+            int wanted = Math.max(1, Mth.ceil(need * perBlock));
+            int drawn = reservoir.drain(wanted, IFluidHandler.FluidAction.EXECUTE).getAmount();
+            if (drawn <= 0)
+                return;
+            member.lubrication = Math.min(1, member.lubrication + (float) drawn / perBlock);
+            member.faults.remove(Fault.SEIZED);
+            member.changed();
+            if (reservoir.isEmpty())
+                return;
+        }
+    }
+
+    /** What pipes see: a reservoir that takes lubricants in, and gives nothing back. */
+    @Nullable
+    public IFluidHandler getReservoir() {
+        if (!isLubricated())
+            return null;
+        return new IFluidHandler() {
+            @Override
+            public int getTanks() {
+                return 1;
+            }
+
+            @Override
+            public FluidStack getFluidInTank(int tank) {
+                return reservoir.getFluid();
+            }
+
+            @Override
+            public int getTankCapacity(int tank) {
+                return RESERVOIR_MB;
+            }
+
+            @Override
+            public boolean isFluidValid(int tank, FluidStack stack) {
+                return isLubricant(stack);
+            }
+
+            @Override
+            public int fill(FluidStack resource, FluidAction action) {
+                return reservoir.fill(resource, action);
+            }
+
+            @Override
+            public FluidStack drain(FluidStack resource, FluidAction action) {
+                return FluidStack.EMPTY;
+            }
+
+            @Override
+            public FluidStack drain(int maxDrain, FluidAction action) {
+                return FluidStack.EMPTY;
+            }
+        };
+    }
+
+    public boolean lubricate(Player player, ItemStack held) {
+        if (!isLubricated())
+            return false;
+        List<EquipmentHealth> group = lubricationGroup();
         float total = 0;
         boolean seized = false;
         for (EquipmentHealth member : group) {
@@ -364,6 +468,9 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
                 .add(Component.translatable("createdangerclose.equipment.lubrication", Math.round(lubrication * 100)))
                 .style(lubrication < CDCConfig.server().maintenance.lubrication.seizeBelow.getF() ? ChatFormatting.GOLD : ChatFormatting.GRAY)
                 .forGoggles(tooltip);
+        // The reservoir, as Create shows any fluid container: only once it holds oil.
+        if (!reservoir.isEmpty() && blockEntity instanceof IHaveGoggleInformation goggles)
+            goggles.containedFluidTooltip(tooltip, false, getReservoir());
     }
 
     /** Like {@link #addToGoggleTooltip}, but says so when nothing is wrong. */
@@ -404,6 +511,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         tag.putFloat("BiasYaw", biasYaw);
         tag.putFloat("BiasPitch", biasPitch);
         tag.putFloat("Lubrication", lubrication);
+        tag.put("Reservoir", reservoir.writeToNBT(registries, new CompoundTag()));
         nbt.put("Health", tag);
     }
 
@@ -419,6 +527,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         biasYaw = tag.getFloat("BiasYaw");
         biasPitch = tag.getFloat("BiasPitch");
         lubrication = tag.contains("Lubrication") ? tag.getFloat("Lubrication") : 1;
+        reservoir.readFromNBT(registries, tag.getCompound("Reservoir"));
     }
 
     /** The block at this position's health record, if it has one. */

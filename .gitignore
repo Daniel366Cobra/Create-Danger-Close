@@ -38,4 +38,4 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
-/art-templates/
+/templates-and-examples/

@@ -50,6 +50,7 @@ public final class CDCPonderTags {
                 .add(CDCBlocks.FIRE_MISSION_CONSOLE)
                 .add(CDCBlocks.MAP_TABLE);
 
+        helper.addToTag(DAMAGE_AND_MAINTENANCE).add(CreateDangerClose.asResource("spindle_oil_bucket"));
         HELPER.addToTag(DAMAGE_AND_MAINTENANCE)
                 .add(CDCBlocks.BALLISTIC_COMPUTER)
                 .add(CDCBlocks.DIFFERENTIATOR)

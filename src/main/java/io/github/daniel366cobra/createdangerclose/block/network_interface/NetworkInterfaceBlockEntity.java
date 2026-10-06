@@ -69,7 +69,13 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
         behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.COG, true)
-                .lubricated(() -> Math.abs(getSpeed()), () -> isPowered));
+                .lubricated(() -> Math.abs(getSpeed()), () -> isPowered)
+                // Driving a computer, it is part of that bank's machinery and shares its oil.
+                .sharingLubricationWith(() -> {
+                    BallisticComputerBlockEntity computer = getLinkedComputer();
+                    return computer != null ? ComputerBank.lubricationGroup(level, computer.getBlockPos())
+                            : List.of(worldPosition);
+                }));
     }
 
     /** Its health record: a jostled interface skews what it passes on (see the computer). */

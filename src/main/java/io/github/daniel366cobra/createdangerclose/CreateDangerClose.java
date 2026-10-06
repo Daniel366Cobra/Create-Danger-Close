@@ -13,6 +13,7 @@ import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import io.github.daniel366cobra.createdangerclose.registries.CDCContraptionTypes;
 import io.github.daniel366cobra.createdangerclose.registries.CDCCreativeTabs;
+import io.github.daniel366cobra.createdangerclose.registries.CDCFluids;
 import io.github.daniel366cobra.createdangerclose.registries.CDCMenuTypes;
 import net.createmod.catnip.lang.FontHelper;
 import net.minecraft.resources.ResourceKey;
@@ -48,6 +49,7 @@ public class CreateDangerClose {
         CDCBlocks.register();
         CDCBlockEntities.register();
         CDCMenuTypes.register();
+        CDCFluids.register();
 
         // Create's contraption type registry only accepts entries while it is
         // being populated, i.e. during its RegisterEvent (same as CBC).
