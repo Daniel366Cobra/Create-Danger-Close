@@ -744,11 +744,6 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return lastException;
     }
 
-    @Nullable
-    public ControlledContraptionEntity getMovedContraption() {
-        return movedContraption;
-    }
-
     // --- NBT ---
 
     @Override

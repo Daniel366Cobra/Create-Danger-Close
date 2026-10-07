@@ -223,10 +223,6 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     // --- Readouts and controls (client) ---
 
-    public boolean isPlunging() {
-        return plunging;
-    }
-
     /** What the readout in front of the middle control shows: the trajectory mode. */
     public String modeText() {
         return plunging ? "PLG" : "DIR";

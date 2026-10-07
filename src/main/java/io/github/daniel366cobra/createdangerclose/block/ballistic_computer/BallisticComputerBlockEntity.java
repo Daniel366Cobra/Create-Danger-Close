@@ -672,12 +672,25 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         panelRange = (float) Math.hypot(targetX - here.x, targetZ - here.z);
         double reach = plot.guns().isEmpty() ? 0 : plot.guns().get(0).radius();
         panelRangeFraction = reach > 0 ? (float) Mth.clamp(panelRange / reach, 0, 1) : 0;
-        BallisticSolver.Result firstSolution = lastPitchResults.values().stream()
-                .filter(BallisticSolver.Result::valid)
-                .findFirst()
+        // The panel follows one gun, chosen so it does not hop between guns: a big cannon (the
+        // lowest-placed of those), else an autocannon, for an anti-aircraft-only network. Its
+        // fuze is shown with its own kind's correction (autocannon fuzes are, notionally, also
+        // set at the Autocannon Control Console's own flak fuze setter).
+        BallisticSolver.Result bigCannon = panelSolution(false);
+        boolean autocannon = bigCannon == null;
+        BallisticSolver.Result shown = autocannon ? panelSolution(true) : bigCannon;
+        panelElevationDeg = shown != null ? (float) shown.pitchDeg() : 0;
+        panelFuzeTicks = shown != null ? correctedFuze(shown.fuzeTicks(), autocannon) : 0;
+    }
+
+    /** The valid solution of the lowest-placed big cannon (or autocannon), if any. */
+    @Nullable
+    private BallisticSolver.Result panelSolution(boolean autocannon) {
+        return lastPitchResults.entrySet().stream()
+                .filter(e -> e.getValue().valid() && autocannonReports.contains(e.getKey()) == autocannon)
+                .min(Map.Entry.comparingByKey())
+                .map(Map.Entry::getValue)
                 .orElse(null);
-        panelElevationDeg = firstSolution != null ? (float) firstSolution.pitchDeg() : 0;
-        panelFuzeTicks = firstSolution != null ? correctedFuze(firstSolution.fuzeTicks(), false) : 0;
     }
 
     /** Eases the panel's moving parts towards the synced readings (client). */
@@ -708,14 +721,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return rangeCounter.getValue(partialTicks);
     }
 
-    /** Ballistic cam turn: the first gun's elevation, degrees (client). */
+    /** Ballistic cam turn: the panel gun's elevation (a big cannon, else an autocannon), degrees (client). */
     public float getCamAngle(float partialTicks) {
         return camAngle.getValue(partialTicks);
     }
 
-    /** The fuze time set for the first gun (time of flight plus correction), seconds; 0 without a solution (client). */
-    public float getFuzeSeconds() {
-        return panelFuzeTicks / 20f;
+    /** The fuze time set for the panel gun (time of flight plus its correction), ticks; 0 without one (client). */
+    public int getFuzeTicks() {
+        return panelFuzeTicks;
     }
 
     /** The battle network's speed, RPM; 0 while unpowered (client). */

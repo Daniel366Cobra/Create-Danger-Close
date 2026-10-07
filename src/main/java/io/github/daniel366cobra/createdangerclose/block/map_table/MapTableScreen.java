@@ -2,6 +2,7 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.network.MapTableTargetPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -9,6 +10,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
@@ -23,13 +25,22 @@ import static io.github.daniel366cobra.createdangerclose.block.map_table.MapTabl
 /**
  * Map table screen: the table's maps stitched into one sheet on the left, a
  * slot per table block on the right (laid out like the table, north up), the
- * player's inventory below. Drawn with plain fills for now.
+ * player's inventory below. The sheet lies on a baize background (a texture); the
+ * panel and the slots are drawn with plain fills, vanilla-style.
  */
 public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
 
     private static final int PANEL = 0xFFC6C6C6, PANEL_LIGHT = 0xFFFFFFFF, PANEL_DARK = 0xFF555555;
     private static final int SLOT_BG = 0xFF8B8B8B, SLOT_DARK = 0xFF373737;
-    private static final int SHEET_FRAME = 0xFF373737, EMPTY_CELL = 0xFFD9CBA3, EMPTY_CELL_LINE = 0xFFB9A983;
+    private static final int SHEET_FRAME = 0xFF373737;
+
+    // The sheet's background, one per table size (1×1, 2×2, 3×3): the same baize, the size of
+    // the sheet so it shows one texel per GUI pixel, chalked with the lines between the cells.
+    private static final ResourceLocation[] SHEET_BACKGROUNDS = {
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_small.png"),
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_medium.png"),
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_large.png")};
+    private static final int BACKGROUND_TEXTURE_SIZE = 132;
     // Text: vanilla's label grey, a softer grey for hints, the red of the target's X.
     private static final int LABEL_COLOR = 0xFF404040, HINT_COLOR = 0xFF707070, TARGET_COLOR = 0xFFB02E26;
 
@@ -99,12 +110,13 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         pose.pushPose();
         pose.translate(originX, originY, 0);
         pose.scale(zoom, zoom, 1);
+        // The baize, under the maps (empty cells show it).
+        ResourceLocation background = SHEET_BACKGROUNDS[Mth.clamp(tableWidth, 1, SHEET_BACKGROUNDS.length) - 1];
+        graphics.blit(background, 0, 0, size, size, 0, 0, BACKGROUND_TEXTURE_SIZE, BACKGROUND_TEXTURE_SIZE,
+                BACKGROUND_TEXTURE_SIZE, BACKGROUND_TEXTURE_SIZE);
         for (int dz = 0; dz < tableWidth; dz++) {
             for (int dx = 0; dx < tableWidth; dx++) {
                 int cellX = dx * cell, cellY = dz * cell;
-                graphics.fill(cellX, cellY, cellX + cell, cellY + cell, EMPTY_CELL);
-                graphics.renderOutline(cellX, cellY, cell, cell, EMPTY_CELL_LINE);
-
                 MapTableBlockEntity part = menu.getPart(dx, dz);
                 ItemStack map = part != null ? part.getMap() : ItemStack.EMPTY;
                 if (map.isEmpty())

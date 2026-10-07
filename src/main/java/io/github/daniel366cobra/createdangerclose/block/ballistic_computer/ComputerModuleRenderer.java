@@ -55,7 +55,8 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
     // printed in the window x 6..10, y 4..7, 0.25 px in front of its back wall (0.74 deep).
     private static final float RING_PIVOT_X = 8, RING_PIVOT_Y = 7, RING_PIVOT_Z = 0.75f;
     private static final PanelText FUZE_WINDOW = PanelText.front(6, 10, 4, 7, 0.74f - 0.25f, 0.9f);
-    private static final float FUZE_MAX_SECONDS = 99.9f;
+    // Four digits of ticks, like a counter (the longest flight solved is 1200).
+    private static final int FUZE_MAX_TICKS = 9999;
 
     private final Font font;
 
@@ -149,8 +150,8 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
                 .translate(-RING_PIVOT_X * PX, -RING_PIVOT_Y * PX, -RING_PIVOT_Z * PX);
         parts.finish();
 
-        float seconds = Math.clamp(be.getFuzeTime(partialTicks), 0, FUZE_MAX_SECONDS);
-        FUZE_WINDOW.draw(font, ms, buffer, front, String.format(Locale.ROOT, "%04.1f", seconds), light);
+        int ticks = Math.clamp(Math.round(be.getFuzeTicks(partialTicks)), 0, FUZE_MAX_TICKS);
+        FUZE_WINDOW.draw(font, ms, buffer, front, String.format(Locale.ROOT, "%04d", ticks), light);
     }
 
     private static float rad(float degrees) {

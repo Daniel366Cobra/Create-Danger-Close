@@ -532,7 +532,6 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     @Nullable
     public MapTableBlockEntity getControllerBE() {
         if (isController())

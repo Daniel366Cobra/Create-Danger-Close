@@ -271,10 +271,6 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         return networkRpm != null;
     }
 
-    public float getLubrication() {
-        return lubrication;
-    }
-
     /**
      * Honeycomb: tops up its whole lubrication group, taking as many combs from the
      * held stack as that needs (one fills one block), shares what there is equally

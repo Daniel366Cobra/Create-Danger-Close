@@ -5,6 +5,7 @@ import io.github.daniel366cobra.createdangerclose.client.ServoLimitsScreen;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
+import net.createmod.catnip.platform.CatnipServices;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -34,8 +35,9 @@ public class CannonServoOutputBlock extends PairOutputBlock<CannonServoOutputBlo
         ServoAxis axis = servo.getDetectedAxis();
         if (axis != ServoAxis.PITCH && axis != ServoAxis.YAW && axis != ServoAxis.SWIVEL)
             return InteractionResult.PASS;
+        // Through the client-only executor, so the screen class is only ever reached on a client.
         if (level.isClientSide)
-            ServoLimitsScreen.open(servo);
+            CatnipServices.PLATFORM.executeOnClientOnly(() -> () -> ServoLimitsScreen.open(servo));
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 

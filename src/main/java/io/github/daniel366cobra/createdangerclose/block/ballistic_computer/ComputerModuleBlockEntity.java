@@ -56,9 +56,9 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity implements IHave
     private static final double SPREAD_BEST_SIGMA = 1, SPREAD_WORST_SIGMA = 100;
     private static final float SPREAD_EASING = 0.2f;
 
-    // Fuze Computer: the setting ring winds round with the time of flight, one turn per
-    // this many seconds, easing like a hand-cranked fuze setter.
-    private static final float RING_SECONDS_PER_TURN = 30;
+    // Fuze Computer: the setting ring winds round with the fuze time, one turn per
+    // this many ticks (30 s), easing like a hand-cranked fuze setter.
+    private static final float RING_TICKS_PER_TURN = 600;
     private static final float RING_EASING = 0.2f;
 
     private EquipmentHealth health;
@@ -77,7 +77,7 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity implements IHave
     private final LerpedFloat holdNeedle = LerpedFloat.linear().startWithValue(0);
     // Correlator.
     private final LerpedFloat coincidenceSpread = LerpedFloat.linear().startWithValue(1);
-    // Fuze Computer: the time the ring and readout show, seconds (linear, so the ring
+    // Fuze Computer: the time the ring and readout show, ticks (linear, so the ring
     // winds the long way round rather than taking a short cut).
     private final LerpedFloat fuzeTime = LerpedFloat.linear().startWithValue(0);
 
@@ -187,7 +187,7 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity implements IHave
     }
 
     private void tickFuzeComputer(@Nullable BallisticComputerBlockEntity computer) {
-        fuzeTime.chase(computer != null ? computer.getFuzeSeconds() : 0, RING_EASING, LerpedFloat.Chaser.EXP);
+        fuzeTime.chase(computer != null ? computer.getFuzeTicks() : 0, RING_EASING, LerpedFloat.Chaser.EXP);
         fuzeTime.tickChaser();
     }
 
@@ -231,14 +231,14 @@ public class ComputerModuleBlockEntity extends SmartBlockEntity implements IHave
         return coincidenceSpread.getValue(partialTicks);
     }
 
-    /** Fuze Computer: the time of flight being set, seconds (client). */
-    public float getFuzeTime(float partialTicks) {
+    /** Fuze Computer: the fuze time being set, ticks (client). */
+    public float getFuzeTicks(float partialTicks) {
         return fuzeTime.getValue(partialTicks);
     }
 
     /** Fuze Computer: the setting ring's turn, degrees, increasing with the time (client). */
     public float getSettingRingAngle(float partialTicks) {
-        return getFuzeTime(partialTicks) / RING_SECONDS_PER_TURN * 360;
+        return getFuzeTicks(partialTicks) / RING_TICKS_PER_TURN * 360;
     }
 
     /** A part that keeps turning: its angle, kept within ±180° and interpolated the short way. */
