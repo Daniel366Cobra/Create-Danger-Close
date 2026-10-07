@@ -128,6 +128,11 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
+// Create's Maven version carries a build number (6.0.10-280): it must be the release players are
+// told is the minimum, or the requirement would claim a version the mod was never built against.
+if (!create_neoforge_version.startsWith("${create_min_version}-"))
+    throw new GradleException("create_neoforge_version ${create_neoforge_version} is not a build of create_min_version ${create_min_version}")
+
 dependencies {
     // --- CREATE ---
     // CBC uses "slim" to avoid bundling conflicts, so add Ponder and Flywheel manually.
@@ -140,19 +145,19 @@ dependencies {
     // --- SABLE & SIMULATED ---
     // The mod depends on Sable (the ship engine) and Simulated (sensors, swivel bearings) only.
     // Aeronautics and Offroad run in the dev client, for testing with the whole suite.
-    api("dev.ryanhcode.sable:sable-neoforge-${project.minecraft_version}:${project.sable_version}")
-    implementation("dev.simulated_team.simulated:simulated-neoforge-${project.minecraft_version}:${project.create_simulated_version}") {
+    api("dev.ryanhcode.sable:sable-neoforge-${project.minecraft_version}:${project.sable_min_version}")
+    implementation("dev.simulated_team.simulated:simulated-neoforge-${project.minecraft_version}:${project.simulated_min_version}") {
         exclude(group: "cc.tweaked", module: "cc-tweaked-1.21.1-forge")
     }
-    runtimeOnly("dev.eriksonn.aeronautics:aeronautics-neoforge-${project.minecraft_version}:${project.create_simulated_version}") {
+    runtimeOnly("dev.eriksonn.aeronautics:aeronautics-neoforge-${project.minecraft_version}:${project.simulated_min_version}") {
         exclude(group: "cc.tweaked", module: "cc-tweaked-1.21.1-forge")
     }
-    runtimeOnly("dev.ryanhcode.offroad:offroad-neoforge-${project.minecraft_version}:${project.create_simulated_version}") {
+    runtimeOnly("dev.ryanhcode.offroad:offroad-neoforge-${project.minecraft_version}:${project.simulated_min_version}") {
         exclude(group: "cc.tweaked", module: "cc-tweaked-1.21.1-forge")
     }
 
     // CBC
-    implementation ("maven.modrinth:create-big-cannons:${create_big_cannons_version}") { transitive = false }
+    implementation ("maven.modrinth:create-big-cannons:${create_big_cannons_min_version}") { transitive = false }
     implementation ("maven.modrinth:rpl:${ritchies_projectile_library_version}") { transitive = false }
 }
 
