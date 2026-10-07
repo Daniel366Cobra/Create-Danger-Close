@@ -33,23 +33,10 @@ repositories {
 
     // Transitive dependencies for Sable & Aeronautics
     maven { url = "https://maven.theillusivec4.top/" } // Curios (Required by Simulated)
-    maven { url = "https://maven.blamejared.com" } // JEI and Veil (Required by Sable/Simulated)
-    maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" } // Often needed for Create compat mods
+    maven { url = "https://maven.blamejared.com" } // JEI, Veil, Molang compiler, GLSL processor (Required by Sable/Simulated)
 
-    // RealRobotix (Restricted so it doesn't time out on other mods)
-    maven {
-        url = "https://maven.realrobotix.me/master"
-        content {
-            includeGroup("com.tterrag.registrate")
-            includeGroup("com.rbasamoyai") // Ritchie's Projectile Library
-        }
-    }
-
-    exclusiveContent {
-        forRepository { maven { url = "https://cursemaven.com" } }
-        filter { includeGroup "curse.maven" }
-    }
-
+    // Create Big Cannons and Ritchie's Projectile Library; also Explorer's and Nature's Compass
+    // (required by Simulated/Aeronautics)
     exclusiveContent {
         forRepository { maven { name = "Modrinth"; url = "https://api.modrinth.com/maven" } }
         filter { includeGroup "maven.modrinth" }
