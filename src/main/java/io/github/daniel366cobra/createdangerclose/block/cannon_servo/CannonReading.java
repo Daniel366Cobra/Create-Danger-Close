@@ -1,7 +1,7 @@
 package io.github.daniel366cobra.createdangerclose.block.cannon_servo;
 
-import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlockEntity.SlavedMount;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -42,7 +42,7 @@ import rbasamoyai.createbigcannons.munitions.fuzes.TimedFuzeItem;
 
 import java.util.List;
 
-import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
+import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.PITCH;
 
 /**
  * Reading a CBC cannon (on a cannon mount or a fixed cannon mount): what it is

@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.api.damage;
+package io.github.daniel366cobra.createdangerclose.foundation.damage;
 
 /** What can be wrong with a piece of equipment. */
 public enum Fault {

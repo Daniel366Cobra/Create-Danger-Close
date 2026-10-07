@@ -1,9 +1,9 @@
 package io.github.daniel366cobra.createdangerclose.block.fire_mission_console;
 
-import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.config.CServer;
+import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;

@@ -1,7 +1,7 @@
 package io.github.daniel366cobra.createdangerclose;
 
-import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensItem;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.ponder.CDCPonderPlugin;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import io.github.daniel366cobra.createdangerclose.registries.CDCPartialModels;

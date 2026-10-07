@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.api.sensor;
+package io.github.daniel366cobra.createdangerclose.foundation.sensor;
 
 /**
  * A ship-frame aiming command for one mount.

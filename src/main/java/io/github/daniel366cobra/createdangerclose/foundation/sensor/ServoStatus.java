@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.api.sensor;
+package io.github.daniel366cobra.createdangerclose.foundation.sensor;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

@@ -2,6 +2,7 @@ package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 
 import com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
+import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -25,9 +26,11 @@ public class RangefinderLensInteraction extends MovingInteractionBehaviour {
                         instanceof RangefinderBearingBlockEntity bearing
                 && bearing.getLensDust(bearing.lensIndex(localPos)) > 0.01f) {
             // The bucket is not used up: a wipe, not a fill.
-            if (!player.level().isClientSide && bearing.cleanLens(localPos))
+            if (!player.level().isClientSide && bearing.cleanLens(localPos)) {
                 player.level().playSound(null, BlockPos.containing(contraptionEntity.toGlobalVector(localPos.getCenter(), 1f)),
                         SoundEvents.GENERIC_SPLASH, SoundSource.BLOCKS, 0.4f, 1.3f);
+                CDCStats.LENSES_CLEANED.awardTo(player);
+            }
             return true;
         }
         if (info == null || !RangefinderLensBlock.canRepair(info.state(), held))

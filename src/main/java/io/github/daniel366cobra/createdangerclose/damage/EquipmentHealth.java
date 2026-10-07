@@ -6,13 +6,14 @@ import com.simibubi.create.foundation.blockEntity.behaviour.BehaviourType;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
-import io.github.daniel366cobra.createdangerclose.CDCLang;
-import io.github.daniel366cobra.createdangerclose.api.damage.BattleDamageable;
-import io.github.daniel366cobra.createdangerclose.api.damage.DamagePart;
-import io.github.daniel366cobra.createdangerclose.api.damage.Fault;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.config.CServer;
+import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
+import io.github.daniel366cobra.createdangerclose.foundation.damage.BattleDamageable;
+import io.github.daniel366cobra.createdangerclose.foundation.damage.DamagePart;
+import io.github.daniel366cobra.createdangerclose.foundation.damage.Fault;
 import io.github.daniel366cobra.createdangerclose.registries.CDCFluids;
+import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -396,6 +397,9 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         }
         if (!player.getAbilities().instabuild)
             held.shrink(combs);
+        // Freeing a seized mechanism puts it back in order: a repair. Topping up is upkeep.
+        if (seized)
+            CDCStats.EQUIPMENT_REPAIRED.awardTo(player);
         return true;
     }
 

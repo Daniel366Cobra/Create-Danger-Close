@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.api.ballistics;
+package io.github.daniel366cobra.createdangerclose.foundation.ballistics;
 
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;

@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.api.plot;
+package io.github.daniel366cobra.createdangerclose.foundation.plot;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;

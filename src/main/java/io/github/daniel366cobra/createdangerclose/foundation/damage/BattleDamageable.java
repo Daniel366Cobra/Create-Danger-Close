@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.api.damage;
+package io.github.daniel366cobra.createdangerclose.foundation.damage;
 
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;

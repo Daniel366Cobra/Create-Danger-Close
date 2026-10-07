@@ -10,22 +10,21 @@ import com.simibubi.create.foundation.data.SharedProperties;
 import com.tterrag.registrate.providers.RegistrateRecipeProvider;
 import com.tterrag.registrate.util.entry.BlockEntry;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
-import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoBlockItem;
-import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoInputBlock;
-import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlock;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlock;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerCasingCTBehaviour;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModule;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleBlock;
-import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlock;
-import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlock;
-import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableCTBehaviour;
-import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.AutocannonControlConsoleBlock;
-import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlock;
-import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlock;
-import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
-import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerBlockItem;
+import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoInputBlock;
+import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlock;
 import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerInputBlock;
 import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerOutputBlock;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.AutocannonControlConsoleBlock;
+import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleBlock;
+import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairBlockItem;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlock;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableCTBehaviour;
+import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlock;
+import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderEyepieceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensBlock;
@@ -218,7 +217,7 @@ public class CDCBlocks {
             }))
             .blockstate((c, p) -> p.directionalBlock(c.get(),
                     $ -> p.models().getExistingFile(p.modLoc("block/cannon_servo/block_input"))))
-            .item(CannonServoBlockItem::new)
+            .item((block, properties) -> new PairBlockItem(block, properties, "cannon_servo.not_enough_space"))
             .transform(customItemModel("cannon_servo/item"))
             .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
                     .pattern("CCC")
@@ -230,7 +229,7 @@ public class CDCBlocks {
                     .define('S', AllBlocks.SHAFT)
                     .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.BRASS_INGOT))
                     .save(p))
-            .lang("Cannon Mount Servo")
+            .lang("Cannon Servo")
             .register();
 
     public static final BlockEntry<CannonServoOutputBlock> CANNON_SERVO_OUTPUT = REGISTRATE.block("cannon_servo_output", CannonServoOutputBlock::new)
@@ -275,7 +274,7 @@ public class CDCBlocks {
             }))
             .blockstate((c, p) -> p.directionalBlock(c.get(),
                     $ -> p.models().getExistingFile(p.modLoc("block/kinetic_network_coupler/block_input"))))
-            .item(CouplerBlockItem::new)
+            .item((block, properties) -> new PairBlockItem(block, properties, "kinetic_network_coupler.not_enough_space"))
             .transform(customItemModel("kinetic_network_coupler/item"))
             .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
                     .pattern(" P ")
@@ -306,7 +305,7 @@ public class CDCBlocks {
             }))
             .blockstate((c, p) -> p.directionalBlock(c.get(),
                     $ -> p.models().getExistingFile(p.modLoc("block/kinetic_network_coupler/block_output"))))
-            .lang("Kinetic Network Coupler")
+            .lang("Kinetic Network Coupler Output")
             .register();
 
     public static final BlockEntry<RangefinderBearingBlock> RANGEFINDER_BEARING = REGISTRATE.block("rangefinder_bearing", RangefinderBearingBlock::new)

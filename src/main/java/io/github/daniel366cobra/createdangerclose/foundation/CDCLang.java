@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose;
+package io.github.daniel366cobra.createdangerclose.foundation;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -6,6 +6,7 @@ import com.simibubi.create.foundation.utility.FilesHelper;
 import com.tterrag.registrate.providers.RegistrateLangProvider;
 import net.createmod.catnip.lang.Lang;
 import net.createmod.catnip.lang.LangBuilder;
+import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.ponder.CDCPonderPlugin;
 import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.network.chat.Component;

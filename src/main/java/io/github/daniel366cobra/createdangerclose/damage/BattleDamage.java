@@ -1,9 +1,9 @@
 package io.github.daniel366cobra.createdangerclose.damage;
 
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
-import io.github.daniel366cobra.createdangerclose.api.damage.BattleDamageable;
-import io.github.daniel366cobra.createdangerclose.api.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
+import io.github.daniel366cobra.createdangerclose.foundation.damage.BattleDamageable;
+import io.github.daniel366cobra.createdangerclose.foundation.damage.DamagePart;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ClipContext;
@@ -63,11 +63,21 @@ public final class BattleDamage {
     private BattleDamage() {}
 
     public static void track(BattleDamageable equipment) {
-        LOADED.add(equipment);
+        if (onServer(equipment))
+            LOADED.add(equipment);
     }
 
     public static void untrack(BattleDamageable equipment) {
-        LOADED.remove(equipment);
+        if (onServer(equipment))
+            LOADED.remove(equipment);
+    }
+
+    // Only the server thread may touch the set: in single player the client thread would
+    // otherwise change it (a weak map tidies itself on every call) while a blast iterates it.
+    // A level already gone is skipped too: the weak set drops the entry by itself.
+    private static boolean onServer(BattleDamageable equipment) {
+        Level level = equipment.damageLevel();
+        return level != null && !level.isClientSide();
     }
 
     /** The loaded equipment in this level (a copy: damage may change the set). */

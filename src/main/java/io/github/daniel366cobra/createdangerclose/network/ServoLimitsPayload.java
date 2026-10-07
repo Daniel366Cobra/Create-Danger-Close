@@ -1,8 +1,8 @@
 package io.github.daniel366cobra.createdangerclose.network;
 
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
-import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoLimits;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -30,6 +30,9 @@ public record ServoLimitsPayload(BlockPos servo, float start, float length) impl
 
     public static void handle(ServoLimitsPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
+            // Malformed angles would leave the servo unable to turn.
+            if (!Float.isFinite(payload.start()) || !Float.isFinite(payload.length()))
+                return;
             var player = context.player();
             if (!player.canInteractWithBlock(payload.servo(), 4.0)
                     || !(player.level().getBlockEntity(payload.servo()) instanceof CannonServoOutputBlockEntity servo))

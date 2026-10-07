@@ -1,5 +1,6 @@
-package io.github.daniel366cobra.createdangerclose;
+package io.github.daniel366cobra.createdangerclose.registries;
 
+import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.stats.StatFormatter;
@@ -12,19 +13,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
+/** The mod's statistics, as listed in the statistics screen. */
 public class CDCStats {
+
     private static final DeferredRegister<ResourceLocation> CUSTOM_STAT =
             DeferredRegister.create(BuiltInRegistries.CUSTOM_STAT, CreateDangerClose.MOD_ID);
-
-    // Track stats for bootstrapping (so they appear in the menu)
+    // Looked up once registered, so they show in the statistics screen.
     private static final List<Stat> STATS_TO_BOOTSTRAP = new ArrayList<>();
 
-    // --- Stat Definitions ---
+    /** Dusty lenses cleaned with a water bucket. */
     public static final Stat LENSES_CLEANED = makeStat("lenses_cleaned", StatFormatter.DEFAULT);
+    /** Jostled equipment realigned with a wrench. */
     public static final Stat EQUIPMENT_REALIGNED = makeStat("equipment_realigned", StatFormatter.DEFAULT);
+    /** Equipment put back in order: a broken cog or mechanism, a cracked lens or a seized mechanism. */
     public static final Stat EQUIPMENT_REPAIRED = makeStat("equipment_repaired", StatFormatter.DEFAULT);
 
-    // --- Helper method to create a stat ---
     private static Stat makeStat(String key, StatFormatter formatter) {
         ResourceLocation id = CreateDangerClose.asResource(key);
         Supplier<ResourceLocation> statId = CUSTOM_STAT.register(key, () -> id);
@@ -33,23 +36,20 @@ public class CDCStats {
         return stat;
     }
 
-    // --- Registration method (called from main class) ---
     public static void register(IEventBus modEventBus) {
         CUSTOM_STAT.register(modEventBus);
     }
 
-    // --- Bootstrap method (called after registries are frozen) ---
+    /** Once the registries are frozen: makes each stat known to the statistics screen. */
     public static void bootstrap() {
-        for (Stat stat : STATS_TO_BOOTSTRAP) {
+        for (Stat stat : STATS_TO_BOOTSTRAP)
             Stats.CUSTOM.get(stat.identifier().get(), stat.formatter());
-        }
-        STATS_TO_BOOTSTRAP.clear(); // Free memory
+        STATS_TO_BOOTSTRAP.clear();
     }
 
-    // --- Inner record to hold stat data ---
     public record Stat(Supplier<ResourceLocation> identifier, StatFormatter formatter) {
         public void awardTo(Player player) {
-            player.awardStat(this.identifier.get());
+            player.awardStat(identifier.get());
         }
     }
 }

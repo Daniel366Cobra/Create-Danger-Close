@@ -12,20 +12,20 @@ import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
-import io.github.daniel366cobra.createdangerclose.CDCLang;
-import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
-import io.github.daniel366cobra.createdangerclose.api.sensor.FireSolution;
-import io.github.daniel366cobra.createdangerclose.api.sensor.SensorReading;
-import io.github.daniel366cobra.createdangerclose.api.sensor.ServoLimits;
-import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
-import io.github.daniel366cobra.createdangerclose.config.CServer;
-import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
-import io.github.daniel366cobra.createdangerclose.api.sensor.ServoStatus;
-import io.github.daniel366cobra.createdangerclose.api.sensor.ComputerServo;
-import io.github.daniel366cobra.createdangerclose.api.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
+import io.github.daniel366cobra.createdangerclose.config.CServer;
+import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
+import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
+import io.github.daniel366cobra.createdangerclose.foundation.ballistics.BallisticSolver;
+import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.ComputerServo;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.FireSolution;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoLimits;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoStatus;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.Direction;
 import net.createmod.catnip.animation.LerpedFloat;
@@ -64,10 +64,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
-import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.PITCH;
-import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.YAW;
-import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.FIXED_GUN;
-import static io.github.daniel366cobra.createdangerclose.api.sensor.ServoAxis.SWIVEL;
+import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.PITCH;
+import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.YAW;
+import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.FIXED_GUN;
+import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.SWIVEL;
 
 /**
  * The Ballistic Computer: the core of the fire control computer, which works
@@ -2200,10 +2200,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                             .forGoggles(tooltip);
 
                     CDCLang.builder()
-                            .add(Component.literal("    pitch="))
-                            .add(CDCLang.numberWithUnit(r.pitchDeg(), "createdangerclose.unit.angle"))
-                            .add(Component.literal("  tof="))
-                            .add(Component.literal(r.fuzeTicks() + " t"))
+                            .add(Component.literal("    "))
+                            .add(Component.translatable("createdangerclose.ballistic_computer.time_of_flight",
+                                    CDCLang.numberWithUnit(r.timeOfFlightTicks(), "createdangerclose.unit.ticks")))
                             .style(ChatFormatting.DARK_GREEN)
                             .forGoggles(tooltip);
                 } else {

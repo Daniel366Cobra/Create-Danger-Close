@@ -13,7 +13,7 @@ credits="Create, Create: Big Cannons and Create: Simulated Teams, for inspiratio
 authors="Daniel366Cobra"
 
 description='''
-Immersive gunnery for Create Aeronautics.
+Immersive pre-radar gunnery for Create Big Cannons and Create Aeronautics.
 '''
 
 [[mixins]]
@@ -47,9 +47,22 @@ versionRange="[5.11.0,)"
 ordering="AFTER"
 side="BOTH"
 
+# Create Aeronautics' core: sensors, navigation table, swivel bearings.
 [[dependencies."${mod_id}"]]
-modId="aeronautics"
+modId="simulated"
 type="required"
 versionRange="[1.3.0,)"
 ordering="AFTER"
 side="BOTH"
+reason="Part of Create Aeronautics: install Create Aeronautics."
+referralUrl="https://www.curseforge.com/minecraft/mc-mods/create-aeronautics"
+
+# The ship (sub-level) engine under Create Aeronautics.
+[[dependencies."${mod_id}"]]
+modId="sable"
+type="required"
+versionRange="[2.0.0,)"
+ordering="AFTER"
+side="BOTH"
+reason="Part of Create Aeronautics: install Create Aeronautics."
+referralUrl="https://www.curseforge.com/minecraft/mc-mods/create-aeronautics"

@@ -34,6 +34,9 @@ public record MapTableTargetPayload(BlockPos table, boolean clear, float u, floa
 
     public static void handle(MapTableTargetPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
+            // A malformed point (NaN survives clamping) would put the target nowhere.
+            if (!payload.clear() && (!Float.isFinite(payload.u()) || !Float.isFinite(payload.v())))
+                return;
             // Only the table whose screen the player has open.
             if (!(context.player().containerMenu instanceof MapTableMenu menu)
                     || !menu.stillValid(context.player()))

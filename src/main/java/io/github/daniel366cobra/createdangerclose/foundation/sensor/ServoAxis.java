@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.api.sensor;
+package io.github.daniel366cobra.createdangerclose.foundation.sensor;
 
 /** What a cannon servo drives, as found on its cannon network. */
 public enum ServoAxis {

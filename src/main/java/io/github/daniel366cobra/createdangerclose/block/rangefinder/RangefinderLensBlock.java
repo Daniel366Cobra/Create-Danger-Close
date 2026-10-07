@@ -1,7 +1,7 @@
 package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 
 import com.mojang.serialization.MapCodec;
-import io.github.daniel366cobra.createdangerclose.CDCStats;
+import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;

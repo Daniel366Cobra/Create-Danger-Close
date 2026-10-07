@@ -2,10 +2,10 @@ package io.github.daniel366cobra.createdangerclose.ponder.scenes;
 
 import com.simibubi.create.foundation.ponder.CreateSceneBuilder;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
-import io.github.daniel366cobra.createdangerclose.api.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableMarker;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
+import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
 import net.createmod.catnip.math.Pointing;
 import net.createmod.ponder.api.PonderPalette;
 import net.createmod.ponder.api.scene.SceneBuilder;

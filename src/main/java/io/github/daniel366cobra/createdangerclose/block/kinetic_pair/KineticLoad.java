@@ -1,4 +1,4 @@
-package io.github.daniel366cobra.createdangerclose.block.coupler;
+package io.github.daniel366cobra.createdangerclose.block.kinetic_pair;
 
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;

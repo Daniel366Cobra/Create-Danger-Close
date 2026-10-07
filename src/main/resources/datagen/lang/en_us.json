@@ -102,6 +102,7 @@
       "solutions": "Fire Solutions:",
       "solution_ok": "Solution found (%s)",
       "solution_failed": "No solution: %s",
+      "time_of_flight": "Time of flight: %s",
       "reason": {
         "ok": "OK",
         "out_of_range": "Target out of range",
@@ -119,7 +120,7 @@
       }
     },
       "cannon_servo": {
-        "not_enough_space": "Not enough space to place Servo Output"
+        "not_enough_space": "Not enough space to place the Servo's output half"
       },
       "kinetic_network_coupler": {
         "title": "Kinetic Network Coupler",
@@ -217,12 +218,9 @@
       "unit": {
         "angle": "°",
         "velocity": " m/s",
-        "distance": " blocks"
-      },
-
-      "tooltip": {},
-
-      "display_source": {}
+        "distance": " blocks",
+        "ticks": " ticks"
+      }
     },
 
     "block.createdangerclose": {

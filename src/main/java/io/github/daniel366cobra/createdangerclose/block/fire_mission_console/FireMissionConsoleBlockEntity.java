@@ -3,9 +3,9 @@ package io.github.daniel366cobra.createdangerclose.block.fire_mission_console;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import io.github.daniel366cobra.createdangerclose.CDCLang;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
+import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import net.createmod.catnip.animation.LerpedFloat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -211,8 +211,9 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     }
 
     /** The correction with its unit, for the goggles. */
-    protected String fuzeTooltipText() {
-        return String.format(Locale.ROOT, "%+d ticks", fuzeOffsetTicks);
+    protected Component fuzeTooltipText() {
+        return Component.literal(String.format(Locale.ROOT, "%+d", fuzeOffsetTicks))
+                .append(Component.translatable("createdangerclose.unit.ticks"));
     }
 
     /** The widest the readout gets, for laying it out. */

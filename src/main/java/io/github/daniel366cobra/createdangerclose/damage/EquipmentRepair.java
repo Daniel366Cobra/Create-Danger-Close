@@ -3,11 +3,10 @@ package io.github.daniel366cobra.createdangerclose.damage;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
-import io.github.daniel366cobra.createdangerclose.api.damage.Fault;
-import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoInputBlockEntity;
-import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlockEntity;
-import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerInputBlockEntity;
-import io.github.daniel366cobra.createdangerclose.block.coupler.CouplerOutputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairInputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairOutputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.foundation.damage.Fault;
+import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -50,6 +49,7 @@ public final class EquipmentRepair {
         if (level.isClientSide)
             return;
         health.repair(Fault.JOSTLED);
+        CDCStats.EQUIPMENT_REALIGNED.awardTo(event.getEntity());
         level.playSound(null, event.getPos(), SoundEvents.ANVIL_LAND, SoundSource.BLOCKS,
                 0.3f, 1.3f + level.random.nextFloat() * 0.4f);
     }
@@ -79,6 +79,7 @@ public final class EquipmentRepair {
         Player player = event.getEntity();
         if (!player.getAbilities().instabuild)
             held.shrink(1);
+        CDCStats.EQUIPMENT_REPAIRED.awardTo(player);
         level.playSound(null, event.getPos(), SoundEvents.SMITHING_TABLE_USE, SoundSource.BLOCKS, 0.8f, 1.1f);
     }
 
@@ -88,12 +89,8 @@ public final class EquipmentRepair {
      */
     @Nullable
     private static EquipmentHealth healthAt(Level level, BlockPos pos) {
-        if (level.getBlockEntity(pos) instanceof CannonServoInputBlockEntity input) {
-            CannonServoOutputBlockEntity output = input.getAdjacentOutput();
-            return output != null ? EquipmentHealth.of(output) : null;
-        }
-        if (level.getBlockEntity(pos) instanceof CouplerInputBlockEntity input) {
-            CouplerOutputBlockEntity output = input.getAdjacentOutput();
+        if (level.getBlockEntity(pos) instanceof PairInputBlockEntity input) {
+            PairOutputBlockEntity output = input.getPairedOutput();
             return output != null ? EquipmentHealth.of(output) : null;
         }
         return EquipmentHealth.at(level, pos);
