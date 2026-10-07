@@ -48,6 +48,8 @@ public final class CDCPonderTags {
                 .add(CDCBlocks.RANGEFINDER_EYEPIECE)
                 .add(CDCBlocks.NAVIGATION_CONSOLE)
                 .add(CDCBlocks.FIRE_MISSION_CONSOLE)
+                .add(CDCBlocks.AUTOCANNON_CONTROL_CONSOLE)
+                .add(CDCBlocks.KINETIC_NETWORK_COUPLER)
                 .add(CDCBlocks.MAP_TABLE);
 
         helper.addToTag(DAMAGE_AND_MAINTENANCE).add(CreateDangerClose.asResource("spindle_oil_bucket"));

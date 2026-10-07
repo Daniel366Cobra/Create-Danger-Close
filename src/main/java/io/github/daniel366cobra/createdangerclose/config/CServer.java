@@ -14,8 +14,6 @@ public class CServer extends CDCConfigBase {
             "Aiming and firing the guns");
     public final DangerClose dangerClose = nested(0, DangerClose::new,
             "Holding fire that would land on your own side until confirmed");
-    public final Kinetics kinetics = nested(0, Kinetics::new,
-            "Kinetic blocks: the Kinetic Network Coupler");
     public final Rangefinder rangefinder = nested(0, Rangefinder::new,
             "Rangefinder accuracy and reach");
     public final MapTable mapTable = nested(0, MapTable::new,
@@ -151,18 +149,6 @@ public class CServer extends CDCConfigBase {
         @Override
         public String getName() {
             return "zones";
-        }
-    }
-
-    public static class Kinetics extends CDCConfigBase {
-        public final ConfigInt couplerFloorRpm = i(32, 1, 256, "couplerFloorRpm",
-                "[in RPM]", "The slowest a Kinetic Network Coupler gears its output network down to when the input",
-                "side cannot spare enough; short of power even for that, the output network is overstressed.",
-                "Fire control equipment needs 32 RPM to work.");
-
-        @Override
-        public String getName() {
-            return "kinetics";
         }
     }
 

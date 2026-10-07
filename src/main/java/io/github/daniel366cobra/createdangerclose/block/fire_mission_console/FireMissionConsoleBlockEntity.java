@@ -48,6 +48,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     // Client: the controls ease to their positions; the button springs back slowly.
     private static final float LEVER_EASING = 0.35f;
     private static final float KNOB_EASING = 0.4f;
+    private static final float BUTTON_PULL_EASING = 0.6f;
     private static final float BUTTON_RETURN_EASING = 0.15f;
 
     private boolean linked = false;
@@ -70,6 +71,8 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     private final LerpedFloat lever = LerpedFloat.linear().startWithValue(0);
     private final LerpedFloat knob = LerpedFloat.linear().startWithValue(0);
     private final LerpedFloat button = LerpedFloat.linear().startWithValue(0);
+    // Client: ticks the fire control stays pressed before it springs back.
+    private int buttonHeldTicks;
 
     public FireMissionConsoleBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -241,7 +244,11 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         lever.tickChaser();
         knob.chase(fuzeOffsetTicks, KNOB_EASING, LerpedFloat.Chaser.EXP);
         knob.tickChaser();
-        button.chase(0, BUTTON_RETURN_EASING, LerpedFloat.Chaser.EXP);
+        if (buttonHeldTicks > 0) {
+            buttonHeldTicks--;
+            button.chase(1, BUTTON_PULL_EASING, LerpedFloat.Chaser.EXP);
+        } else
+            button.chase(0, BUTTON_RETURN_EASING, LerpedFloat.Chaser.EXP);
         button.tickChaser();
     }
 
@@ -262,7 +269,19 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     /** Pushes the fire button in; it springs back by itself (client). */
     public void animateButtonPress() {
-        button.setValue(1);
+        int hold = fireControlHoldTicks();
+        if (hold > 0)
+            buttonHeldTicks = hold;
+        else
+            button.setValue(1);
+    }
+
+    /**
+     * How long the fire control stays pressed after each press, ticks; 0 snaps it in and
+     * lets it spring straight back (the salvo button, pressed once).
+     */
+    protected int fireControlHoldTicks() {
+        return 0;
     }
 
     /** Whether the readouts show a fire mission: connected to a computer (or shown in a Ponder scene). */

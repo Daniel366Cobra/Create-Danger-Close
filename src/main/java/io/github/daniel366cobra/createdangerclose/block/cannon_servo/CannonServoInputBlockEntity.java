@@ -49,6 +49,9 @@ public class CannonServoInputBlockEntity extends KineticBlockEntity implements C
         if (Math.abs(impact - drawImpact) <= Math.max(0.01f, drawImpact * 0.02f) && (impact == 0) == (drawImpact == 0))
             return;
         drawImpact = impact;
+        // Create subtracts this, as saved, from the network's saved stress on reload: stale, it would
+        // leave the difference behind as phantom stress for good.
+        lastStressApplied = impact;
         if (hasNetwork())
             getOrCreateNetwork().updateStressFor(this, impact);
     }

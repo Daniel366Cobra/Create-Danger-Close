@@ -452,6 +452,9 @@ public class CannonServoOutputBlockEntity extends GeneratingKineticBlockEntity
         if (Math.abs(capacity - outputCapacity) > Math.max(0.01f, outputCapacity * 0.02f)
                 || (recorded != null && Math.abs(recorded - capacity) > Math.max(0.01f, capacity * 0.02f))) {
             outputCapacity = capacity;
+            // Create subtracts this, as saved, from the network's saved capacity on reload: stale, it
+            // would leave the difference behind as phantom capacity for good.
+            lastCapacityProvided = capacity;
             if (hasNetwork())
                 getOrCreateNetwork().updateCapacityFor(this, capacity);
         }

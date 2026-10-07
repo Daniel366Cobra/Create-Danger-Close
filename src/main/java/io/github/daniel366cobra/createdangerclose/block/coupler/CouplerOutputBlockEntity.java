@@ -6,7 +6,6 @@ import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import io.github.daniel366cobra.createdangerclose.CDCLang;
-import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -30,7 +29,7 @@ import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.
  * <p>It passes on the input side's speed when it can afford to. What the output network
  * draws is charged to the input side; when the input side cannot spare that, the coupler
  * gears the output network down to what its share of the spare runs, down to a floor
- * speed (config). Short of that, it sheds it: it keeps the output network turning at the
+ * speed (set on the input half). Short of that, it sheds it: it keeps the output network turning at the
  * floor but offers it too little, so Create shows it overstressed (stopped, but still
  * connected with its load showing) while the input side and its machinery run on; it
  * comes back by itself once the share covers the load. The share is the input side's
@@ -75,14 +74,11 @@ public class CouplerOutputBlockEntity extends GeneratingKineticBlockEntity imple
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
-        // Its gears span both halves; worn as fast as the input side turns.
+        // Its gears span both halves, and break under fire. Unlike fire control equipment it needs
+        // no lubrication: it serves factories as much as battle networks, and no Create part asks for it.
         behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.COG, false)
                 .withBox(() -> new AABB(worldPosition).minmax(
-                        new AABB(worldPosition.relative(getBlockState().getValue(FACING).getOpposite()))))
-                .lubricated(() -> {
-                    CouplerInputBlockEntity input = getAdjacentInput();
-                    return input != null ? Math.abs(input.getSpeed()) : 0f;
-                }, this::isPassingPower));
+                        new AABB(worldPosition.relative(getBlockState().getValue(FACING).getOpposite())))));
     }
 
     @Override
@@ -124,7 +120,7 @@ public class CouplerOutputBlockEntity extends GeneratingKineticBlockEntity imple
         rpmLimit = Math.min(affordable, rpmLimit >= Float.MAX_VALUE / 2 ? affordable : rpmLimit * POWER_RAMP_UP + 1);
 
         float wanted = Math.abs(inputSpeed);
-        float minimum = Math.min(wanted, CDCConfig.server().kinetics.couplerFloorRpm.get());
+        float minimum = Math.min(wanted, input.getFloorRpm());
         // Out of overstress only with a margin to spare, so it does not flip back and forth.
         float resumeAt = state == State.OVERSTRESSED ? minimum * RESUME_FACTOR : minimum;
         if (rpmLimit >= wanted && (state != State.OVERSTRESSED || rpmLimit >= resumeAt))
@@ -164,6 +160,9 @@ public class CouplerOutputBlockEntity extends GeneratingKineticBlockEntity imple
         if (Math.abs(capacity - outputCapacity) > Math.max(0.01f, outputCapacity * 0.02f)
                 || (recorded != null && Math.abs(recorded - capacity) > Math.max(0.01f, capacity * 0.02f))) {
             outputCapacity = capacity;
+            // Create subtracts this, as saved, from the network's saved capacity on reload: stale, it
+            // would leave the difference behind as phantom capacity for good.
+            lastCapacityProvided = capacity;
             if (hasNetwork())
                 getOrCreateNetwork().updateCapacityFor(this, capacity);
         }

@@ -9,6 +9,8 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
 
+import java.util.List;
+
 /**
  * Turns a cannon section in a Ponder scene like a mount does: traverse about
  * the world's vertical axis, elevation about the barrel's own trunnions.
@@ -26,15 +28,18 @@ final class CannonAim {
     private static final boolean SWAPPED_ORDER = ModList.get().isLoaded("simulated");
 
     private final CreateSceneBuilder scene;
-    private final ElementLink<WorldSectionElement> cannon;
+    // The gun's sections, all turned alike about the same pivot (an autocannon's barrel is
+    // its own, so it can recoil).
+    private final List<ElementLink<WorldSectionElement>> sections;
     // The pose: traverse to the left and elevation, degrees.
     private double yaw, pitch;
     // The section's rotation angles for that pose.
     private double rotX, rotY, rotZ;
 
-    CannonAim(CreateSceneBuilder scene, ElementLink<WorldSectionElement> cannon) {
+    @SafeVarargs
+    CannonAim(CreateSceneBuilder scene, ElementLink<WorldSectionElement>... sections) {
         this.scene = scene;
-        this.cannon = cannon;
+        this.sections = List.of(sections);
     }
 
     double yaw() { return yaw; }
@@ -52,7 +57,8 @@ final class CannonAim {
 
     private void stepTo(double toYaw, double toPitch, int ticks) {
         double[] angles = anglesFor(toYaw, toPitch);
-        scene.world().rotateSection(cannon, angles[0] - rotX, angles[1] - rotY, angles[2] - rotZ, ticks);
+        for (ElementLink<WorldSectionElement> section : sections)
+            scene.world().rotateSection(section, angles[0] - rotX, angles[1] - rotY, angles[2] - rotZ, ticks);
         scene.idle(ticks);
         rotX = angles[0];
         rotY = angles[1];

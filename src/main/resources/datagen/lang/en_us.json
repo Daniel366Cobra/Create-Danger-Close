@@ -124,6 +124,7 @@
       "kinetic_network_coupler": {
         "title": "Kinetic Network Coupler",
         "not_enough_space": "Not enough space to place the Coupler's output half",
+        "floor_speed": "Floor speed (in RPM)",
         "running": "Passing %s RPM",
         "geared_down": "Geared down to %s RPM: the input side cannot spare more",
         "overstressed": "Output network overstressed: the input side cannot spare enough",
@@ -266,6 +267,28 @@
         "behaviour3": "Switches between _direct_ and _plunging_ fire.",
         "condition4": "When the button on the right is right-clicked:",
         "behaviour4": "_Fires_ every gun that has a solution and is _on target_. The others hold fire."
+      },
+      "autocannon_control_console.tooltip": {
+        "summary": "The anti-aircraft gunner's station: gives the _autocannons_ their orders.",
+        "condition1": "When a powered Battle Network Interface faces it:",
+        "behaviour1": "Shows the _target_, the _fire mode_ and each autocannon's _firing solution_ through Goggles. Autocannons always fire _direct_.",
+        "condition2": "When scrolling over the knob on the left:",
+        "behaviour2": "Sets a _fuze correction_ from -20 to +20 ticks (1 second), added to the rounds' _timed fuzes_, 1 tick a notch. _Right-click_ the knob to zero it.",
+        "condition3": "When the switch in the middle is right-clicked:",
+        "behaviour3": "Switches between _manual_ and _AUTO_ (weapons free), where autocannons fire by themselves while _on target_ and the target is being _ranged_ or marked on a _Map Table_.",
+        "condition4": "While the trigger on the right is held with right-click:",
+        "behaviour4": "_Fires_ every autocannon that is _on target_. _Danger close_ is never fired automatically: release the trigger and pull it again to confirm."
+      },
+      "kinetic_network_coupler.tooltip": {
+        "summary": "Runs a _separate kinetic network_ off another one's rotation, without joining them: two battle networks or machines can share _one engine_.",
+        "condition1": "When the input half turns:",
+        "behaviour1": "The output half turns its own network at the _same speed_. What that network draws is _charged_ to the input side as stress.",
+        "condition2": "When the input side cannot spare enough:",
+        "behaviour2": "_Gears the output network down_ to what it can afford, to no slower than its _floor speed_ (32 RPM unless set). Short of even that, the output network is _overstressed_ while the input side runs on; it _restarts by itself_ once there is power to spare.",
+        "condition3": "When several couplers share an input network:",
+        "behaviour3": "Its spare power is _split equally_ among them.",
+        "condition4": "When the value box on the input half's side is used:",
+        "behaviour4": "Sets the _floor speed_, from 1 to 256 RPM. Fire control equipment needs _32 RPM_ to work."
       },
       "navigation_console.tooltip": {
         "summary": "Shows the ship's own _attitude_, _speed_ and _altitude_ through Goggles.",

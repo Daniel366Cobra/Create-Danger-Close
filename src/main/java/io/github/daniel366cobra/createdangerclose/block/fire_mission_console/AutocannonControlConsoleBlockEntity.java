@@ -26,6 +26,8 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
 
     // A held right-click repeats every 4 ticks: the trigger counts as held this long after the last.
     private static final int TRIGGER_HOLD_TICKS = 6;
+    // Client: the trigger stays pulled between repeats, and a moment after a single click.
+    private static final int TRIGGER_ANIMATION_HOLD_TICKS = 8;
 
     /** What pulling the trigger did. */
     public enum Pull { HELD, PRESSED, DANGER_CLOSE_WARNING }
@@ -85,12 +87,22 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
     }
 
     @Override
+    protected int fireControlHoldTicks() {
+        return TRIGGER_ANIMATION_HOLD_TICKS;
+    }
+
+    @Override
     protected String titleKey() {
         return "createdangerclose.autocannon_control_console.title";
     }
 
     public boolean isWeaponsFree() {
         return weaponsFree;
+    }
+
+    /** Ponder scenes only: sets the auto switch, as right-clicking it would. */
+    public void showWeaponsFree(boolean free) {
+        weaponsFree = free;
     }
 
     void toggleWeaponsFree() {

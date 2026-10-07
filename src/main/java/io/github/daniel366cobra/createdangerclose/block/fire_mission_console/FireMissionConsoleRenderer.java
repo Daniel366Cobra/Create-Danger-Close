@@ -35,6 +35,9 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
     private static final float LEVER_DOWN_DEG = -90;
     // Fire button: presses straight down this far.
     private static final float BUTTON_TRAVEL_PX = 0.75f;
+    // Autocannon trigger: tips about the east-west axis through (3.5, 16, 7.5), this far towards the player.
+    private static final float TRIGGER_PIVOT_Y = 16, TRIGGER_PIVOT_Z = 7.5f;
+    private static final float TRIGGER_PULL_DEG = -22.5f;
 
     // Readout windows in front of each control, 0.5 px deep: the text lies 0.25 px above their floor.
     private static final float READOUT_FRONT = 2, READOUT_BACK = 4, READOUT_HEIGHT = 15.75f, READOUT_FILL = 0.9f;
@@ -47,16 +50,19 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
     private static final int MAX_GUNS_SHOWN = 9;
 
     /**
-     * What a console carries: its three controls, and the readout in front of the middle one
-     * (with the widest text it shows, which sets the text's size).
+     * What a console carries: its three controls (the fire control a push button or a
+     * trigger lever), and the readout in front of the middle one (with the widest text
+     * it shows, which sets the text's size).
      */
-    private record Layout(PartialModel knob, PartialModel lever, PartialModel button, PanelText modeReadout,
-                          String widestMode) {}
+    private record Layout(PartialModel knob, PartialModel lever, PartialModel fireControl, boolean trigger,
+                          PanelText modeReadout, String widestMode) {}
 
     private static final Layout FIRE_MISSION = new Layout(CDCPartialModels.CONSOLE_FUZE_KNOB,
-            CDCPartialModels.CONSOLE_TRAJECTORY_LEVER, CDCPartialModels.CONSOLE_FIRE_BUTTON, TRAJECTORY_READOUT, "PLG");
+            CDCPartialModels.CONSOLE_TRAJECTORY_LEVER, CDCPartialModels.CONSOLE_FIRE_BUTTON, false,
+            TRAJECTORY_READOUT, "PLG");
     private static final Layout AUTOCANNON = new Layout(CDCPartialModels.AA_CONSOLE_FUZE_KNOB,
-            CDCPartialModels.AA_CONSOLE_AUTO_SWITCH, CDCPartialModels.AA_CONSOLE_FIRE_BUTTON, AUTO_MODE_READOUT, "AUTO");
+            CDCPartialModels.AA_CONSOLE_AUTO_SWITCH, CDCPartialModels.AA_CONSOLE_FIRE_TRIGGER, true,
+            AUTO_MODE_READOUT, "AUTO");
 
     private final Font font;
     private final Layout layout;
@@ -101,10 +107,15 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
                 .light(deckLight)
                 .renderInto(ms, vb);
 
-        part(layout.button(), state, faceTurn)
-                .translate(0, -BUTTON_TRAVEL_PX * PX * be.getButtonPress(partialTicks), 0)
-                .light(deckLight)
-                .renderInto(ms, vb);
+        SuperByteBuffer fireControl = part(layout.fireControl(), state, faceTurn);
+        float press = be.getButtonPress(partialTicks);
+        if (layout.trigger())
+            fireControl.translate(0, TRIGGER_PIVOT_Y * PX, TRIGGER_PIVOT_Z * PX)
+                    .rotate(rad(TRIGGER_PULL_DEG * press), Direction.EAST)
+                    .translate(0, -TRIGGER_PIVOT_Y * PX, -TRIGGER_PIVOT_Z * PX);
+        else
+            fireControl.translate(0, -BUTTON_TRAVEL_PX * PX * press, 0);
+        fireControl.light(deckLight).renderInto(ms, vb);
 
         boolean connected = be.showsMission();
         FUZE_READOUT.draw(font, ms, buffer, front,
@@ -116,10 +127,10 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
                 "0/0", deckLight);
     }
 
-    /** The controls stand on the block's top, above its own space (the lever reaches 2.25 px up). */
+    /** The controls stand on the block's top, above its own space (the trigger reaches 4.5 px up). */
     @Override
     public AABB getRenderBoundingBox(FireMissionConsoleBlockEntity be) {
-        return new AABB(be.getBlockPos()).expandTowards(0, 3 * PX, 0);
+        return new AABB(be.getBlockPos()).expandTowards(0, 5 * PX, 0);
     }
 
     /** A partial, turned to the block's facing; transforms after this are in model space. */

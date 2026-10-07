@@ -39,7 +39,7 @@ public class CDCPartialModels {
     public static final PartialModel CONSOLE_FIRE_BUTTON = block("fire_mission_console/fire_button");
     public static final PartialModel AA_CONSOLE_FUZE_KNOB = block("autocannon_control_console/fuze_delay_knob");
     public static final PartialModel AA_CONSOLE_AUTO_SWITCH = block("autocannon_control_console/auto_mode_switch_lever");
-    public static final PartialModel AA_CONSOLE_FIRE_BUTTON = block("autocannon_control_console/fire_button");
+    public static final PartialModel AA_CONSOLE_FIRE_TRIGGER = block("autocannon_control_console/fire_trigger");
 
     // Navigation Console.
     public static final PartialModel NAV_CONSOLE_BALL = block("navigation_console/nav_ball");

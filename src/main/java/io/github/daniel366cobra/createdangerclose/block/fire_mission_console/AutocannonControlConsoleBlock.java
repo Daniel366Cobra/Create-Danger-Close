@@ -9,10 +9,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
 
 /**
  * The Autocannon Control Console: the Fire Mission Console's desk, with the fuze knob on
@@ -24,6 +27,18 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
 
     public AutocannonControlConsoleBlock(Properties properties) {
         super(properties);
+    }
+
+    /**
+     * The trigger is held, not clicked: it takes the use without swinging the hand
+     * (CONSUME on both sides, as the server's answer swings it for other players).
+     */
+    @Override
+    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
+                                               BlockHitResult hitResult) {
+        InteractionResult result = super.useWithoutItem(state, level, pos, player, hitResult);
+        return result == InteractionResult.SUCCESS && controlAt(state, pos, hitResult) == Control.FIRE_BUTTON
+                ? InteractionResult.CONSUME : result;
     }
 
     /** The trigger: every autocannon on target fires while it is held (right-click repeats). */

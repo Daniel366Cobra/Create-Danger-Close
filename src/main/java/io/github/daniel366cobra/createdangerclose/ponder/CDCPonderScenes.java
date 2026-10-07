@@ -3,10 +3,12 @@ package io.github.daniel366cobra.createdangerclose.ponder;
 import com.tterrag.registrate.util.entry.ItemProviderEntry;
 import com.tterrag.registrate.util.entry.RegistryEntry;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.ponder.scenes.AutocannonControlScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.BallisticComputerScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.BattleDamageScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.CannonServoScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.FireMissionConsoleScenes;
+import io.github.daniel366cobra.createdangerclose.ponder.scenes.KineticNetworkCouplerScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.MapTableScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.NavigationConsoleScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.NetworkInterfaceScenes;
@@ -50,6 +52,10 @@ public final class CDCPonderScenes {
                 .addStoryBoard("navigation_console", NavigationConsoleScenes::navigationConsole, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.FIRE_MISSION_CONSOLE)
                 .addStoryBoard("fire_mission_console", FireMissionConsoleScenes::fireMissionConsole, CDCPonderTags.FIRE_CONTROL);
+        HELPER.forComponents(CDCBlocks.AUTOCANNON_CONTROL_CONSOLE)
+                .addStoryBoard("autocannon_control", AutocannonControlScenes::autocannonControl, CDCPonderTags.FIRE_CONTROL);
+        HELPER.forComponents(CDCBlocks.KINETIC_NETWORK_COUPLER)
+                .addStoryBoard("kinetic_network_coupler", KineticNetworkCouplerScenes::kineticNetworkCoupler, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.MAP_TABLE)
                 .addStoryBoard("map_table", MapTableScenes::mapTable, CDCPonderTags.FIRE_CONTROL);
 
