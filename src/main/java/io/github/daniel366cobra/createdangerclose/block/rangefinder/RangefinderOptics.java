@@ -78,6 +78,18 @@ public final class RangefinderOptics {
         return new Sight(origin, direction.normalize());
     }
 
+    /** The ship the operated tube stands on, or null when not operating or not on a ship. */
+    @Nullable
+    public static SubLevel operatedShip(@Nullable Player player) {
+        AbstractContraptionEntity contraptionEntity = findOperatedContraption(player);
+        if (contraptionEntity == null)
+            return null;
+        Vec3 viewPoint = ((RangefinderContraption) contraptionEntity.getContraption()).getOperatorViewPoint();
+        if (viewPoint == null)
+            return null;
+        return Sable.HELPER.getContaining(player.level(), contraptionEntity.toGlobalVector(viewPoint, 1f));
+    }
+
     /** Converts a position that may lie on a ship (Sable plot) to world coordinates. */
     public static Vec3 toWorld(Level level, Vec3 position) {
         SubLevel ship = Sable.HELPER.getContaining(level, position);

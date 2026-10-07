@@ -109,6 +109,8 @@ public final class RangefinderSight {
 
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
+        // Before the line of sight is taken: the sight holds against the ship's motion, if stabilised.
+        SightStabiliser.tick(mc.player, getOperatedBearing());
         RangefinderOptics.Sight sight = RangefinderOptics.lineOfSight(mc.player);
         if (sight == null) {
             zoomIndex = 0;

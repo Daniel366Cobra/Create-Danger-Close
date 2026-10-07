@@ -138,6 +138,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private static final long STATUS_LIFETIME_TICKS = 40;
     private FireControlStatus fireControlStatus = FireControlStatus.NONE;
     private long fireControlStatusTick;
+    // Sight stabilisation, from the sensors the computer finds on the network (refreshed
+    // and lapsing with the status): a Gimbal Sensor holds the sight against the ship's
+    // pitch and roll, a heading sensor (Navigation Table holding a Redstone Magnet) against its yaw.
+    private boolean stabilisedTilt, stabilisedYaw;
 
     public RangefinderBearingBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -278,9 +282,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 illumination = signal;
                 sendData();
             }
-            if (fireControlStatus != FireControlStatus.NONE
+            if ((fireControlStatus != FireControlStatus.NONE || stabilisedTilt || stabilisedYaw)
                     && level.getGameTime() - fireControlStatusTick > STATUS_LIFETIME_TICKS) {
                 fireControlStatus = FireControlStatus.NONE;
+                stabilisedTilt = stabilisedYaw = false;
                 sendData();
             }
         }
@@ -574,6 +579,25 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return fireControlStatus;
     }
 
+    /** Called by the Ballistic Computer on every poll, after {@link #setFireControlStatus}. */
+    public void setStabilisation(boolean tilt, boolean yaw) {
+        if (tilt != stabilisedTilt || yaw != stabilisedYaw) {
+            stabilisedTilt = tilt;
+            stabilisedYaw = yaw;
+            sendData();
+        }
+    }
+
+    /** Whether the sight holds steady against the ship's pitch and roll (a Gimbal Sensor on the network). */
+    public boolean isStabilisedTilt() {
+        return stabilisedTilt;
+    }
+
+    /** Whether the sight holds steady against the ship's yaw (a heading sensor on the network). */
+    public boolean isStabilisedYaw() {
+        return stabilisedYaw;
+    }
+
     /**
      * The target solution as a battle network reading, while it is fresh.
      * Rangefinder readings outrank navigation tables in the Ballistic Computer.
@@ -741,6 +765,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         compound.putFloat("RangeRate", rangeRate);
         compound.putFloat("BearingRate", bearingRate);
         compound.putInt("FireControlStatus", fireControlStatus.ordinal());
+        compound.putBoolean("StabilisedTilt", stabilisedTilt);
+        compound.putBoolean("StabilisedYaw", stabilisedYaw);
         if (operatorTarget != null)
             compound.putFloat("OperatorTarget", operatorTarget);
         AssemblyException.write(compound, registries, lastException);
@@ -771,6 +797,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         int statusOrdinal = compound.getInt("FireControlStatus");
         fireControlStatus = statusOrdinal >= 0 && statusOrdinal < statuses.length
                 ? statuses[statusOrdinal] : FireControlStatus.NONE;
+        stabilisedTilt = compound.getBoolean("StabilisedTilt");
+        stabilisedYaw = compound.getBoolean("StabilisedYaw");
         operatorTarget = compound.contains("OperatorTarget") ? compound.getFloat("OperatorTarget") : null;
         lastException = AssemblyException.read(compound, registries);
         super.read(compound, registries, clientPacket);

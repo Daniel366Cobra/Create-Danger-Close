@@ -233,6 +233,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Faster apparent motion than this is a jump between solutions, not tracking.
     private static final double MAX_RATE_DEG_PER_TICK = 2.0;
     private static final double RATE_SMOOTHING = 0.5;
+    // Last commanded angle per driven swivel bearing, the same way: a turret laid on a moving
+    // target would otherwise trail it by its angular rate over the servo's correction gain.
+    // Kept per gun it is laid for and per elevation sense, since a change of either jumps the angle.
+    private record JointSample(double angleDeg, long tick, double rate, BlockPos director, int sense) {}
+    private final Map<BlockPos, JointSample> jointHistory = new HashMap<>();
 
     private boolean isPowered = false;
 
@@ -351,6 +356,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return;
         this.plungingFire = plungingFire;
         aimHistory.clear(); // the guns jump to the other arc: that is not motion to feed forward
+        jointHistory.clear();
         setChanged();
         notifyUpdate();
     }
@@ -845,6 +851,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : pos.equals(directingRangefinder) ? FireControlStatus.DIRECTING
                     : merged.contains(pos) ? FireControlStatus.MERGED
                     : FireControlStatus.STANDBY);
+            rangefinder.setStabilisation(gimbalCount > 0, navHeadingCount > 0);
         }
 
         // Players carrying one of the plotted maps: plotted friendlies.
@@ -1157,6 +1164,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             for (Joint joint : joints)
                 joint.servo().receiveFiringSolution(joint.driven() ? new FireSolution(0, 0, 0, true) : null);
             directors.clear();
+            jointHistory.clear();
             outOfArcLastPoll.clear();
             passengerRange.clear();
             return;
@@ -1166,6 +1174,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             BlockPos swivelPos = joint.swivel().swivelPos();
             if (!joint.driven()) {
                 joint.servo().receiveFiringSolution(null);
+                jointHistory.remove(swivelPos);
                 continue;
             }
             Gun director = null;
@@ -1186,14 +1195,16 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             }
             if (director == null) {
                 joint.servo().receiveFiringSolution(null);
+                jointHistory.remove(swivelPos);
                 continue;
             }
             directorThisPoll.put(swivelPos, director.pos());
             turnOf.put(swivelPos, lay.turn());
             if (tilts(joint))
                 joint.servo().receiveElevationSense(lay.sense());
-            joint.servo().receiveFiringSolution(
-                    new FireSolution(0, Mth.wrapDegrees(joint.swivel().actualAngle() + lay.turn()), 0, true));
+            double angle = Mth.wrapDegrees(joint.swivel().actualAngle() + lay.turn());
+            joint.servo().receiveFiringSolution(new FireSolution(0, angle, 0, true)
+                    .withRates(0, jointRate(swivelPos, angle, director.pos(), lay.sense())));
         }
         directors.clear();
         directors.putAll(directorThisPoll);
@@ -1593,6 +1604,36 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         aimHistory.put(mountPos, new AimSample(solution.pitchDeg(), solution.yawDeg(), now, pitchRate, yawRate));
         return solution.withRates(pitchRate, yawRate);
+    }
+
+    /**
+     * How fast a driven swivel bearing's commanded angle is changing (degrees per tick),
+     * estimated from consecutive polls as {@link #withRates} does for mounts, so its servo
+     * keeps pace with a moving solution instead of trailing it. A new director gun or
+     * elevation sense starts the estimate afresh: the angle jumps, which is not motion.
+     */
+    private double jointRate(BlockPos swivelPos, double angleDeg, BlockPos director, int sense) {
+        // Rates are the Differentiator's job; without it servos only chase the angles.
+        if (level == null || !has(ComputerModule.DIFFERENTIATOR)) {
+            jointHistory.remove(swivelPos);
+            return 0;
+        }
+        long now = level.getGameTime();
+        JointSample prev = jointHistory.get(swivelPos);
+        if (prev != null && prev.tick() == now)
+            return prev.rate();
+        double rate = 0;
+        if (prev != null && prev.director().equals(director) && prev.sense() == sense) {
+            long dt = now - prev.tick();
+            if (dt > 0 && dt <= MAX_RATE_SAMPLE_GAP) {
+                double raw = Mth.wrapDegrees(angleDeg - prev.angleDeg()) / dt;
+                // A jump (rest to tracking, a new target) is not motion.
+                if (Math.abs(raw) <= MAX_RATE_DEG_PER_TICK)
+                    rate = RATE_SMOOTHING * raw + (1 - RATE_SMOOTHING) * prev.rate();
+            }
+        }
+        jointHistory.put(swivelPos, new JointSample(angleDeg, now, rate, director, sense));
+        return rate;
     }
 
     private FireSolution solveYaw(ServoStatus status) {

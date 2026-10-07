@@ -279,6 +279,17 @@
         "condition4": "While the trigger on the right is held with right-click:",
         "behaviour4": "_Fires_ every autocannon that is _on target_. _Danger close_ is never fired automatically: release the trigger and pull it again to confirm."
       },
+      "cannon_servo_input.tooltip": {
+        "summary": "Lays a _gun_ on the Ballistic Computer's _firing solution_. Its input half sits on the _battle network_; its output half drives the gun's _own network_.",
+        "condition1": "When the output half's network reaches one Cannon Mount or Swivel Bearing:",
+        "behaviour1": "_Turns_ it onto the solution and keeps pace with a moving target. One servo per axis: one for _traverse_, one for _elevation_.",
+        "condition2": "When the battle network cannot spare enough power:",
+        "behaviour2": "What the gun side draws is _charged_ to the battle network. Short of power the gun _slows_; starved, its network is _overstressed_ until power returns.",
+        "condition3": "When the output half is right-clicked:",
+        "behaviour3": "Opens the _arc limits_ dial. The gun never turns past them, and _holds fire_ on targets outside.",
+        "condition4": "Upkeep:",
+        "behaviour4": "Its gears _break_ under fire: repair with a _Cogwheel_. They need _lubrication_: Honeycomb, or oil piped in."
+      },
       "kinetic_network_coupler.tooltip": {
         "summary": "Runs a _separate kinetic network_ off another one's rotation, without joining them: two battle networks or machines can share _one engine_.",
         "condition1": "When the input half turns:",
@@ -305,7 +316,9 @@
         "condition1": "When facing up or down and right-clicked:",
         "behaviour1": "_Assembles_ the attached structure. Its turning speed scales with the _network RPM_.",
         "condition2": "When powered by Redstone:",
-        "behaviour2": "_Illuminates_ the eyepiece reticle. A stronger signal makes it _brighter_."
+        "behaviour2": "_Illuminates_ the eyepiece reticle. A stronger signal makes it _brighter_.",
+        "condition3": "On a battle network with a Ballistic Computer:",
+        "behaviour3": "A _Gimbal Sensor_ on the network _stabilises_ the sight against the ship's _pitch_ and _roll_; a _Navigation Table_ holding a _Redstone Magnet_, against its _yaw_. A faster network lets the tube keep up better."
       },
       "rangefinder_lens.cracked": "Cracked Rangefinder Lens",
       "rangefinder_lens.tooltip": {
@@ -332,14 +345,6 @@
         "behaviour1": "_Mounts_ on that block, looking into it. It moves with the block, and _pops off_ if the block is removed.",
         "condition2": "When right-clicked on an assembled tube:",
         "behaviour2": "_Seats_ the player. The tube _follows_ where they look."
-      }
-    },
-
-    "item.createdangerclose": {
-      "some_item.tooltip": {
-        "summary": "Summary",
-        "condition1": "Condition1",
-        "behaviour1": "Behavior1"
       }
     },
 
