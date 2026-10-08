@@ -489,7 +489,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         CDCLang.builder()
                 .add(Component.literal("  • "))
                 .add(Component.translatable("createdangerclose.network_interface.nav_target",
-                        String.format("%.0f, %.0f, %.0f", t.worldPos().x, t.worldPos().y, t.worldPos().z)))
+                        BlockPos.containing(t.worldPos()).toShortString()))
                 .style(ChatFormatting.GOLD)
                 .forGoggles(tooltip);
     }
@@ -500,7 +500,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 .add(Component.literal("  • "))
                 .add(pos != null
                         ? Component.translatable("createdangerclose.network_interface.map_target",
-                                String.format("%.0f, %.0f, %.0f", pos.x, pos.y, pos.z))
+                                BlockPos.containing(pos).toShortString())
                         : Component.translatable("createdangerclose.network_interface.map_no_target"))
                 .style(ChatFormatting.GOLD)
                 .forGoggles(tooltip);

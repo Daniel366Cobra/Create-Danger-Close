@@ -582,8 +582,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.map_table.target"))
                     .add(Component.literal(" ").withStyle(ChatFormatting.RESET))
-                    .add(Component.literal(String.format("%.0f, %.0f, %.0f",
-                            table.target.x, table.target.y, table.target.z)).withStyle(ChatFormatting.GOLD))
+                    .add(Component.literal(BlockPos.containing(table.target).toShortString()).withStyle(ChatFormatting.GOLD))
                     .forGoggles(tooltip);
         } else {
             CDCLang.builder()

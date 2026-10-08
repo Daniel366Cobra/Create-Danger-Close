@@ -9,6 +9,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
@@ -255,7 +256,7 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         drawFitted(graphics, Component.translatable("createdangerclose.map_table.target"),
                 SLOT_GRID_X, readoutY, readoutWidth, LABEL_COLOR);
         drawFitted(graphics, Component.literal(target != null
-                        ? String.format("%.0f, %.0f, %.0f", target.x, target.y, target.z)
+                        ? BlockPos.containing(target).toShortString()
                         : "—"),
                 SLOT_GRID_X, readoutY + 10, readoutWidth, TARGET_COLOR);
 

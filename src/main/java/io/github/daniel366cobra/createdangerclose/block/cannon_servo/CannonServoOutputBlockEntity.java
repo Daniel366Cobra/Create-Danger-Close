@@ -460,8 +460,10 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             error = arc.turnWithin(sm.currentAngle - sm.facingYaw, target - sm.facingYaw);
         }
 
-        // On target and not tracking: lock the mount.
+        // On target and not tracking: set the true angle and lock the mount.
         if (Math.abs(error) < SNAP_THRESHOLD_DEG && Math.abs(rate) < HOLD_RATE_DEG_PER_TICK) {
+            if (Math.abs(error) > SNAP_EPSILON_DEG && sm.mount != null)
+                snapMount(sm, sm.currentAngle + error, pitch);
             sm.iface.setSequencedAngleLimit(0);
             applyGeneratedSpeed(KEEP_ALIVE_RPM);
             return;
@@ -481,6 +483,16 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         float mountRpm = angleRate / (MOUNT_DEG_PER_TICK_PER_RPM * axisSign);
         float generated = Mth.clamp(mountRpm / transmissionRatio, -maxDriveRpm(), maxDriveRpm());
         applyGeneratedSpeed(generated);
+    }
+
+    /** Our elevation is CBC's raw pitch (raw times elevationSign, twice), and yaw is CBC's own. */
+    private static void snapMount(SlavedMount sm, float angle, boolean pitch) {
+        if (pitch)
+            sm.mount.setPitch(angle);
+        else
+            sm.mount.setYaw(angle);
+        sm.currentAngle = angle;
+        sm.mount.sendData();
     }
 
     // --- Network polling (server only) ---
@@ -715,6 +727,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     }
 
     private static final float SNAP_THRESHOLD_DEG = 0.2f;
+    // Closer than this is left as is, so a held mount is not resynced every tick.
+    private static final float SNAP_EPSILON_DEG = 1e-4f;
 
     // --- Limits (the protractor dial) ---
 
