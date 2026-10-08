@@ -30,7 +30,7 @@
 		{
 			"name": "backboard",
 			"from": [0, 16, 12],
-			"to": [16, 20.15, 16],
+			"to": [16, 20.15, 15.99],
 			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
 			"faces": {
 				"north": {"uv": [0, 4, 16, 8], "texture": "#6"},

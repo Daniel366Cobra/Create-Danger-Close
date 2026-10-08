@@ -2,6 +2,7 @@
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
 	"render_type": "minecraft:cutout",
+	"ambientocclusion": false,
 	"textures": {
 		"0": "createdangerclose:block/autocannon_control_console/autocannon_control_console_side",
 		"1": "createdangerclose:block/autocannon_control_console/autocannon_control_console_top",
@@ -29,7 +30,7 @@
 		{
 			"name": "backboard",
 			"from": [0, 16, 12],
-			"to": [16, 20.15, 16],
+			"to": [16, 20.15, 15.99],
 			"rotation": {"angle": 0, "axis": "y", "origin": [8, 8, 8]},
 			"faces": {
 				"north": {"uv": [0, 4, 16, 8], "texture": "#5"},

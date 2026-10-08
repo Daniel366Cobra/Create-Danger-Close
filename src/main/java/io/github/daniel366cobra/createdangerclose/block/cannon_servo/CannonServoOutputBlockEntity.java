@@ -20,6 +20,7 @@ import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReadin
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoStatus;
+import io.github.daniel366cobra.createdangerclose.mixin.SwivelBearingAccessor;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.ChatFormatting;
@@ -318,6 +319,11 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         }
         if (Math.abs(error) < SNAP_THRESHOLD_DEG && Math.abs(rate) < HOLD_RATE_DEG_PER_TICK) {
             applyGeneratedSpeed(0);
+            // As a mount: the exact angle, not wherever the deadband caught it. The turret follows its set-point.
+            if (Math.abs(error) > SNAP_EPSILON_DEG) {
+                ((SwivelBearingAccessor) swivel).createdangerclose$setTargetAngleDegrees(current + error);
+                swivel.sendData();
+            }
             return;
         }
         float facingSign = swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxisDirection()

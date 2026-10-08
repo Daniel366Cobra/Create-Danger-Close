@@ -206,6 +206,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // The same for driven swivel bearings, per director gun and elevation sense (a change of either jumps the angle).
     private record JointSample(double angleDeg, long tick, double rate, BlockPos director, int sense) {}
     private final Map<BlockPos, JointSample> jointHistory = new HashMap<>();
+    // Last poll's target, for telling a new target from a moving one.
+    private TargetSource lastTargetSource = TargetSource.NONE;
+    private double lastTargetX;
+    private double lastTargetY;
+    private double lastTargetZ;
+    private long lastTargetTick;
+    private static final double TARGET_MOVED_EPSILON = 0.01;
 
     private boolean isPowered = false;
 
@@ -275,6 +282,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             clearServos();
         } else {
             pollNetwork();
+            forgetRatesOnNewTarget();
             pollAndPushServos();
         }
         updatePanel();
@@ -1110,7 +1118,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 joint.servo().receiveElevationSense(lay.sense());
             double angle = Mth.wrapDegrees(joint.swivel().actualAngle() + lay.turn());
             joint.servo().receiveFiringSolution(new FireSolution(0, angle, 0, true)
-                    .withRates(0, jointRate(swivelPos, angle, director.pos(), lay.sense())));
+                    .withRates(0, jointRate(swivelPos, angle, director, lay.sense())));
         }
         directors.clear();
         directors.putAll(directorThisPoll);
@@ -1434,6 +1442,44 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius, arc[0], arc[1]);
     }
 
+    /**
+     * Whether a gun's angles can be moving: a still target fired on from the ground has nothing to
+     * feed forward, and the solution's drift as the turret swings round would only make the guns hunt.
+     */
+    private boolean feedsForward(ServoStatus.MountSnapshot mount) {
+        return hasTargetVelocity || onShip(mount);
+    }
+
+    /**
+     * After a poll: a target that moved more than it could have (a new designation, the
+     * rangefinders on another target, another source) is a jump, not motion; rates start afresh.
+     */
+    private void forgetRatesOnNewTarget() {
+        long now = level.getGameTime();
+        if (hasTarget && lastTargetSource != TargetSource.NONE) {
+            boolean jumped = targetSource != lastTargetSource;
+            if (!jumped) {
+                long dt = now - lastTargetTick;
+                double dx = targetX - lastTargetX - targetVelX * dt;
+                double dy = targetY - lastTargetY - targetVelY * dt;
+                double dz = targetZ - lastTargetZ - targetVelZ * dt;
+                // Ranging scatter is not a jump; a designation either stays put or is a new one.
+                double tolerance = targetSource == TargetSource.RANGEFINDER
+                        ? Math.max(MIN_MERGE_DISTANCE, MERGE_SIGMAS * targetSigma) : TARGET_MOVED_EPSILON;
+                jumped = dx * dx + dy * dy + dz * dz > tolerance * tolerance;
+            }
+            if (jumped) {
+                aimHistory.clear();
+                jointHistory.clear();
+            }
+        }
+        lastTargetSource = hasTarget ? targetSource : TargetSource.NONE;
+        lastTargetX = targetX;
+        lastTargetY = targetY;
+        lastTargetZ = targetZ;
+        lastTargetTick = now;
+    }
+
     /** Attaches the rates of the commanded angles from consecutive polls, for servo feed-forward. */
     @Nullable
     private FireSolution withRates(ServoStatus status, @Nullable FireSolution solution) {
@@ -1441,6 +1487,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (solution == null || level == null || !has(ComputerModule.DIFFERENTIATOR)) return solution;
 
         BlockPos mountPos = status.mounts().get(0).mountPos();
+        if (!feedsForward(status.mounts().get(0))) {
+            aimHistory.remove(mountPos);
+            return solution;
+        }
         long now = level.getGameTime();
         AimSample prev = aimHistory.get(mountPos);
 
@@ -1470,9 +1520,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /** The same as {@link #withRates} for a driven swivel bearing; a new director or sense starts afresh. */
-    private double jointRate(BlockPos swivelPos, double angleDeg, BlockPos director, int sense) {
+    private double jointRate(BlockPos swivelPos, double angleDeg, Gun directorGun, int sense) {
+        BlockPos director = directorGun.pos();
         // Rates are the Differentiator's job; without it servos only chase the angles.
-        if (level == null || !has(ComputerModule.DIFFERENTIATOR)) {
+        if (level == null || !has(ComputerModule.DIFFERENTIATOR) || !feedsForward(directorGun.mount())) {
             jointHistory.remove(swivelPos);
             return 0;
         }
