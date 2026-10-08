@@ -14,27 +14,20 @@ import net.minecraft.world.phys.Vec3;
 import rbasamoyai.createbigcannons.effects.particles.plumes.BigCannonPlumeParticleData;
 import rbasamoyai.createbigcannons.ponder.CBCAnimateBlockEntityInstruction;
 
-/** Ponder scenes for the Cannon Servo. */
 public final class CannonServoScenes {
 
     private CannonServoScenes() {}
 
-    // How the demonstration gun trains onto its target: traverse to the left
-    // (north-east) and elevation, in degrees, over this many ticks.
+    // Traverse left (north-east) and elevation.
     private static final float TRAVERSE_DEG = 40, ELEVATION_DEG = 20;
     private static final int TRAINING_TICKS = 40;
-    // Output network speed while training, as a multiple of its 1 RPM keep-alive.
+    // Multiple of the 1 RPM keep-alive.
     private static final float TRAINING_SPEED_FACTOR = 32;
 
     /**
-     * Structure {@code cannon_servo.nbt}: a 6×6 floor (the bottom layer), a
-     * cogwheel column beside it bringing power from off the scene to the
-     * battle network along z = 5, a Ballistic Computer
-     * with its interface on the west side, and two servo pairs: the one at
-     * x = 4 drives the mount's elevation through the shaft at (4, 1, 1), the
-     * one at x = 2 its traverse through two stacked gearboxes down to the gearbox
-     * under the mount. The cannon mount at (4, 1, 0) faces east with its
-     * (unassembled) cannon two blocks up, and a lever on its west side.
+     * Structure {@code cannon_servo.nbt}: 6×6 floor, battle network along z = 5, a computer with its
+     * interface on the west. Servos at x = 4 (elevation, shaft at (4, 1, 1)) and x = 2 (traverse, gearboxes
+     * down under the mount). Mount (4, 1, 0) facing east, cannon unassembled, lever west.
      */
     public static void cannonServo(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -55,8 +48,7 @@ public final class CannonServoScenes {
         Selection servos = util.select().fromTo(2, 1, 2, 2, 1, 4).add(util.select().fromTo(4, 1, 2, 4, 1, 4));
         Selection pitchLinkage = util.select().position(4, 1, 1);
         Selection yawLinkage = util.select().fromTo(2, 1, 0, 2, 1, 1);
-        // The cannon networks, between the servo outputs and the mount (the
-        // lower gearbox, encased shaft and gearbox under it sit in the floor layer).
+        // Servo outputs to the mount (traverse gearing in the floor layer).
         Selection cannonNetworks = util.select().fromTo(2, 1, 0, 2, 1, 2)
                 .add(util.select().fromTo(2, 0, 0, 4, 0, 0))
                 .add(util.select().fromTo(4, 1, 1, 4, 1, 2));
@@ -70,7 +62,6 @@ public final class CannonServoScenes {
         scene.world().showSection(util.select().position(mount).add(util.select().position(lever)), Direction.DOWN);
         ElementLink<WorldSectionElement> cannon =
                 scene.world().showIndependentSection(util.select().fromTo(4, 3, 0, 6, 3, 0), Direction.DOWN);
-        // The cannon pivots where it sits on the mount.
         scene.world().configureCenterOfRotation(cannon, util.vector().centerOf(4, 3, 0));
         scene.idle(20);
 
@@ -83,7 +74,7 @@ public final class CannonServoScenes {
                 .text("A Cannon Servo turns one axis of a Cannon Mount for the Ballistic Computer");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
-        // Input, then output: one after the other, the first fading out before the second appears.
+        // The first text fades before the second appears.
         scene.overlay().showText(PonderTiming.TEXT)
                 .colored(PonderPalette.BLUE)
                 .pointAt(util.vector().topOf(pitchInput))
@@ -112,7 +103,6 @@ public final class CannonServoScenes {
                 .text("...the other its traverse. Each finds out which one it drives on its own");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
-        // Assemble the cannon with the lever.
         scene.world().modifyBlock(lever, state -> state.setValue(BlockStateProperties.POWERED, true), false);
         scene.world().modifyBlock(mount, CannonAim::assembled, false);
         scene.effects().createRedstoneParticles(lever, 0xFF0000, 10);
@@ -131,7 +121,7 @@ public final class CannonServoScenes {
                 .text("When the computer has a firing solution, the servos train the gun onto it");
         scene.idle(30);
         scene.world().multiplyKineticSpeed(cannonNetworks, TRAINING_SPEED_FACTOR);
-        // CBC's mount yaw grows the other way round to Ponder's rotation (east is 270, north 180).
+        // CBC's mount yaw runs opposite to Ponder's rotation (east 270, north 180).
         scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountYaw(mount, -TRAVERSE_DEG, TRAINING_TICKS));
         scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountPitch(mount, ELEVATION_DEG, TRAINING_TICKS));
         new CannonAim(scene, cannon).turn(TRAVERSE_DEG, ELEVATION_DEG, TRAINING_TICKS);

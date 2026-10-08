@@ -16,12 +16,7 @@ import java.util.List;
 
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 
-/**
- * The Kinetic Network Coupler's input half: an ordinary consumer on the network it draws
- * from, charged whatever the output half's network draws (see {@link CouplerOutputBlockEntity}).
- * Its value box, on the brass plate on each side, sets the floor speed: the slowest it gears
- * the output network down to before letting it overstress.
- */
+/** The coupler's input half; its value box (on the brass plates) sets the floor speed. */
 public class CouplerInputBlockEntity extends PairInputBlockEntity {
 
     // Fire control equipment needs 32 RPM to work.
@@ -43,12 +38,12 @@ public class CouplerInputBlockEntity extends PairInputBlockEntity {
         behaviours.add(floorSpeed);
     }
 
-    /** The slowest the output network is geared down to before it is left overstressed (RPM). */
+    /** RPM. */
     int getFloorRpm() {
         return floorSpeed.getValue();
     }
 
-    /** The value box: centred on each side around the coupler's axis, where the brass plate is. */
+    /** Centered on each side around the axis, on the brass plate. */
     private static class SideSlot extends ValueBoxTransform.Sided {
         @Override
         protected Vec3 getSouthLocation() {

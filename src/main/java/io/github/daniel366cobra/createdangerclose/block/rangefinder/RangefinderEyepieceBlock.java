@@ -18,22 +18,15 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * The operator's station on a rangefinder tube. Once the tube is assembled,
- * right-clicking the eyepiece seats the player there, and the tube follows
- * where they look. Must face the same way as the lenses, centred on the
- * bearing axis.
- *
- * <p>It is a wall-mounted block, like a lever: a plate bolted to the block in
- * front of the operator, with the eyepieces and the seat hanging off it.
- * {@link #FACING} is the line of sight, so the supporting block is the one
- * {@code FACING} points at. Without it the eyepiece pops off.
+ * The operator's station on a rangefinder tube: seats the player, and the tube follows their look.
+ * Wall-mounted like a lever: {@link #FACING} is the line of sight and points at its support; without
+ * it, it pops off.
  */
 public class RangefinderEyepieceBlock extends RangefinderOpticBlock {
 
     public static final MapCodec<RangefinderEyepieceBlock> CODEC = simpleCodec(RangefinderEyepieceBlock::new);
 
-    // The model's solid parts, for an eyepiece facing north (pixels): the
-    // plate against the support, the seat mounting beam, and the seat itself.
+    // Facing north, pixels: plate, seat beam, seat.
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(Shapes.or(
             Block.box(0, 0, 0, 16, 16, 2),
             Block.box(7, 1, 2, 9, 3, 12),
@@ -48,17 +41,12 @@ public class RangefinderEyepieceBlock extends RangefinderOpticBlock {
         return SHAPE.get(state.getValue(FACING));
     }
 
-    /** The direction of the block the plate is bolted to: the way the eyepiece looks. */
+    /** The way it looks. */
     public static Direction getSupportDirection(BlockState state) {
         return state.getValue(FACING);
     }
 
-    /**
-     * Mounts on the side face that was clicked, looking into that block. If
-     * that does not work (a top or bottom face was clicked, or there is
-     * nothing to bolt to), tries the blocks the player is looking towards.
-     * Null, i.e. not placeable, without any support.
-     */
+    /** On the clicked side face; else toward where the player looks. Null without any support. */
     @Override
     @Nullable
     public BlockState getStateForPlacement(BlockPlaceContext context) {
@@ -78,7 +66,7 @@ public class RangefinderEyepieceBlock extends RangefinderOpticBlock {
         return null;
     }
 
-    /** The face the plate is bolted to must be solid (a full, sturdy face), as for a lever. */
+    /** A full, sturdy face, as for a lever. */
     @Override
     protected boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
         Direction support = getSupportDirection(state);
@@ -86,7 +74,6 @@ public class RangefinderEyepieceBlock extends RangefinderOpticBlock {
         return level.getBlockState(supportPos).isFaceSturdy(level, supportPos, support.getOpposite());
     }
 
-    /** Pops off (dropping itself) when the block it is bolted to goes. */
     @Override
     protected BlockState updateShape(BlockState state, Direction direction, BlockState neighborState,
                                      LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
@@ -95,7 +82,7 @@ public class RangefinderEyepieceBlock extends RangefinderOpticBlock {
         return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
     }
 
-    /** Turning it would tear it off its support, so the wrench does not turn it. */
+    /** Turning it would tear it off. */
     @Override
     public BlockState getRotatedBlockState(BlockState originalState, Direction targetedFace) {
         return originalState;

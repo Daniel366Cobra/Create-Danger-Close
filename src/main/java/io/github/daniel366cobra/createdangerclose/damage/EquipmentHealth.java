@@ -44,20 +44,16 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
- * The health record of a piece of mechanical equipment, attached to its block
- * entity: what is wrong with it, and the bias a jostle left it with. It saves
- * and syncs itself, takes battle damage for its block (as a
- * {@link BattleDamageable}), and writes its own goggles lines. The equipment
- * only asks it {@link #isOutOfOrder()} and {@link #biasYaw()} / {@link #biasPitch()}.
+ * Health record of mechanical equipment: faults and jostle bias. Saves, syncs, takes battle damage
+ * and writes its goggles lines; the equipment only asks {@link #isOutOfOrder()} and the biases.
  */
 public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamageable {
 
     public static final BehaviourType<EquipmentHealth> TYPE = new BehaviourType<>();
 
-    // A jostle throws the equipment off by between this share of the most (config) and the most.
+    // A jostle's bias is between this share of the maximum (config) and the maximum.
     private static final float MIN_BIAS_SHARE = 0.4f;
 
-    /** What a heavy blow breaks in this equipment. */
     public enum Breaks { COG, MECHANISM }
 
     private final Breaks breaks;
@@ -66,9 +62,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
 
     private final Set<Fault> faults = EnumSet.noneOf(Fault.class);
 
-    // --- Lubrication: only for equipment given its network speed (see lubricated) ---
-    // It dries out faster the faster its network turns (linear in RPM, to full speed), to
-    // reward powering a ship down and make high readiness cost upkeep (rates: config).
+    // --- Lubrication (see lubricated): dries faster at higher RPM, so readiness costs upkeep ---
     private static final float TICKS_PER_DAY = 24000;
     private static final float FULL_SPEED_RPM = 256;
     private static final int MAINTENANCE_INTERVAL_TICKS = 20;
@@ -76,7 +70,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     private BooleanSupplier running = () -> false;
     private Supplier<Collection<BlockPos>> lubricationGroup = () -> List.of(getPos());
     private float lubrication = 1;
-    // A small oil reservoir, filled by pipe: it tops up its lubrication group by itself.
+    // Filled by pipe; tops up its lubrication group.
     private static final int RESERVOIR_MB = 1000;
     private final FluidTank reservoir = new FluidTank(RESERVOIR_MB, EquipmentHealth::isLubricant) {
         @Override
@@ -85,14 +79,13 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
             reservoirChanged = true;
         }
     };
-    // Sent on with the next maintenance tick rather than at every drop a pipe moves.
+    // Synced with the next maintenance tick rather than every drop.
     private boolean reservoirChanged;
-    // The jostle's bias (degrees), while jostled.
+    // Degrees, while jostled.
     private float biasYaw, biasPitch;
 
     /**
-     * @param breaks    what a close blast or a hit breaks
-     * @param canJostle whether a lighter blast jostles it (else it shrugs that off)
+     * @param canJostle whether a lighter blast jostles it
      */
     public EquipmentHealth(SmartBlockEntity be, Breaks breaks, boolean canJostle) {
         super(be);
@@ -102,11 +95,9 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     }
 
     /**
-     * Gives it lubrication, which its network's speed wears down, and lets it seize
-     * when running dry.
+     * Wears with network speed; seizes when dry.
      *
-     * @param networkRpm its speed on the battle network
-     * @param running    whether it is working (powered at operating speed): only then can it seize
+     * @param running only then can it seize
      */
     public EquipmentHealth lubricated(Supplier<Float> networkRpm, BooleanSupplier running) {
         this.networkRpm = networkRpm;
@@ -114,13 +105,13 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         return this;
     }
 
-    /** The blocks it shares its lubrication with (itself among them): one honeycomb click serves them all. */
+    /** One honeycomb click serves the whole group. */
     public EquipmentHealth sharingLubricationWith(Supplier<Collection<BlockPos>> group) {
         this.lubricationGroup = group;
         return this;
     }
 
-    /** Its vulnerable box, in the level (default: its block). */
+    /** Default: its block. */
     public EquipmentHealth withBox(Supplier<AABB> box) {
         this.box = box;
         return this;
@@ -138,7 +129,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
 
     // --- What the equipment asks ---
 
-    /** Whether it does not work at all: broken or seized. */
+    /** Broken or seized. */
     public boolean isOutOfOrder() {
         for (Fault fault : faults)
             if (fault.isOutOfOrder())
@@ -150,12 +141,10 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         return faults.contains(fault);
     }
 
-    /** The jostle's bias in yaw, degrees (0 unless jostled). */
     public float biasYaw() {
         return faults.contains(Fault.JOSTLED) ? biasYaw : 0;
     }
 
-    /** The jostle's bias in pitch, degrees (0 unless jostled). */
     public float biasPitch() {
         return faults.contains(Fault.JOSTLED) ? biasPitch : 0;
     }
@@ -185,7 +174,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         changed();
     }
 
-    /** Clears a fault (a repair). Returns whether it was there. */
+    /** Returns whether the fault was there. */
     public boolean repair(Fault fault) {
         if (!faults.remove(fault))
             return false;
@@ -193,7 +182,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         return true;
     }
 
-    /** Ponder only: sets or clears a fault quietly (no sound, nothing to sync). */
+    /** Ponder only: no sound, nothing to sync. */
     public void setPonderFault(Fault fault, boolean present) {
         if (present)
             faults.add(fault);
@@ -238,7 +227,6 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
 
     // --- Lubrication ---
 
-    /** Dries a little, by its network's speed; running dry, it may seize. */
     private void wearLubrication() {
         float rpm = Math.min(Math.abs(networkRpm.get()), FULL_SPEED_RPM);
         CServer.Lubrication config = CDCConfig.server().maintenance.lubrication;
@@ -252,7 +240,6 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
                 seize();
         }
         drawFromReservoir();
-        // Sent on in whole percent, for the goggles.
         if ((int) (before * 100) != (int) (lubrication * 100))
             changed();
         else if (reservoirChanged)
@@ -266,19 +253,11 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         changed();
     }
 
-    /** Whether it takes lubrication (honeycomb). */
     public boolean isLubricated() {
         return networkRpm != null;
     }
 
-    /**
-     * Honeycomb: tops up its whole lubrication group, taking as many combs from the
-     * held stack as that needs (one fills one block), shares what there is equally
-     * among them, and frees any seized one (that takes a comb at least).
-     *
-     * @return whether anything was done
-     */
-    /** The lubricated equipment sharing its lubrication (itself among them). */
+    /** Itself included. */
     private List<EquipmentHealth> lubricationGroup() {
         List<EquipmentHealth> group = new ArrayList<>();
         for (BlockPos pos : lubricationGroup.get()) {
@@ -297,16 +276,13 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         return fluid.is(CDCFluids.LUBRICANTS) || fluid.is(CDCFluids.WEAK_LUBRICANTS);
     }
 
-    /** How much of the reservoir's fluid fills one block's lubrication, mB. */
+    /** mB. */
     private int fluidPerBlock() {
         CServer.Lubrication config = CDCConfig.server().maintenance.lubrication;
         return reservoir.getFluid().is(CDCFluids.LUBRICANTS) ? config.lubricantPerBlock.get() : config.plantOilPerBlock.get();
     }
 
-    /**
-     * Tops up its group from the reservoir, as far as the oil goes: below full by at least
-     * a percent, a member takes what it needs (a seized one is freed by it).
-     */
+    /** Members at least a percent below full take what they need; that frees a seized one. */
     private void drawFromReservoir() {
         if (reservoir.isEmpty())
             return;
@@ -327,7 +303,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         }
     }
 
-    /** What pipes see: a reservoir that takes lubricants in, and gives nothing back. */
+    /** Takes lubricants in, gives nothing back. */
     @Nullable
     public IFluidHandler getReservoir() {
         if (!isLubricated())
@@ -399,7 +375,6 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         return true;
     }
 
-    /** A particle on the top of the part, drifting up. */
     private static void emit(Level level, AABB part, ParticleOptions particle, double speed) {
         RandomSource random = level.random;
         double x = Mth.lerp(random.nextDouble(), part.minX + 0.1, part.maxX - 0.1);
@@ -438,16 +413,16 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     public List<DamagePart> damageParts() {
         Level level = getWorld();
         AABB part = box.get();
-        // On a ship the block stands in the ship's plot: through its pose to and from the world.
+        // On a ship: through its pose to and from the world.
         SubLevel ship = Sable.HELPER.getContaining(level, getPos());
-        Vec3 centre = ship != null ? ship.logicalPose().transformPosition(part.getCenter()) : part.getCenter();
-        return List.of(new DamagePart(getPos(), DamagePart.PartKind.MECHANISM, part, centre,
+        Vec3 center = ship != null ? ship.logicalPose().transformPosition(part.getCenter()) : part.getCenter();
+        return List.of(new DamagePart(getPos(), DamagePart.PartKind.MECHANISM, part, center,
                 world -> ship != null ? ship.logicalPose().transformPositionInverse(world) : world));
     }
 
     @Override
     public void onBlast(DamagePart part, double severity) {
-        if (BattleDamage.radiiFromCentre(severity) <= CDCConfig.server().battleDamage.breakDistance.getF())
+        if (BattleDamage.radiiFromCenter(severity) <= CDCConfig.server().battleDamage.breakDistance.getF())
             breakDown();
         else
             jostle();
@@ -460,7 +435,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
 
     // --- Goggles ---
 
-    /** Its lubrication, if it takes any: gold once low enough to seize. */
+    /** Gold once low enough to seize. */
     private void addLubricationToGoggleTooltip(List<Component> tooltip) {
         if (!isLubricated() || !CDCConfig.server().maintenance.lubrication.allowWearAndSeizing.get())
             return;
@@ -468,12 +443,12 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
                 .add(Component.translatable("createdangerclose.equipment.lubrication", Math.round(lubrication * 100)))
                 .style(lubrication < CDCConfig.server().maintenance.lubrication.seizeBelow.getF() ? ChatFormatting.GOLD : ChatFormatting.GRAY)
                 .forGoggles(tooltip);
-        // The reservoir, as Create shows any fluid container: only once it holds oil.
+        // Shown like any Create fluid container, once it holds oil.
         if (!reservoir.isEmpty() && blockEntity instanceof IHaveGoggleInformation goggles)
             goggles.containedFluidTooltip(tooltip, false, getReservoir());
     }
 
-    /** Like {@link #addToGoggleTooltip}, but says so when nothing is wrong. */
+    /** Also says so when nothing is wrong. */
     public void addConditionToGoggleTooltip(List<Component> tooltip) {
         if (faults.isEmpty()) {
             CDCLang.builder()
@@ -486,10 +461,9 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         }
     }
 
-    /** Adds a line per fault, explaining it and its repair. */
     public void addToGoggleTooltip(List<Component> tooltip) {
         addLubricationToGoggleTooltip(tooltip);
-        // The messages carry their own line break before the repair hint: a goggles line each.
+        // Each message has a line break before the repair hint: a goggles line each.
         for (Fault fault : faults)
             for (String line : Component.translatable(fault.translationKey()).getString().split("\n"))
                 CDCLang.builder()
@@ -530,7 +504,6 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         reservoir.readFromNBT(registries, tag.getCompound("Reservoir"));
     }
 
-    /** The block at this position's health record, if it has one. */
     @Nullable
     public static EquipmentHealth at(Level level, BlockPos pos) {
         return of(level.getBlockEntity(pos));

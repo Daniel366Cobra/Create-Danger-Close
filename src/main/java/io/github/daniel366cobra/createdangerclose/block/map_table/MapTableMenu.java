@@ -15,17 +15,13 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * The map table screen: one slot per table block, laid out like the table
- * (north up), plus the player's inventory.
- */
+/** One slot per table block, laid out like the table (north up), plus the inventory. */
 public class MapTableMenu extends AbstractContainerMenu {
 
-    // Screen layout, shared with MapTableScreen.
+    // Shared with MapTableScreen.
     public static final int IMAGE_WIDTH = 212, IMAGE_HEIGHT = 271;
     public static final int PREVIEW_X = 8, PREVIEW_Y = 18, PREVIEW_SIZE = 132;
     public static final int SLOT_GRID_X = PREVIEW_X + PREVIEW_SIZE + 10, SLOT_GRID_Y = PREVIEW_Y;
-    // Two lines of hints under the map sheet.
     public static final int HINTS_Y = PREVIEW_Y + PREVIEW_SIZE + 5;
     public static final int PLAYER_INV_X = (IMAGE_WIDTH - 162) / 2, PLAYER_INV_Y = 189;
     public static final int SLOT_SIZE = 18;
@@ -39,7 +35,7 @@ public class MapTableMenu extends AbstractContainerMenu {
         this(CDCMenuTypes.MAP_TABLE.get(), containerId, playerInventory, controller, controller.getWidth());
     }
 
-    /** Client side: the table position and width come from the open packet. */
+    /** Client side: position and width come from the open packet. */
     public static MapTableMenu fromNetwork(MenuType<MapTableMenu> type, int containerId, Inventory playerInventory,
                                            RegistryFriendlyByteBuf buf) {
         BlockPos pos = buf.readBlockPos();
@@ -56,8 +52,7 @@ public class MapTableMenu extends AbstractContainerMenu {
         this.tableWidth = tableWidth;
         this.parts = new MapTableBlockEntity[tableWidth * tableWidth];
 
-        // Always the same number of slots on both sides; a missing block gets
-        // a dummy slot that accepts nothing.
+        // The same slot count on both sides; missing blocks get dummy slots.
         for (int dz = 0; dz < tableWidth; dz++) {
             for (int dx = 0; dx < tableWidth; dx++) {
                 MapTableBlockEntity part = controller != null ? controller.partAt(dx, dz) : null;
@@ -91,7 +86,7 @@ public class MapTableMenu extends AbstractContainerMenu {
         return tableWidth;
     }
 
-    /** The table block at a cell (north-west = 0, 0), or null. */
+    /** North-west = 0, 0. */
     @Nullable
     public MapTableBlockEntity getPart(int dx, int dz) {
         return parts[dz * tableWidth + dx];

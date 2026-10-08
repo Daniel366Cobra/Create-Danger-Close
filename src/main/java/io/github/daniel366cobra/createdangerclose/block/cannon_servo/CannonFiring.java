@@ -10,16 +10,15 @@ import rbasamoyai.createbigcannons.cannon_control.contraption.MountedAutocannonC
 import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
 import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
 
-/** Firing a CBC cannon (on a cannon mount or a fixed one) on command, as a redstone pulse on the mount would. */
+/** Fires CBC cannons on command, as a redstone pulse on the mount would. */
 public final class CannonFiring {
 
     private CannonFiring() {}
 
     /**
-     * Fires the cannon on the mount at this position, with whatever it has
-     * loaded (CBC handles empty or unprimed cannons itself).
+     * CBC handles empty or unprimed cannons itself.
      *
-     * @return false if there is no assembled cannon there
+     * @return false without an assembled cannon
      */
     public static boolean fire(ServerLevel level, BlockPos mountPos) {
         PitchOrientedContraptionEntity cannonEntity = switch (level.getBlockEntity(mountPos)) {
@@ -33,15 +32,13 @@ public final class CannonFiring {
         return true;
     }
 
-    /** The fastest rate of fire, the strongest redstone signal. */
+    /** The strongest redstone signal. */
     public static final int AUTOCANNON_FULL_RATE = 15;
 
     /**
-     * Sets an autocannon's rate of fire, as a redstone signal of this strength on its mount
-     * does: the breech then fires by itself at that rate, as long as it has rounds; 0 ceases
-     * fire.
+     * As a redstone signal on the mount: the breech fires by itself at that rate while it has rounds; 0 ceases fire.
      *
-     * @return false if there is no assembled autocannon there
+     * @return false without an assembled autocannon
      */
     public static boolean setAutocannonFireRate(ServerLevel level, BlockPos mountPos, int rate) {
         BlockEntity be = level.getBlockEntity(mountPos);

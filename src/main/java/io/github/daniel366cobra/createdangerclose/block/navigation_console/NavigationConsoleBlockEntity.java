@@ -28,20 +28,12 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Navigation Console: the ship's own attitude, speed and altitude, read
- * through goggles.
- *
- * <p>A Battle Network Interface facing it connects it: each time that
- * interface polls, the console takes a fresh reading ({@link #pollFrom}).
- * As everywhere in the mod, the sensors on the network are <em>gates</em>:
- * the values come from the Sable pose of the ship the console stands on, but
- * each is only shown if the network has the sensor for it (gimbal and
- * heading, a velocity sensor per ship axis, altitude).
+ * The ship's own attitude, speed and altitude, read through goggles. Connected by a facing
+ * interface ({@link #pollFrom}). Values come from the Sable pose; sensors only gate what is shown.
  */
 public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
 
-    // The link lapses this long after the interface's last poll
-    // (a powered interface polls at least every 20 ticks).
+    // A powered interface polls at least every 20 ticks.
     private static final int LINK_TIMEOUT_TICKS = 40;
 
     private boolean linked = false;
@@ -51,7 +43,7 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
     private int gimbalCount = 0;
     private int navHeadingCount = 0;
     private int altitudeCount = 0;
-    // Velocity sensors per ship axis (X, Y, Z).
+    // Per ship axis (X, Y, Z).
     private final int[] velocityAxisCounts = new int[3];
 
     // --- Own-ship state from the sublevel pose ---
@@ -59,16 +51,15 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
     private double shipPitchDeg = 0;
     private double shipHeadingDeg = 0;
     private double shipRollDeg = 0;
-    // Ship-frame velocity at the console, m/s.
+    // Ship frame, m/s.
     private double shipVelX = 0;
     private double shipVelY = 0;
     private double shipVelZ = 0;
     private double shipAltitude = 0;
 
-    // Client: the instruments ease towards the latest readings between polls.
-    // Each shows only what the network has a sensor for, resting at zero otherwise.
+    // Client: instruments ease toward the latest readings; zero without their sensor.
     private static final float INSTRUMENT_EASING = 0.3f;
-    /** Speedometer full scale, blocks per second (half a turn of the needle). */
+    /** Blocks per second (half a needle turn). */
     public static final double SPEEDOMETER_FULL_SCALE = 40;
     private final LerpedFloat ballHeading = LerpedFloat.angular().startWithValue(0);
     private final LerpedFloat ballPitch = LerpedFloat.angular().startWithValue(0);
@@ -83,7 +74,7 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
 
-    /** Called by a powered network interface facing the console, each time it polls. */
+    /** Called by a powered facing interface each time it polls. */
     public void pollFrom(NetworkInterfaceBlockEntity networkInterface) {
         if (level == null || level.isClientSide())
             return;
@@ -103,7 +94,6 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
             tickInstruments();
             return;
         }
-        // The interface stopped polling (unpowered, turned away, removed).
         if (linked && level.getGameTime() - lastLinkTick > LINK_TIMEOUT_TICKS) {
             linked = false;
             notifyUpdate();
@@ -124,7 +114,6 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
                 ? (shipAltitude - level.getMinBuildHeight()) / (level.getMaxBuildHeight() - level.getMinBuildHeight()) : 0;
         altimeter.chase(Mth.clamp(altitudeShown, 0, 1), INSTRUMENT_EASING, LerpedFloat.Chaser.EXP);
 
-        // Only the ship axes with a velocity sensor count towards the speed.
         double vx = velocityAxisCounts[0] > 0 ? shipVelX : 0;
         double vy = velocityAxisCounts[1] > 0 ? shipVelY : 0;
         double vz = velocityAxisCounts[2] > 0 ? shipVelZ : 0;
@@ -139,27 +128,27 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
         speedometer.tickChaser();
     }
 
-    /** Navball: the ship's heading, degrees (Minecraft yaw: 0 = south, 90 = west); 0 without a heading sensor. */
+    /** Degrees (Minecraft yaw: 0 = south, 90 = west); 0 without a heading sensor. */
     public float getBallHeading(float partialTicks) {
         return ballHeading.getValue(partialTicks);
     }
 
-    /** Navball: the ship's pitch, degrees, nose up positive; 0 without a Gimbal Sensor. */
+    /** Degrees, nose up positive; 0 without a Gimbal Sensor. */
     public float getBallPitch(float partialTicks) {
         return ballPitch.getValue(partialTicks);
     }
 
-    /** Navball: the ship's roll, degrees; 0 without a Gimbal Sensor. */
+    /** Degrees; 0 without a Gimbal Sensor. */
     public float getBallRoll(float partialTicks) {
         return ballRoll.getValue(partialTicks);
     }
 
-    /** Altimeter: 0 (bedrock) to 1 (build height); 0 without an Altitude Sensor. */
+    /** 0 (bedrock) to 1 (build height); 0 without an Altitude Sensor. */
     public float getAltimeter(float partialTicks) {
         return altimeter.getValue(partialTicks);
     }
 
-    /** Speedometer: 0 (stopped) to 1 (full scale); 0 without Velocity Sensors. */
+    /** 0 to 1 (full scale); 0 without Velocity Sensors. */
     public float getSpeedometer(float partialTicks) {
         return speedometer.getValue(partialTicks);
     }
@@ -182,7 +171,6 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
         }
     }
 
-    /** Samples the pose of the ship the console stands on. */
     private void readOwnShipState() {
         hasPose = false;
         SubLevel subLevel = Sable.HELPER.getContaining(level, worldPosition);
@@ -237,7 +225,7 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
     @Override
     protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(compound, registries, clientPacket);
-        // Readings are live, and the link lapses on its own: only clients need them.
+        // Only clients need these: readings are live, and the link lapses on its own.
         if (!clientPacket)
             return;
         compound.putBoolean("Linked", linked);
@@ -346,11 +334,11 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
                 .forGoggles(tooltip);
     }
 
-    /** A ship-frame velocity component, or a dash if no sensor covers that axis. */
+    /** A dash if no sensor covers that axis. */
     private MutableComponent velocityComponent(int axis, double value) {
         if (velocityAxisCounts[axis] == 0)
             return Component.literal("--").withStyle(ChatFormatting.DARK_GRAY);
         return CDCLang.numberWithUnit(value, "createdangerclose.unit.velocity").withStyle(ChatFormatting.WHITE);
     }
 
-    /** Sensor count for an axis: red if missing, yellow if redundant. */}
+}

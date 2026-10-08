@@ -5,11 +5,7 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
-/**
- * The mod's settings: {@link CServer} (gameplay, per world, synced to players) and
- * {@link CClient} (each player's looks), built with Catnip as Create does, so they
- * show in Create's style of config screen.
- */
+/** {@link CServer} (gameplay, per world, synced) and {@link CClient} (looks), built with Catnip as Create does. */
 public final class CDCConfig {
 
     private static CServer server;

@@ -17,21 +17,14 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
-/**
- * Carries a rangefinder tube as a yaw-only contraption. Sits on the battle
- * network: its rotation is the budget for how fast the tube can be trained,
- * not a direct drive.
- */
+/** Carries a rangefinder tube in yaw. Its network rotation is a speed budget, not a direct drive. */
 public class RangefinderBearingBlock extends BearingBlock implements IBE<RangefinderBearingBlockEntity> {
 
     public RangefinderBearingBlock(Properties properties) {
         super(properties);
     }
 
-    /**
-     * Yaw only, so it is placed vertically: plate up when set on a deck, plate
-     * down when set under a block (hanging from a hull). Sneaking flips it.
-     */
+    /** Plate up on a deck, down under a hull. Sneaking flips it. */
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         Direction facing = context.getClickedFace() == Direction.DOWN ? Direction.DOWN : Direction.UP;
@@ -40,7 +33,7 @@ public class RangefinderBearingBlock extends BearingBlock implements IBE<Rangefi
         return defaultBlockState().setValue(FACING, facing);
     }
 
-    /** The wrench flips it between up and down, never sideways. */
+    /** Up or down, never sideways. */
     @Override
     public BlockState getRotatedBlockState(BlockState originalState, Direction targetedFace) {
         return originalState.setValue(FACING, originalState.getValue(FACING).getOpposite());

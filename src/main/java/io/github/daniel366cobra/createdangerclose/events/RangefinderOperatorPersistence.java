@@ -19,19 +19,14 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Keeps a rangefinder operator seated across logout/login and world reload.
- *
- * <p>Create deliberately never saves a contraption as a player's root vehicle
- * ({@code AbstractContraptionEntity.hasExactlyOnePlayerPassenger()} is false,
- * so logging out cannot pull the contraption out of the world), which means
- * anyone seated on a contraption is dismounted on logout. We remember the
- * operator's tube and seat them again once it is loaded.
+ * Keeps a rangefinder operator seated across logout and reload: Create never saves a contraption as a
+ * player's root vehicle, so it dismounts them; we reseat them once the tube loads.
  */
 @EventBusSubscriber(modid = CreateDangerClose.MOD_ID)
 public final class RangefinderOperatorPersistence {
 
     private static final String SEAT_TAG = CreateDangerClose.MOD_ID + ":rangefinder_seat";
-    // The tube may load after the player (e.g. aboard a ship), so keep trying for a while.
+    // The tube may load after the player (aboard a ship).
     private static final int RESEAT_ATTEMPT_TICKS = 200;
 
     private static final class PendingReseat {
@@ -47,7 +42,7 @@ public final class RangefinderOperatorPersistence {
 
     private RangefinderOperatorPersistence() {}
 
-    /** Fires before the player is saved and dismounted. */
+    /** Before the player is saved and dismounted. */
     @SubscribeEvent
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         Player player = event.getEntity();

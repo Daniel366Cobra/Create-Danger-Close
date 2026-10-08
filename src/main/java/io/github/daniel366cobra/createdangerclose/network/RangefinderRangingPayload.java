@@ -9,10 +9,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-/**
- * Client to server: the rangefinder operator pressed (true) or released
- * (false) the ranging button. The server does the measuring.
- */
+/** Client to server: ranging button pressed or released. */
 public record RangefinderRangingPayload(boolean active) implements CustomPacketPayload {
 
     public static final Type<RangefinderRangingPayload> TYPE =

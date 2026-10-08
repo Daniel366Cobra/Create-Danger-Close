@@ -16,7 +16,7 @@
     "equipment": {
       "working_order": "In working order",
       "lubrication": "Lubrication: %s%%",
-      "power_balance": "Output requesting %s su, input providing %s su"
+      "power_balance": "Drawing %s su, providing up to %s su"
     },
 
     "network_interface": {
@@ -32,7 +32,7 @@
       "rangefinder": "Range: %s",
       "map_target": "Map target: %s",
       "map_no_target": "Map table: no target",
-      "computer": "Fire control computer (driving)",
+      "computer": "Fire control computer",
       "nav_console": "Navigation console",
       "fire_console": "Fire mission console",
       "fixed_gun": "Fixed cannon mount: loaded",
@@ -40,9 +40,9 @@
     },
     "autocannon_control_console": {
       "title": "Autocannon Control Console",
-      "mode.auto": "Weapons free: autocannons fire by themselves while on a target being ranged",
+      "mode.auto": "Weapons free: autocannons fire at existing targets",
       "mode.manual": "Manual: autocannons fire while the trigger is held",
-      "fire_mode.auto": "Fire mode: Auto (weapons free)",
+      "fire_mode.auto": "Fire mode: Auto",
       "fire_mode.manual": "Fire mode: Manual",
       "no_autocannons": "No autocannons on this network",
       "danger_close": "DANGER CLOSE: release and press again within %ss to confirm"
@@ -52,7 +52,7 @@
       "title": "Fire Mission Console",
       "not_connected": "Not connected. Needs a powered Battle Network Interface facing it.",
       "no_computer": "No Ballistic Computer on this battle network",
-      "computer_unloaded": "The Ballistic Computer is too far away to show",
+      "computer_unloaded": "The Ballistic Computer is too far away",
       "mode": {
         "direct": "Trajectory: Direct fire",
         "plunging": "Trajectory: Plunging fire"
@@ -72,7 +72,7 @@
       "ship_velocity": "Ship Velocity",
       "ship_altitude": "Ship Altitude",
       "no_gimbal": "Pitch and roll: no Gimbal Sensor on the network",
-      "no_heading": "Heading: no heading sensor on the network",
+      "no_heading": "Heading: no Nav Table with a Magnet on the network",
       "no_velocity": "Velocity: no Velocity Sensor on the network",
       "no_altitude": "Altitude: no Altitude Sensor on the network"
     },
@@ -88,7 +88,7 @@
         "fuze_computer": "fuze timers are not set"
       },
       "target": "Target",
-      "missing_orientation": "Missing: Gimbal or Heading",
+      "missing_orientation": "Missing: Gimbal or Nav Table with a Magnet",
       "missing_velocity": "Missing: Velocity (needs sensors on X, Y and Z)",
       "missing_altitude": "Missing: Altitude (for map and navigation targets well above or below)",
       "missing_target": "Missing: Target",
@@ -116,7 +116,7 @@
         "too_close": "Too close for plunging fire",
         "no_altitude": "Own altitude unknown: needs an Altitude Sensor",
         "redundant_drives": "Too many drives aim this gun",
-        "round_expires": "Out of reach: the round expires before it gets there"
+        "round_expires": "Out of reach: the round expires before impact"
       }
     },
       "cannon_servo": {
@@ -156,14 +156,14 @@
       },
       "map_table": {
         "title": "Map Table",
-        "occupied": "There is already a map on this part of the table.",
-        "does_not_fit": "This map does not fit the others: it needs the same zoom and dimension, laid out like the land (north up).",
+        "occupied": "A map is already present on this part of the table.",
+        "does_not_fit": "This map does not fit the others (needs same zoom and dimension, laid north up).",
         "connected": "Connected to the battle network",
         "not_connected": "Not connected to a battle network",
         "no_target": "No target marked",
         "target": "Target:",
         "hint": {
-          "target": "Right-click: mark target, Shift: clear",
+          "target": "Right-click: mark target, Shift + Right-Click: clear",
           "view": "Scroll: zoom, Drag: move"
         }
       },
@@ -194,7 +194,7 @@
         "lens_obstructed": "Nothing on the tube may stand in front of a Rangefinder Lens (found a block %s ahead).",
         "eyepiece_count":"A rangefinder needs exactly one Rangefinder Eyepiece (found %s).",
         "eyepiece_facing": "The Rangefinder Eyepiece must face the same way as the lenses.",
-        "eyepiece_offcenter": "The Rangefinder Eyepiece must be centred on the bearing axis, midway between the lenses.",
+        "eyepiece_offcenter": "The Rangefinder Eyepiece must be centered on the bearing axis, midway between the lenses.",
         "operator": "Operator: %s",
         "no_operator": "No operator",
         "illumination": "Reticle lamp: %s/15",
@@ -243,12 +243,12 @@
       "differentiator.tooltip": {
         "summary": "A module for the _Ballistic Computer_. Works out how fast the target is moving.",
         "condition1": "When part of a computer's bank:",
-        "behaviour1": "The guns _lead_ a moving target, and servos _track smoothly_ instead of lagging behind."
+        "behaviour1": "Cannon servos _lead_ a moving target instead of lagging behind."
       },
       "integrator.tooltip": {
         "summary": "A module for the _Ballistic Computer_. Keeps the solution running between readings.",
         "condition1": "When part of a computer's bank:",
-        "behaviour1": "A rangefinder solution is _held for 10 seconds_ after ranging stops, and the ship's own speed is _compensated_ (needs Velocity Sensors). With a _Differentiator_, the held target keeps moving."
+        "behaviour1": "_Holds_ Rangefinder solutions for 10 seconds, _compensates_ for ship speed (needs Velocity Sensors). With a _Differentiator_, the held target keeps moving."
       },
       "correlator.tooltip": {
         "summary": "A module for the _Ballistic Computer_. Combines several rangefinders.",
@@ -258,65 +258,63 @@
       "fire_mission_console.tooltip": {
         "summary": "The gunnery officer's station: shows the _fire mission_ and gives the _orders_.",
         "condition1": "When a powered Battle Network Interface faces it:",
-        "behaviour1": "Shows the _target_, the _trajectory_ and each gun's _firing solution_ through Goggles.",
-        "condition2": "When scrolling over the knob on the left:",
-        "behaviour2": "Sets a _fuze correction_ from -40 to +40 ticks (2 seconds), added to timed fuzes: early for an _airburst_ short of the target, late so a base-fuzed _armour-piercing_ shell bursts _inside_ after piercing. On _delayed impact_ and _delayed inertia_ fuzes it sets the delay after impact instead. Scrolling turns it 5 ticks a notch, or 1 with _Shift_ held; _right-click_ the knob to zero it.",
-        "condition3": "When the lever in the middle is right-clicked:",
+        "behaviour1": "Shows the guns' _firing solutions_ and trajectory parameters through Goggles.",
+        "condition2": "When the left knob is scrolled over:",
+        "behaviour2": "Sets a _timed fuze correction_ from -40 to +40 ticks. On _delayed impact_ and _delayed inertia_ fuzes sets the delay after impact. Scroll to turn with a 5-tick step, _Shift_-scroll for 1-tick. _Right-click_ to zero.",
+        "condition3": "When the middle lever is right-clicked:",
         "behaviour3": "Switches between _direct_ and _plunging_ fire.",
-        "condition4": "When the button on the right is right-clicked:",
+        "condition4": "When the right button is right-clicked:",
         "behaviour4": "_Fires_ every gun that has a solution and is _on target_. The others hold fire."
       },
       "autocannon_control_console.tooltip": {
         "summary": "The anti-aircraft gunner's station: gives the _autocannons_ their orders.",
         "condition1": "When a powered Battle Network Interface faces it:",
-        "behaviour1": "Shows the _target_, the _fire mode_ and each autocannon's _firing solution_ through Goggles. Autocannons always fire _direct_.",
-        "condition2": "When scrolling over the knob on the left:",
-        "behaviour2": "Sets a _fuze correction_ from -20 to +20 ticks (1 second), added to the rounds' _timed fuzes_, 1 tick a notch. _Right-click_ the knob to zero it.",
-        "condition3": "When the switch in the middle is right-clicked:",
-        "behaviour3": "Switches between _manual_ and _AUTO_ (weapons free), where autocannons fire by themselves while _on target_ and the target is being _ranged_ or marked on a _Map Table_.",
-        "condition4": "While the trigger on the right is held with right-click:",
-        "behaviour4": "_Fires_ every autocannon that is _on target_. _Danger close_ is never fired automatically: release the trigger and pull it again to confirm."
+        "behaviour1": "Shows the autocannons' _firing solutions_ and _fire mode_ through Goggles. Autocannons always fire _direct_.",
+        "condition2": "When the left knob is scrolled over:",
+        "behaviour2": "Sets a _fuze correction_ from -20 to +20 ticks (1 second), added to the rounds' _timed fuzes_, 1 tick a notch. _Right-click_ to zero.",
+        "condition3": "When the middle switch is right-clicked:",
+        "behaviour3": "Switches between _manual_ and _automatic_ (weapons free), where autocannons fire by themselves while _on a target_.",
+        "condition4": "While the right trigger is held with right-click:",
+        "behaviour4": "_Fires_ every autocannon that has a solution and is _on target_. The others hold fire."
       },
       "cannon_servo_input.tooltip": {
         "summary": "Lays a _gun_ on the Ballistic Computer's _firing solution_. Its input half sits on the _battle network_; its output half drives the gun's _own network_.",
-        "condition1": "When the output half's network reaches one Cannon Mount or Swivel Bearing:",
-        "behaviour1": "_Turns_ it onto the solution and keeps pace with a moving target. One servo per axis: one for _traverse_, one for _elevation_.",
-        "condition2": "When the battle network cannot spare enough power:",
-        "behaviour2": "What the gun side draws is _charged_ to the battle network. Short of power the gun _slows_; starved, its network is _overstressed_ until power returns.",
+        "condition1": "When the output half is connected to a Cannon Mount or Swivel Bearing:",
+        "behaviour1": "_Trains_ the cannon onto the solution. One servo per axis: one for _traverse_, one for _elevation_.",
+        "condition2": "When the battle network is underpowered:",
+        "behaviour2": "The gun _slows_ down; starved, the output network is _overstressed_ until power returns.",
         "condition3": "When the output half is right-clicked:",
-        "behaviour3": "Opens the _arc limits_ dial. The gun never turns past them, and _holds fire_ on targets outside.",
-        "condition4": "Upkeep:",
-        "behaviour4": "Its gears _break_ under fire: repair with a _Cogwheel_. They need _lubrication_: Honeycomb, or oil piped in."
+        "behaviour3": "Opens the _arc limits_ dial. The gun never turns past them, and _holds fire_ on targets outside."
       },
       "kinetic_network_coupler.tooltip": {
-        "summary": "Runs a _separate kinetic network_ off another one's rotation, without joining them: two battle networks or machines can share _one engine_.",
-        "condition1": "When the input half turns:",
-        "behaviour1": "The output half turns its own network at the _same speed_. What that network draws is _charged_ to the input side as stress.",
-        "condition2": "When the input side cannot spare enough:",
-        "behaviour2": "_Gears the output network down_ to what it can afford, to no slower than its _floor speed_ (32 RPM unless set). Short of even that, the output network is _overstressed_ while the input side runs on; it _restarts by itself_ once there is power to spare.",
+        "summary": "Runs a _separate kinetic network_ off the input one's rotation, without joining them.",
+        "condition1": "When the input half is powered:",
+        "behaviour1": "The output half powers its own network at the _same RPM_. Output draw is _charged_ to the input side as stress.",
+        "condition2": "When the input network is underpowered:",
+        "behaviour2": "_Gears the output down_ to what it can afford, no slower than set _floor speed_. Short of even that, the output network is _overstressed_ and decoupled, and _restarts_ once input power returns.",
         "condition3": "When several couplers share an input network:",
-        "behaviour3": "Its spare power is _split equally_ among them.",
+        "behaviour3": "Input power pool is _split equally_ among them.",
         "condition4": "When the value box on the input half's side is used:",
-        "behaviour4": "Sets the _floor speed_, from 1 to 256 RPM. Fire control equipment needs _32 RPM_ to work."
+        "behaviour4": "Sets the _floor speed_ for decoupling the output side."
       },
       "navigation_console.tooltip": {
         "summary": "Shows the ship's own _attitude_, _speed_ and _altitude_ through Goggles.",
         "condition1": "When a powered Battle Network Interface faces it:",
-        "behaviour1": "_Shows_ each reading the network has a _sensor_ for: Gimbal, heading, Velocity and Altitude."
+        "behaviour1": "_Shows_ each reading the network has a _sensor_ for."
       },
       "fuze_computer.tooltip": {
         "summary": "A module for the _Ballistic Computer_. Works out fuze times.",
         "condition1": "When part of a computer's bank:",
-        "behaviour1": "_Timed fuzes_ in loaded shells are _set_ to the time of flight."
+        "behaviour1": "_Timed_ fuzes in loaded shells are _set_ to the time of flight, corrected for airburst or delay. _Delayed Impact/Inertia_ fuzes are set to post-impact delay."
       },
       "rangefinder_bearing.tooltip": {
-        "summary": "Carries a _rangefinder_ and trains it towards a bearing.",
+        "summary": "Carries a _rangefinder_ and trains it onto targets.",
         "condition1": "When facing up or down and right-clicked:",
         "behaviour1": "_Assembles_ the attached structure. Its turning speed scales with the _network RPM_.",
         "condition2": "When powered by Redstone:",
         "behaviour2": "_Illuminates_ the eyepiece reticle. A stronger signal makes it _brighter_.",
         "condition3": "On a battle network with a Ballistic Computer:",
-        "behaviour3": "A _Gimbal Sensor_ on the network _stabilises_ the sight against the ship's _pitch_ and _roll_; a _Navigation Table_ holding a _Redstone Magnet_, against its _yaw_. A faster network lets the tube keep up better."
+        "behaviour3": "A _Gimbal Sensor_ stabilizes the sight against the ship's _pitch_ and _roll_; a _Navigation Table_ with a _Redstone Magnet_, against its _yaw_."
       },
       "rangefinder_lens.cracked": "Cracked Rangefinder Lens",
       "rangefinder_lens.tooltip": {
@@ -329,20 +327,18 @@
         "behaviour3": "Range readings become _far less accurate_. Right-click the lens with a _Glass Pane_ to repair it."
       },
       "map_table.tooltip": {
-        "summary": "A plotting table for _maps_. Joins with neighbouring tables into a square of up to _3×3_.",
+        "summary": "A plotting table for _maps_. Joins with neighboring tables into a square of up to _3×3_.",
         "condition1": "When right-clicked with a Filled Map:",
         "behaviour1": "_Lays_ the map on that part of the table. Maps must share the same zoom and fit together _like the land_, north up.",
         "condition2": "When right-clicked with an empty hand:",
-        "behaviour2": "_Opens_ the table, showing all its maps stitched together. _Right-click_ the maps to mark a _target_.",
+        "behaviour2": "_Opens_ the table, showing all its maps stitched together.",
         "condition3": "When a Battle Network Interface faces it:",
         "behaviour3": "_Shows_ the ship's position and _sends_ the marked target to the _Ballistic Computer_."
       },
       "rangefinder_eyepiece.tooltip": {
-        "summary": "The operator's station on a _rangefinder_ tube. _Bolts_ onto the back of the tube, _centred_ between the lenses.",
-        "condition1": "When placed on the side of a block:",
-        "behaviour1": "_Mounts_ on that block, looking into it. It moves with the block, and _pops off_ if the block is removed.",
-        "condition2": "When right-clicked on an assembled tube:",
-        "behaviour2": "_Seats_ the player. The tube _follows_ where they look."
+        "summary": "The operator's station on a _rangefinder_ tube. _Bolts_ onto the back of the tube, _centered_ between the lenses.",
+        "condition1": "When right-clicked on an assembled tube:",
+        "behaviour1": "_Seats_ the player and starts aiming through the _sight_. The tube turns to _follow_ the look."
       }
     },
 

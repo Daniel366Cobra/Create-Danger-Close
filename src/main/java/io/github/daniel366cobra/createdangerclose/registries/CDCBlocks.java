@@ -76,14 +76,13 @@ public class CDCBlocks {
 
     public static final BlockEntry<BallisticComputerBlock> BALLISTIC_COMPUTER = REGISTRATE.block("ballistic_computer", BallisticComputerBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            // Open front (gauge windows, cam bay): must not block light into them.
+            // Windowed front: must not block light.
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
-            // Like the modules: cabinet casing on the plain faces (joining the bank).
             .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
             .blockstate((c, p) -> p.horizontalBlock(c.get(),
                     p.models().getExistingFile(p.modLoc("block/computer/ballistic_computer/block"))))
             .transform(axeOrPickaxe())
-            // No shaft and no stress impact: a network interface facing it drives it.
+            // Driven by a facing network interface: no shaft, no stress impact.
             .item()
             .transform(customItemModel("computer/ballistic_computer/item"))
             .recipe((c, p) -> ShapedRecipeBuilder.shaped(RecipeCategory.MISC, c.get(), 1)
@@ -110,7 +109,7 @@ public class CDCBlocks {
     public static final BlockEntry<NavigationConsoleBlock> NAVIGATION_CONSOLE = REGISTRATE
             .block("navigation_console", NavigationConsoleBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            // A desk, not a full block: neighbours and light must show around it.
+            // A desk, not a full block.
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .transform(axeOrPickaxe())
             .blockstate((c, p) -> p.horizontalBlock(c.get(),
@@ -129,7 +128,7 @@ public class CDCBlocks {
     public static final BlockEntry<FireMissionConsoleBlock> FIRE_MISSION_CONSOLE = REGISTRATE
             .block("fire_mission_console", FireMissionConsoleBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            // A desk, not a full block: neighbours and light must show around it.
+            // A desk, not a full block.
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .transform(axeOrPickaxe())
             .blockstate((c, p) -> p.horizontalBlock(c.get(),
@@ -149,7 +148,7 @@ public class CDCBlocks {
     public static final BlockEntry<AutocannonControlConsoleBlock> AUTOCANNON_CONTROL_CONSOLE = REGISTRATE
             .block("autocannon_control_console", AutocannonControlConsoleBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            // A desk, not a full block: neighbours and light must show around it.
+            // A desk, not a full block.
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .transform(axeOrPickaxe())
             .blockstate((c, p) -> p.horizontalBlock(c.get(),
@@ -167,19 +166,14 @@ public class CDCBlocks {
             .lang("Autocannon Control Console")
             .register();
 
-    /**
-     * A computer module: a casing-sided block whose face turns in yaw. Crafted
-     * from a brass casing, a precision mechanism and one part of its own.
-     */
-    /** A module, with its own models in {@code models/block/computer/<id>/}: block, item, moving parts. */
+    /** Models in {@code models/block/computer/<id>/}: block, item, moving parts. */
     private static BlockEntry<ComputerModuleBlock> computerModule(ComputerModule module, String name,
                                                                   ItemLike signaturePart) {
         return REGISTRATE.block(module.id(), p -> new ComputerModuleBlock(p, module))
                 .initialProperties(SharedProperties::softMetal)
-                // The front has windows onto the parts inside: it must not block light into them.
+                // Windowed front: must not block light.
                 .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
                 .transform(axeOrPickaxe())
-                // Plain faces use the computer casing, which joins across the bank.
                 .onRegister(connectedTextures(ComputerCasingCTBehaviour::new))
                 .blockstate((c, p) -> p.horizontalBlock(c.get(),
                         p.models().getExistingFile(p.modLoc("block/computer/" + c.getName() + "/block"))))
@@ -198,11 +192,11 @@ public class CDCBlocks {
 
     public static final BlockEntry<CannonServoInputBlock> CANNON_SERVO_INPUT =REGISTRATE.block("cannon_servo_input", CannonServoInputBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            // Open model (inspection windows): must not hide neighbours or block light.
+            // Inspection windows: must not hide neighbors or block light.
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .blockstate(BlockStateGen.directionalBlockProvider(true))
             .transform(axeOrPickaxe())
-            // No fixed stress impact: it charges the battle network for what its cannon side draws.
+            // It charges the battle network for what its cannon side draws.
             .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
                 if (!(state.getBlock() instanceof CannonServoInputBlock))
                     return BlockMovementChecks.CheckResult.PASS;
@@ -234,7 +228,7 @@ public class CDCBlocks {
 
     public static final BlockEntry<CannonServoOutputBlock> CANNON_SERVO_OUTPUT = REGISTRATE.block("cannon_servo_output", CannonServoOutputBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            // Open model (inspection windows): must not hide neighbours or block light.
+            // Inspection windows: must not hide neighbors or block light.
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .blockstate(BlockStateGen.directionalBlockProvider(true))
             .transform(axeOrPickaxe())
@@ -256,10 +250,10 @@ public class CDCBlocks {
 
     public static final BlockEntry<CouplerInputBlock> KINETIC_NETWORK_COUPLER = REGISTRATE.block("kinetic_network_coupler", CouplerInputBlock::new)
             .initialProperties(SharedProperties::softMetal)
-            // Open model (inspection windows), as the servo's.
+            // Inspection windows.
             .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
             .transform(axeOrPickaxe())
-            // No fixed stress impact: it charges the engine side what its battle network draws.
+            // It charges the engine side for what its battle network draws.
             .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
                 if (!(state.getBlock() instanceof CouplerInputBlock))
                     return BlockMovementChecks.CheckResult.PASS;
@@ -310,7 +304,7 @@ public class CDCBlocks {
 
     public static final BlockEntry<RangefinderBearingBlock> RANGEFINDER_BEARING = REGISTRATE.block("rangefinder_bearing", RangefinderBearingBlock::new)
             .initialProperties(SharedProperties::stone)
-            // Open top: the turning plate is Create's bearing top, drawn by the renderer.
+            // Open top: the plate is Create's bearing top, drawn by the renderer.
             .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN).noOcclusion())
             .transform(axeOrPickaxe())
             .blockstate((c, p) -> p.directionalBlock(c.get(),
@@ -336,14 +330,14 @@ public class CDCBlocks {
             .initialProperties(SharedProperties::softMetal)
             .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
             .transform(axeOrPickaxe())
-            // A cracked lens is the same model with the lens glass texture ("5") swapped.
+            // Cracked: the same model with the lens glass texture ("5") swapped.
             .blockstate((c, p) -> p.horizontalBlock(c.get(), state -> state.getValue(RangefinderLensBlock.CRACKED)
                     ? p.models().withExistingParent("block/rangefinder_lens/block_cracked",
                                     p.modLoc("block/rangefinder_lens/block"))
                             .texture("5", p.modLoc("block/rangefinder_lens/lens_cracked"))
                     : p.models().getExistingFile(p.modLoc("block/rangefinder_lens/block"))))
             .onRegister(interactionBehaviour(new RangefinderLensInteraction()))
-            // A cracked lens drops cracked: the state rides on the stack and is put back when placed.
+            // The cracked state rides on the stack.
             .loot((lt, block) -> lt.add(block, lt.createSingleItemTable(block)
                     .apply(CopyBlockState.copyState(block).copy(RangefinderLensBlock.CRACKED)
                             .when(LootItemBlockStatePropertyCondition.hasBlockStateProperties(block)
@@ -371,9 +365,7 @@ public class CDCBlocks {
             .initialProperties(SharedProperties::softMetal)
             .properties(p -> p.mapColor(MapColor.TERRACOTTA_BROWN))
             .transform(axeOrPickaxe())
-            // Wall-mounted: it moves with the block its plate is bolted to, and as a
-            // brittle block it is removed first and placed last, so it does not
-            // pop off while a contraption assembles or disassembles.
+            // Wall-mounted: moves with its support, and as a brittle block does not pop off during (dis)assembly.
             .onRegister(b -> BlockMovementChecks.registerAttachedCheck((state, world, pos, direction) -> {
                 if (!(state.getBlock() instanceof RangefinderEyepieceBlock))
                     return BlockMovementChecks.CheckResult.PASS;
@@ -424,6 +416,5 @@ public class CDCBlocks {
             .lang("Map Table")
             .register();
 
-    /** Loads this class, which registers its entries. */
     public static void register() {}
 }

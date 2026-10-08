@@ -9,25 +9,20 @@ import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 /** Connected texture sheets (Create's CT system). */
 public class CDCSpriteShifts {
 
-    // Map table: frame trim only along the outer edge of the whole table.
+    // Map table: trim only along the whole table's outer edge.
     public static final CTSpriteShiftEntry
             MAP_TABLE_TOP = ct(AllCTTypes.RECTANGLE, "map_table/top"),
             MAP_TABLE_SIDE = ct(AllCTTypes.HORIZONTAL, "map_table/side"),
             MAP_TABLE_BOTTOM = ct(AllCTTypes.RECTANGLE, "map_table/bottom");
 
-    // Fire control computer casing: plain faces of the Ballistic Computer and
-    // its modules join in any shape, so it needs the omnidirectional sheet.
+    // Computer casing joins in any shape: omnidirectional.
     public static final CTSpriteShiftEntry
             COMPUTER_CASING = ct(AllCTTypes.OMNIDIRECTIONAL, "computer/computer");
 
-    /**
-     * Loads this class so the entries exist before the block atlas is stitched.
-     * Entries created later never pick up their sprites (until a resource
-     * reload), and the blocks render unconnected.
-     */
+    /** Before the atlas is stitched: later entries never get their sprites, and render unconnected. */
     public static void init() {}
 
-    /** Block texture {@code block/<name>} with its sheet {@code block/<name>_connected}. */
+    /** {@code block/<name>} with {@code block/<name>_connected}. */
     private static CTSpriteShiftEntry ct(CTType type, String name) {
         return CTSpriteShifter.getCT(type,
                 CreateDangerClose.asResource("block/" + name),

@@ -44,21 +44,12 @@ import java.util.List;
 
 import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.PITCH;
 
-/**
- * Reading a CBC cannon (on a cannon mount or a fixed cannon mount): what it is
- * loaded with, where its barrel points and where its shell leaves, and setting
- * its fuze.
- */
+/** Reads CBC cannons (mounted or fixed): load, barrel, launch point; sets fuzes. */
 public final class CannonReading {
 
     private CannonReading() {}
 
-    /**
-     * Which way CBC's raw pitch angle turns this barrel: +1 if raising the pitch
-     * raises the barrel, -1 if it lowers it. The pitch is a rotation about a fixed
-     * world axis, so it depends on the cannon's initial orientation; this is the
-     * rule CBC itself uses ({@code CannonMountBlockEntity.tick}).
-     */
+    /** +1 if raising CBC's raw pitch raises this barrel, -1 if it lowers it (CBC's own rule, {@code CannonMountBlockEntity.tick}). */
     static float elevationSign(PitchOrientedContraptionEntity entity) {
         Direction facing = entity.getInitialOrientation();
         boolean pitchIsUp = (facing.getAxisDirection() == Direction.AxisDirection.POSITIVE)
@@ -66,11 +57,7 @@ public final class CannonReading {
         return pitchIsUp ? 1 : -1;
     }
 
-    /**
-     * Where the shell leaves the cannon. CBC spawns it at the centre of the
-     * block just past the barrel's last block, on the line from the cannon's
-     * rotation centre (the contraption origin) along the barrel.
-     */
+    /** CBC spawns the shell at the center of the block past the barrel's end, on the line from the rotation center. */
     static void readMuzzle(SlavedMount sm, PitchOrientedContraptionEntity entity) {
         sm.pivot = entity.toGlobalVector(Vec3.atCenterOf(BlockPos.ZERO), 0);
         if (!(entity.getContraption() instanceof AbstractMountedCannonContraption cannon)) {
@@ -85,7 +72,6 @@ public final class CannonReading {
         sm.muzzleDistance = farthest + 1;
     }
 
-    /** Reads the loaded shell, fuze and charge into this mount's record. */
     static void readShell(SlavedMount sm, PitchOrientedContraptionEntity entity, HolderLookup.Provider registries) {
         sm.hasShell = false;
         sm.shellType = null;
@@ -139,10 +125,7 @@ public final class CannonReading {
     }
 
     static BallisticPropertiesComponent resolveBallistics(EntityType<?> projectileType) {
-        // Common shells: HE, fluid, smoke.
-        // Sentinel: gravity() != 0 because every shipped shell has a negative
-        // gravity value in its JSON. The default is 0.0, which means "no entry
-        // for this entity type in this handler."
+        // HE, fluid, smoke. gravity() == 0 means no entry for this type (every shipped shell's is negative).
         BallisticPropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
                 .getPropertiesOf(projectileType).ballistics();
         if (common.gravity() != 0) return common;
@@ -171,14 +154,12 @@ public final class CannonReading {
                 .getPropertiesOf(projectileType).ballistics();
         if (stone.gravity() != 0) return stone;
 
-        // Nothing matched. Return the common default so callers get a consistent
-        // zeroed value and the ballistic solver can fall back.
+        // Nothing matched: the zeroed default lets the solver fall back.
         return common;
     }
 
     static BigCannonProjectilePropertiesComponent resolveBigCannonProperties(EntityType<?> projectileType) {
-        // Sentinel: minimumChargePower() != 0 because every shipped shell has a
-        // minimum charge of at least 1.0 in its JSON. The default is 0.
+        // minimumChargePower() == 0 means no entry (every shipped shell's is at least 1).
         BigCannonProjectilePropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
                 .getPropertiesOf(projectileType).bigCannonProperties();
         if (common.minimumChargePower() != 0) return common;
@@ -214,16 +195,12 @@ public final class CannonReading {
         return common;
     }
 
-    /** Delayed impact and delayed inertia fuzes: their timer counts the delay after impact. */
+    /** Their timer counts the delay after impact. */
     public static boolean isDelayedImpactFuze(ItemStack fuze) {
         return fuze.getItem() instanceof DelayedImpactFuzeItem || fuze.getItem() instanceof DelayedInertiaFuzeItem;
     }
 
-    /**
-     * Sets the loaded shell's fuze timer to this many ticks: a timed fuze's time,
-     * or a delayed impact or inertia fuze's delay. Returns true if such a fuze was
-     * found and updated.
-     */
+    /** A timed fuze's time, or a delayed fuze's delay. Returns true if such a fuze was updated. */
     static boolean setLoadedFuzeTime(@Nullable PitchOrientedContraptionEntity entity, int ticks, HolderLookup.Provider registries) {
         if (entity == null) return false;
         if (entity.getContraption() instanceof MountedAutocannonContraption autocannon)
@@ -238,7 +215,6 @@ public final class CannonReading {
             if (loadedInfo.state().isAir()) continue;
             if (!(loadedInfo.state().getBlock() instanceof ProjectileBlock<?>)) continue;
 
-            // Modify the loaded shell's NBT
             CompoundTag shellNbt = loadedInfo.nbt() != null ? loadedInfo.nbt().copy() : new CompoundTag();
             ItemStack fuzeStack = ItemStack.parseOptional(registries, shellNbt.getCompound("Fuze"));
             if (!(fuzeStack.getItem() instanceof TimedFuzeItem) && !isDelayedImpactFuze(fuzeStack)) return false;
@@ -246,13 +222,11 @@ public final class CannonReading {
             fuzeStack.set(CBCDataComponents.FUZE_TIMER, ticks);
             shellNbt.put("Fuze", fuzeStack.saveOptional(registries));
 
-            // Replace the loaded block in the behavior
             behavior.loadBlock(new StructureBlockInfo(
                     loadedInfo.pos(), loadedInfo.state(), shellNbt));
             behavior.blockEntity.setChanged();
 
-            // Update the contraption's blocks map entry for the CANNON BLOCK,
-            // using the cannon block's own position and state.
+            // Also update the contraption's block map entry for the cannon block.
             StructureBlockInfo cannonInfo = mounted.getBlocks().get(cannonLocalPos);
             if (cannonInfo == null) return true;  // behavior updated, but map not synced
 
@@ -266,11 +240,7 @@ public final class CannonReading {
         return false;
     }
 
-    /**
-     * Sets the fuze timer on every round an autocannon has to fire: those queued in its
-     * breech, and those in its ammo container, main and tracer (they all go up the same
-     * barrel at the same target). Returns true if any had a timed or delayed fuze.
-     */
+    /** Every round in the breech queue and ammo containers (main and tracer). True if any had a timed or delayed fuze. */
     private static boolean setAutocannonFuzeTime(PitchOrientedContraptionEntity entity,
                                                  MountedAutocannonContraption cannon, int ticks) {
         for (var entry : cannon.presentBlockEntities.entrySet()) {
@@ -304,9 +274,8 @@ public final class CannonReading {
     }
 
     /**
-     * Orders an autocannon's breech to set this fuze on each round it fires (see
-     * {@link FuzeOrderedBreech}): a timed fuze's time (0 or less: as loaded), a delayed
-     * fuze's delay (below 0: as loaded). To be renewed while the gun is laid.
+     * Orders the breech to set fuzes on each round it fires ({@link FuzeOrderedBreech}). Values below
+     * 0 (timed: 0 or less) leave fuzes as loaded. Renewed while the gun is laid.
      */
     public static void orderAutocannonFuzes(@Nullable PitchOrientedContraptionEntity entity,
                                             int timedTicks, int delayTicks, long gameTime) {
@@ -317,7 +286,6 @@ public final class CannonReading {
                 breech.createdangerclose$orderFuzes(timedTicks, delayTicks, gameTime);
     }
 
-    /** Sets a round going up the barrel as ordered (see {@link #orderAutocannonFuzes}). */
     public static void applyFuzeOrder(ItemStack ammo, int timedTicks, int delayTicks) {
         if (ammo == null || ammo.isEmpty())
             return;
@@ -328,16 +296,13 @@ public final class CannonReading {
             setRoundFuzeTime(ammo, delayTicks);
     }
 
-    /** The round itself: a cartridge holds it (the fuze is on the round), a bare round is one. */
+    /** A cartridge holds the round (the fuze is on the round). */
     private static ItemStack roundOf(ItemStack ammo) {
         return ammo.getItem() instanceof AutocannonCartridgeItem
                 ? AutocannonCartridgeItem.getProjectileStack(ammo) : ammo;
     }
 
-    /**
-     * Sets an autocannon round's (or cartridge's) timed or delayed fuze to this many ticks,
-     * in place. False if it has no such fuze, or already reads that.
-     */
+    /** In place. False if it has no such fuze, or already reads that. */
     private static boolean setRoundFuzeTime(ItemStack ammo, int ticks) {
         if (ammo.isEmpty())
             return false;
@@ -354,10 +319,7 @@ public final class CannonReading {
         return true;
     }
 
-    /**
-     * Reads a cannon's angles, barrel and launch point into this mount's record,
-     * and for a pitch axis what it is loaded with.
-     */
+    /** Angles, barrel and launch point, and the load for a pitch axis. */
     static void readCannon(SlavedMount sm, PitchOrientedContraptionEntity entity, HolderLookup.Provider registries) {
         sm.elevationSign = elevationSign(entity);
         sm.currentAngle = (sm.axis == PITCH) ? sm.elevationSign * entity.pitch : entity.yaw;
@@ -375,10 +337,8 @@ public final class CannonReading {
     }
 
     /**
-     * Reads an autocannon's next round and how it fires it. CBC gives the round a speed from
-     * the barrel's material: a base speed, and more for each barrel block up to a limit; and
-     * a lifetime, after which the round expires. The next round is the first in the breech's
-     * queue, or failing that the ammo container's.
+     * CBC's round speed comes from the barrel material (base plus per barrel block, capped) and expires
+     * after a lifetime. The next round is the breech queue's head, else the ammo container's.
      */
     static void readAutocannon(SlavedMount sm, PitchOrientedContraptionEntity entity) {
         sm.hasShell = false;
@@ -405,7 +365,6 @@ public final class CannonReading {
         if (breech == null)
             return;
 
-        // The barrel: its material, and its length past the breech.
         AutocannonMaterial material = null;
         int barrels = 0;
         for (BlockPos pos = breechPos.relative(along); ; pos = pos.relative(along)) {
@@ -425,7 +384,6 @@ public final class CannonReading {
                 + properties.speedIncreasePerBarrel() * Math.min(barrels, properties.maxSpeedIncreases());
         sm.maxFlightTicks = properties.projectileLifetime();
 
-        // The next round to fire.
         ItemStack round = breech.getInputBuffer().isEmpty() ? ItemStack.EMPTY : breech.getInputBuffer().peek();
         if (round.isEmpty() && !breech.getMagazine().isEmpty()
                 && AutocannonAmmoContainerItem.getTotalAmmoCount(breech.getMagazine()) > 0)
@@ -439,12 +397,11 @@ public final class CannonReading {
         if (ballistics.gravity() == 0)
             ballistics = CBCMunitionPropertiesHandlers.INERT_AUTOCANNON_PROJECTILE.getPropertiesOf(projectileType).ballistics();
         sm.hasShell = true;
-        // Named by what it fires (the cartridges themselves all look alike).
+        // The cartridges all look alike: name by what they fire.
         sm.shellType = BuiltInRegistries.ENTITY_TYPE.getKey(projectileType);
         sm.gravity = ballistics.gravity();
         sm.drag = ballistics.drag();
         sm.isQuadraticDrag = ballistics.isQuadraticDrag();
-        // The fuze is on the round, which a cartridge holds.
         ItemStack fuze = FuzedProjectileBlock.getFuzeFromItemStack(roundOf(round));
         sm.fuzeStack = fuze;
         sm.isTimedFuze = fuze.getItem() instanceof TimedFuzeItem;
@@ -454,23 +411,17 @@ public final class CannonReading {
                 : 0;
     }
 
-    /**
-     * Where the barrel points, in the frame the cannon stands in (its sub-level's,
-     * or the world's): a unit vector from its rotation centre along the barrel.
-     */
+    /** Unit vector from the rotation center along the barrel, in the cannon's own frame. */
     static Vec3 barrel(PitchOrientedContraptionEntity entity) {
         Direction along = entity.getInitialOrientation();
-        Vec3 centre = Vec3.atCenterOf(BlockPos.ZERO);
-        Vec3 pivot = entity.toGlobalVector(centre, 1);
-        return entity.toGlobalVector(centre.add(along.getStepX(), along.getStepY(), along.getStepZ()), 1)
+        Vec3 center = Vec3.atCenterOf(BlockPos.ZERO);
+        Vec3 pivot = entity.toGlobalVector(center, 1);
+        return entity.toGlobalVector(center.add(along.getStepX(), along.getStepY(), along.getStepZ()), 1)
                 .subtract(pivot).normalize();
     }
 
     /**
-     * The record of a cannon as the computer gets it.
-     *
-     * @param mountLimits whether the mount's elevation limits apply: not for a fixed
-     *                    mount, whose gun the bearings carrying it elevate
+     * @param mountLimits false for a fixed mount, which the bearings carrying it elevate
      */
     static ServoStatus.MountSnapshot snapshot(SlavedMount sm, @Nullable PitchOrientedContraptionEntity entity, boolean mountLimits) {
         float facingYaw = 0f;
@@ -493,10 +444,7 @@ public final class CannonReading {
                 sm.pivot, sm.muzzleDistance, sm.barrel, sm.autocannon, sm.maxFlightTicks);
     }
 
-    /**
-     * A gun on a fixed cannon mount, as the network interface facing the mount
-     * reads it: like a cannon mount's pitch servo would. Null if unassembled.
-     */
+    /** A fixed mount's gun, read like a pitch servo would. Null if unassembled. */
     @Nullable
     public static ServoStatus.MountSnapshot readFixedGun(FixedCannonMountBlockEntity mount, HolderLookup.Provider registries) {
         PitchOrientedContraptionEntity entity = mount.getContraption();
@@ -507,7 +455,6 @@ public final class CannonReading {
         return snapshot(sm, entity, false);
     }
 
-    /** Sets the fuze of the shell loaded in a fixed cannon mount's gun (see {@link #setLoadedFuzeTime}). */
     public static boolean setFixedGunFuze(FixedCannonMountBlockEntity mount, int ticks, HolderLookup.Provider registries) {
         return setLoadedFuzeTime(mount.getContraption(), ticks, registries);
     }

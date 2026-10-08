@@ -17,43 +17,33 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
-/**
- * The Fire Mission Console's controls and readouts. Positions are model pixels
- * with the face towards north, as in the model; the deck is the block's top (y = 16).
- */
+/** Model pixels, face toward north; the deck is y = 16. */
 public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMissionConsoleBlockEntity> {
 
     private static final float PX = 1 / 16f;
 
-    // Fuze knob: turns about the vertical axis through (12.5, 16, 7.5), up to
-    // this far either way; clockwise seen from above is a later burst.
+    // Fuze knob: vertical axis through (12.5, 16, 7.5); clockwise from above is later.
     private static final float KNOB_PIVOT_X = 12.5f, KNOB_PIVOT_Z = 7.5f;
     private static final float KNOB_MAX_DEG = 135;
-    // Trajectory lever: tips about the east-west axis through (8.5, 15.75, 7.5),
-    // a quarter turn from up (direct, as modelled) to down (plunging), towards the player.
+    // Trajectory lever: east-west axis through (8.5, 15.75, 7.5), a quarter turn toward the player for plunging.
     private static final float LEVER_PIVOT_Y = 15.75f, LEVER_PIVOT_Z = 7.5f;
     private static final float LEVER_DOWN_DEG = -90;
-    // Fire button: presses straight down this far.
     private static final float BUTTON_TRAVEL_PX = 0.75f;
-    // Autocannon trigger: tips about the east-west axis through (3.5, 16, 7.5), this far towards the player.
+    // Autocannon trigger: east-west axis through (3.5, 16, 7.5), toward the player.
     private static final float TRIGGER_PIVOT_Y = 16, TRIGGER_PIVOT_Z = 7.5f;
     private static final float TRIGGER_PULL_DEG = -22.5f;
 
-    // Readout windows in front of each control, 0.5 px deep: the text lies 0.25 px above their floor.
+    // Readout windows 0.5 px deep; text 0.25 px above their floor.
     private static final float READOUT_FRONT = 2, READOUT_BACK = 4, READOUT_HEIGHT = 15.75f, READOUT_FILL = 0.9f;
     private static final PanelText FUZE_READOUT = PanelText.top(11, 14, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
     private static final PanelText TRAJECTORY_READOUT = PanelText.top(7, 10, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
-    // The autocannon console's mode readout: four characters, centred.
+    // Four characters, centered.
     private static final PanelText AUTO_MODE_READOUT = PanelText.top(6, 10, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
     private static final PanelText READY_READOUT = PanelText.top(2, 5, READOUT_FRONT, READOUT_BACK, READOUT_HEIGHT, READOUT_FILL);
-    // Single digits keep "ready/total" to three characters.
+    // Keeps "ready/total" to three characters.
     private static final int MAX_GUNS_SHOWN = 9;
 
-    /**
-     * What a console carries: its three controls (the fire control a push button or a
-     * trigger lever), and the readout in front of the middle one (with the widest text
-     * it shows, which sets the text's size).
-     */
+    /** The three controls, and the middle readout with its widest text (which sets the size). */
     private record Layout(PartialModel knob, PartialModel lever, PartialModel fireControl, boolean trigger,
                           PanelText modeReadout, String widestMode) {}
 
@@ -76,7 +66,7 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
         this.layout = layout;
     }
 
-    /** The Autocannon Control Console: the same desk, with an auto switch in place of the lever. */
+    /** The same desk with an auto switch for the lever. */
     public static FireMissionConsoleRenderer autocannon(BlockEntityRendererProvider.Context context) {
         return new FireMissionConsoleRenderer(context, AUTOCANNON);
     }
@@ -86,15 +76,14 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
                               MultiBufferSource buffer, int light, int overlay) {
         BlockState state = be.getBlockState();
         Direction front = state.getValue(FireMissionConsoleBlock.FACING);
-        // The block does not fill its space: light the deck by the space above it.
+        // Light the deck by the space above.
         int deckLight = RenderLight.at(be.getLevel(), be.getBlockPos().above());
-        // The model faces north; the blockstate turns it like this.
         float faceTurn = (float) Math.toRadians(-(front.toYRot() + 180));
         VertexConsumer vb = buffer.getBuffer(RenderType.cutoutMipped());
 
         part(layout.knob(), state, faceTurn)
                 .translate(KNOB_PIVOT_X * PX, 0, KNOB_PIVOT_Z * PX)
-                // About +Y: positive is anticlockwise seen from above.
+                // Counterclockwise from above.
                 .rotate(rad(-KNOB_MAX_DEG * be.getKnobTurn(partialTicks)), Direction.UP)
                 .translate(-KNOB_PIVOT_X * PX, 0, -KNOB_PIVOT_Z * PX)
                 .light(deckLight)
@@ -127,13 +116,13 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
                 "0/0", deckLight);
     }
 
-    /** The controls stand on the block's top, above its own space (the trigger reaches 4.5 px up). */
+    /** The trigger reaches 4.5 px above the block. */
     @Override
     public AABB getRenderBoundingBox(FireMissionConsoleBlockEntity be) {
         return new AABB(be.getBlockPos()).expandTowards(0, 5 * PX, 0);
     }
 
-    /** A partial, turned to the block's facing; transforms after this are in model space. */
+    /** Transforms after this are in model space. */
     private static SuperByteBuffer part(PartialModel partial, BlockState state, float faceTurn) {
         return CachedBuffers.partial(partial, state).rotateCentered(faceTurn, Direction.UP);
     }

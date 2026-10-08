@@ -60,12 +60,9 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     private boolean initialSpeedApplied = false;
 
     // --- Drive ---
-    // CBC turns a mount by 0.0375°/tick per interface RPM on the server
-    // (Create's 0.3°/tick per RPM, scaled by 0.125 in CannonMountBlockEntity).
+    // CBC: Create's 0.3°/tick per RPM, scaled by 0.125 in CannonMountBlockEntity.
     private static final float MOUNT_DEG_PER_TICK_PER_RPM = 0.0375f;
-    // Which way CBC's raw angles turn for positive interface rotation, the same for
-    // every mount orientation. For the barrel's elevation, the pitch sign is
-    // multiplied by the cannon's elevationSign.
+    // CBC's raw angle direction for positive rotation; pitch is also multiplied by elevationSign.
     private static final float PITCH_AXIS_SIGN = 1f;
     private static final float YAW_AXIS_SIGN = -1f;
     // Fraction of the remaining error closed per tick, on top of feed-forward.
@@ -73,9 +70,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     // Below this commanded rate the mount is locked once on target.
     private static final float HOLD_RATE_DEG_PER_TICK = 0.01f;
 
-    // Interface RPM per generated RPM, measured from Create's propagated
-    // speeds. Its sign covers gearboxes and gearshifts, its magnitude any
-    // gearing. NaN until first measured.
+    // Interface RPM per generated RPM (sign: gearboxes, magnitude: gearing). NaN until measured.
     private float transmissionRatio = Float.NaN;
 
     public static final class SlavedMount {
@@ -84,10 +79,9 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         public final @Nullable CannonMountInterfaceBlockEntity iface;
         public final ServoAxis axis;
 
-        // Pitch axis: the barrel's elevation, positive up (CBC's raw pitch times
-        // elevationSign); yaw axis: CBC's yaw.
+        // Pitch: elevation, positive up (CBC raw pitch times elevationSign). Yaw: CBC's yaw.
         public float currentAngle;
-        // The mount's yaw (CBC's), whichever axis this servo drives.
+        // CBC's yaw, whichever axis this servo drives.
         public float mountYaw;
         public float elevationSign = 1;
         public boolean hasShell;
@@ -95,7 +89,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         public ItemStack fuzeStack = ItemStack.EMPTY;
         public int fuzeTimer = 0;
         public boolean isTimedFuze = false;
-        // A delayed impact or inertia fuze: its timer is the delay after impact.
+        // Its timer is the delay after impact.
         public boolean isDelayedImpactFuze = false;
         public double gravity;
         public double drag;
@@ -103,17 +97,15 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         public float addedChargePower;
         public float minimumChargePower;
         public float totalChargePower;
-        // Where CBC launches the shell from: the cannon's rotation centre (level
-        // coordinates) and how far along the barrel from it the shell appears.
+        // The cannon's rotation center (level coordinates) and the shell's spawn distance along the barrel.
         public @Nullable Vec3 pivot;
         public double muzzleDistance;
-        // Where the barrel points, a unit vector in the frame the cannon stands in; null if unassembled.
+        // Unit vector in the cannon's own frame; null if unassembled.
         public @Nullable Vec3 barrel;
-        // An autocannon (fires bursts; its rounds expire after a lifetime), and that lifetime
-        // in ticks (0: no limit).
+        // Autocannon rounds expire after this many ticks (0: no limit).
         public boolean autocannon;
         public int maxFlightTicks;
-        // The way the cannon faced when assembled (CBC yaw), where the yaw dial reads 0.
+        // CBC yaw when assembled: the yaw dial's zero.
         public float facingYaw;
 
         public SlavedMount(BlockPos mountPos,
@@ -128,43 +120,40 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     }
 
     private final List<SlavedMount> slavedMounts = new ArrayList<>();
-    // The swivel bearing this servo turns (SWIVEL), and its cog on our network.
     @Nullable private SwivelBearingBlockEntity swivel;
     @Nullable private KineticBlockEntity swivelCog;
-    // The turret's angles for the goggles (synced): where it is and where it is turning to.
+    // For the goggles (synced).
     private float shownSwivelAngle, shownSwivelTarget;
-    // Whether a swivel is on the network at all (synced), for the goggles' invalid-setup message.
+    // For the goggles' invalid-setup message (synced).
     private boolean swivelSeen;
-    // How far a swivel's target angle turns per tick per cog RPM (Create's convertToAngular).
+    // Create's convertToAngular.
     private static final float SWIVEL_DEG_PER_TICK_PER_RPM = 0.3f;
-    // The limits set on the dial (synced), or null for none: see getLimits.
+    // Null for none.
     @Nullable private ServoLimits limits;
-    // The swivel lies on its side, tilting a cradle (synced): its dial reads elevation.
+    // Tilting a cradle: its dial reads elevation (synced).
     private boolean swivelTilts;
-    // Which way the swivel's angle raises the barrels, as the computer last found (saved, synced).
+    // Which way the swivel's angle raises the barrels, from the computer.
     private int swivelSense = 1;
-    // Where what this servo drives stands on its dial now (synced), for the dial's needle.
+    // For the dial's needle (synced).
     private float dialAngle;
     private EquipmentHealth health;
-    // Power (server; see updatePower): how often it is worked out.
+    // --- Power (see updatePower) ---
     private static final int POWER_INTERVAL_TICKS = 5;
-    // The cannon side's load per RPM of drive (su), as last measured (see KineticLoad).
+    // su per RPM of drive (see KineticLoad).
     private float mountImpact;
-    // How fast it may drive on its power share (RPM), and that share (su).
+    // RPM, and the share it comes from (su).
     private float rpmLimit = Float.MAX_VALUE;
     private float powerShare;
-    // This tick: whether the drive was held back by the share. For the goggles (synced):
-    // whether it was, and what it draws and may draw (su).
+    // Held back by the power share this tick; the goggles show it with the draw (su).
     private boolean drivingLimited;
     private boolean shownLimited;
-    // Too little power even to hold the mount: overstressed (synced as shownStarved).
+    // Too little power even to hold the mount.
     private boolean overstressHold, shownStarved;
-    // The fastest it was asked to drive this tick (RPM), for what it requests.
     private float requestedRpm;
     private float shownDraw, shownShare;
     private ServoAxis detectedAxis = ServoAxis.NONE;
     private boolean isPowered = false;
-    // Whether the saved network totals left over from loading were dropped (see dropUnloadedStress).
+    // See dropUnloadedStress.
     private boolean unloadedDropped;
 
     public CannonServoOutputBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
@@ -174,7 +163,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
-        // Its gears span both halves, the input and this output.
         behaviours.add(health = new EquipmentHealth(this, EquipmentHealth.Breaks.COG, false)
                 .lubricated(() -> Math.abs(getInputSpeed()), () -> isPowered)
                 .withBox(() -> new AABB(worldPosition).minmax(
@@ -186,9 +174,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         return true;
     }
 
-    // ------------------------------------------------------------------
-    // Tick
-    // ------------------------------------------------------------------
+    // --- Tick ---
 
     @Override
     public void tick() {
@@ -228,11 +214,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     }
 
     /**
-     * Once after loading, when it has found what it drives: Create rebuilds a network from
-     * its saved totals, less what each block accounts for as it loads, but CBC's mount
-     * interfaces never do, so their share would stay on as phantom stress (overstressing
-     * the cannon side until the network was rebuilt). This servo is that side's only
-     * source, and what it drives has loaded: the leftover is dropped.
+     * Once after loading: CBC's mount interfaces never remove their saved share of the network
+     * stress, which would stay on as phantom stress. This servo is the only source, so drop it.
      */
     private void dropUnloadedStress() {
         if (unloadedDropped || !hasNetwork()
@@ -242,11 +225,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         getOrCreateNetwork().initFromTE(0, 0, 0);
     }
 
-    /**
-     * This block is the only source on its cannon network and never fully
-     * stops while powered (keep-alive), so Create has always propagated a
-     * signed speed to the mount interface. Their ratio is the transmission.
-     */
+    /** The only source on its network, never fully stopped while powered: the mount's speed over ours is the transmission. */
     private void measureTransmission() {
         KineticBlockEntity driven = swivelCog != null ? swivelCog
                 : !slavedMounts.isEmpty() ? slavedMounts.get(0).iface : null;
@@ -289,7 +268,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             return;
         }
 
-        // If any slaved mount isn't currently assembled, idle instead of driving.
+        // A slaved mount not assembled: idle.
         for (SlavedMount sm : slavedMounts) {
             if (sm.mount == null || sm.mount.getContraption() == null) {
                 applyIdleControl();
@@ -301,9 +280,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         driveToTarget(command, commandAge);
     }
 
-    // ------------------------------------------------------------------
-    // Idle control
-    // ------------------------------------------------------------------
+    // --- Idle control ---
 
     private void applyIdleControl() {
         for (SlavedMount sm : slavedMounts) {
@@ -315,19 +292,12 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         applyGeneratedSpeed(isPowered && swivel == null ? KEEP_ALIVE_RPM : 0f);
     }
 
-    // ------------------------------------------------------------------
-    // Swivel bearing (turret yaw)
-    // ------------------------------------------------------------------
+    // --- Swivel bearing (turret yaw) ---
 
-    /**
-     * Turns the swivel to the commanded angle (the yaw of the command): winding
-     * its cog changes its target angle at 0.3° per tick per RPM, the other way
-     * round for a bearing facing down, and the turret follows the target angle.
-     */
+    /** Winding the cog turns the swivel's target angle 0.3°/tick per RPM (reversed facing down); the turret follows. */
     private void driveSwivel(FireSolution command, long commandAge) {
         float rate = (float) command.yawRateDegPerTick();
         float target = (float) command.yawDeg() + rate * commandAge;
-        // Within the dial's limits, in dial degrees (dialSign times the swivel's angle).
         ServoLimits arc = getLimits();
         float sign = dialSign();
         float current = (float) swivel.getTargetAngleDegrees();
@@ -361,10 +331,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         applyGeneratedSpeed(Mth.clamp(cogRpm / ratio, -maxDriveRpm(), maxDriveRpm()));
     }
 
-    /**
-     * The angle the turret is actually at, degrees, worked out from the hull's and
-     * the turret's poses as Simulated does; its target angle if that is not possible.
-     */
+    /** The turret's actual angle from the hull and turret poses, as Simulated does; else its target angle. */
     private double swivelActualAngle() {
         SubLevelContainer container = SubLevelContainer.getContainer(level);
         SubLevel turret = container != null && swivel.getSubLevelID() != null
@@ -382,21 +349,16 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         return Math.toDegrees(2 * Math.atan2(relative.y(), relative.w()));
     }
 
-    /** The fastest it drives (config); a turret traverses no faster than a mount at this speed. */
+    /** Config; a turret traverses no faster than a mount at this speed. */
     private static float maxDriveRpm() {
         return CDCConfig.server().fireControl.maxServoRpm.get();
     }
 
-    // ------------------------------------------------------------------
-    // Power: the battle network pays for what the cannon side draws
-    // ------------------------------------------------------------------
+    // --- Power: the battle network pays for what the cannon side draws ---
 
     /**
-     * Works out how fast this servo may drive on its share of the battle network's spare
-     * power. The mount's load is read from the cannon side as it runs (its stress per RPM
-     * of drive, gearing included); the share is worked out as for every pair (see
-     * {@link PairOutputBlockEntity#fairShare}), servos driving and couplers passing power
-     * alike. The limit drops at once when the share shrinks, and rises gently when it grows.
+     * How fast it may drive on its share of the battle network's power ({@link PairOutputBlockEntity#fairShare}).
+     * The limit drops at once and rises gently.
      */
     private void updatePower() {
         mountImpact = KineticLoad.perRpmOf(this, mountImpact);
@@ -414,7 +376,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         rpmLimit = rampedLimit(rpmLimit, shareRpm);
     }
 
-    /** Charges the battle network for what the cannon side draws at the speed driven now, and offers it there. */
     private void commitDraw() {
         // Every tick: the speed may just have changed, and the capacity must follow at once.
         mountImpact = KineticLoad.perRpmOf(this, mountImpact);
@@ -425,26 +386,23 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         CannonServoInputBlockEntity input = getAdjacentInput();
         if (input != null)
             input.setDrawImpact(Math.abs(input.getSpeed()) > 1e-3f ? draw / Math.abs(input.getSpeed()) : 0);
-        // A little over the load, so the cannon side never overstresses on rounding; or, starved,
-        // what the share can spare but short of the load, so Create shows it overstressed.
+        // Slightly over the load so rounding never overstresses; starved, short of it so Create shows overstress.
         float capacity = overstressed
                 ? Math.min(powerShare, load * UNDER_OFFER) / Math.abs(desiredGeneratedSpeed)
                 : mountImpact * CAPACITY_HEADROOM + MIN_CAPACITY;
         offerCapacity(capacity);
-        // For the goggles: what it would need at the speed it was asked for.
         shownDraw = mountImpact * requestedRpm;
         requestedRpm = 0;
     }
 
-    /** Whether it is driving its gun now, not just holding it (for sharing the battle network's power). */
+    /** Driving, not just holding (for sharing the battle network's power). */
     @Override
     public boolean isPassingPower() {
         return Math.abs(desiredGeneratedSpeed) > KEEP_ALIVE_RPM + 1e-3f;
     }
 
     private void applyGeneratedSpeed(float rpm) {
-        // No faster than the battle network's power share allows. Too little even to hold the
-        // mount: kept turning at the keep-alive speed, but overstressed (see commitDraw).
+        // Capped by the power share; too little to hold: keep-alive speed, overstressed (see commitDraw).
         requestedRpm = Math.max(requestedRpm, Math.abs(rpm));
         if (overstressHold && rpm != 0) {
             drivingLimited = true;
@@ -466,12 +424,10 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         // Extrapolate the command to now: the computer only updates every poll.
         float target = (float) (pitch ? command.pitchDeg() : command.yawDeg()) + rate * commandAge;
 
-        // Set the loaded fuze: a timed fuze to the time of flight (with correction),
-        // a delayed impact or inertia fuze's delay to the correction alone.
+        // Timed fuzes: time of flight plus correction. Delayed impact or inertia: the correction alone.
         if (detectedAxis == ServoAxis.PITCH) {
             for (SlavedMount sm : slavedMounts) {
-                // An autocannon: its breech sets each round as it fires it (a hopper-fed one
-                // holds none long enough to be set here), so the order stands while it is laid.
+                // Autocannon breeches set each round as they fire it.
                 if (sm.autocannon && sm.mount != null)
                     CannonReading.orderAutocannonFuzes(sm.mount.getContraption(),
                             command.fuzeTicks(), command.impactDelayTicks(), level.getGameTime());
@@ -489,8 +445,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             return;
         }
 
-        // Within the limits set on the dial: the barrel stops at them, and a mount
-        // traverses the long way round rather than through the arc left out.
+        // Stop at the dial's limits; traverse the long way round rather than through the excluded arc.
         ServoLimits arc = getLimits();
         float error;
         if (pitch) {
@@ -512,8 +467,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             return;
         }
 
-        // Transmission not measured yet (the keep-alive rotation provides
-        // the first measurement), or the drivetrain is disengaged.
+        // Not measured yet (keep-alive provides it), or disengaged.
         if (Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f) {
             applyIdleControl();
             return;
@@ -521,8 +475,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
         sm.iface.setSequencedAngleLimit(-1);
 
-        // Desired contraption angle rate: follow the command's own motion,
-        // plus a proportional pull towards it.
+        // Feed-forward plus a proportional pull.
         float angleRate = rate + CORRECTION_GAIN * error;
         float axisSign = pitch ? PITCH_AXIS_SIGN * sm.elevationSign : YAW_AXIS_SIGN;
         float mountRpm = angleRate / (MOUNT_DEG_PER_TICK_PER_RPM * axisSign);
@@ -530,14 +483,11 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         applyGeneratedSpeed(generated);
     }
 
-    // ------------------------------------------------------------------
-    // Network polling (server only)
-    // ------------------------------------------------------------------
+    // --- Network polling (server only) ---
 
     private void pollCannonNetwork() {
         KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
-        // Holding a turret still, this servo generates nothing, and Create then takes the
-        // swivel's cog off our network: keep the swivel we found until we turn it again.
+        // A still servo generates nothing and Create drops the swivel cog from our network: keep it until we turn it again.
         if (swivel != null && !swivel.isRemoved() && Math.abs(desiredGeneratedSpeed) < 1e-4f
                 && level.getBlockEntity(swivel.getBlockPos()) == swivel) {
             detectedAxis = ServoAxis.SWIVEL;
@@ -601,8 +551,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         }
 
         if (swivels > 0) {
-            // A swivel bearing, alone on the network: with a mount interface or another
-            // swivel too, one servo would drive two things.
+            // A swivel alone on the network; with anything else one servo would drive two things.
             detectedAxis = swivels == 1 && axisThisPoll == ServoAxis.NONE
                     ? ServoAxis.SWIVEL : ServoAxis.INVALID;
             slavedMounts.clear();
@@ -623,27 +572,21 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         CannonReading.readCannon(sm, entity, level.registryAccess());
     }
 
-    // ------------------------------------------------------------------
-    // SensorReading.Provider
-    // ------------------------------------------------------------------
+    // --- SensorReading.Provider ---
 
     @Override
     public SensorReading getSensorReading() {
         return new SensorReading.None();
     }
 
-    // ------------------------------------------------------------------
-    // Kinetic source API
-    // ------------------------------------------------------------------
+    // --- Kinetic source API ---
 
     @Override
     public float getGeneratedSpeed() {
         return desiredGeneratedSpeed;
     }
 
-    // ------------------------------------------------------------------
-    // NBT
-    // ------------------------------------------------------------------
+    // --- NBT ---
 
     @Override
     protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
@@ -761,8 +704,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         for (SlavedMount sm : slavedMounts)
             mounts.add(CannonReading.snapshot(sm, sm.mount != null ? sm.mount.getContraption() : null, true));
         ServoStatus.SwivelSnapshot swivelSnapshot = null;
-        // Reported whenever a swivel is on the network, even in an invalid setup, so the
-        // computer knows the turret is there.
+        // Reported even in an invalid setup, so the computer knows the turret is there.
         if (swivel != null) {
             SubLevel hull = Sable.HELPER.getContaining(swivel);
             swivelSnapshot = new ServoStatus.SwivelSnapshot(swivel.getBlockPos(), swivel.getSubLevelID(),
@@ -774,14 +716,9 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
     private static final float SNAP_THRESHOLD_DEG = 0.2f;
 
-    // ------------------------------------------------------------------
-    // Limits (the protractor dial)
-    // ------------------------------------------------------------------
+    // --- Limits (the protractor dial) ---
 
-    /**
-     * The angles this servo may turn what it drives through: as set on its dial,
-     * or no limit. For a pitch servo, within -90..90.
-     */
+    /** As set on the dial, or none. A pitch servo is within -90..90. */
     public ServoLimits getLimits() {
         boolean pitch = isElevationDial();
         if (limits == null)
@@ -792,28 +729,22 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         return new ServoLimits(start, Mth.clamp(limits.end(), start + 1, 90) - start);
     }
 
-    /** Sets the limits from the dial (server). */
     public void setLimits(ServoLimits newLimits) {
         limits = newLimits;
         setChanged();
         notifyUpdate();
     }
 
-    /** Whether the dial reads elevation (a half dial): a mount's pitch, or a swivel tilting a cradle. */
+    /** A half dial: a mount's pitch, or a swivel tilting a cradle. */
     public boolean isElevationDial() {
         return detectedAxis == PITCH || detectedAxis == ServoAxis.SWIVEL && swivelTilts;
     }
 
-    /**
-     * A swivel's dial angle per degree of its angle: a turret's dial reads clockwise
-     * seen from the bearing's face (the other way round from its angle); a cradle's
-     * reads elevation, up positive.
-     */
+    /** Dial degrees per swivel degree: a turret's reads clockwise from its face, a cradle's elevation. */
     private float dialSign() {
         return swivelTilts ? swivelSense : -1;
     }
 
-    /** From the computer: which way this swivel's angle raises the barrels it tilts. */
     public void setSwivelSense(int sense) {
         if (sense == 0 || sense == swivelSense)
             return;
@@ -825,7 +756,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         return detectedAxis;
     }
 
-    /** Where what this servo drives stands on its dial now (client: as last synced). */
+    /** Client: as last synced. */
     public float getDialAngle() {
         return dialAngle;
     }
@@ -839,7 +770,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         return sm.axis == PITCH ? sm.currentAngle : Mth.wrapDegrees(sm.currentAngle - sm.facingYaw);
     }
 
-    /** Sets the loaded shell's fuze timer on the mount this pitch servo drives (see {@link CannonReading#setLoadedFuzeTime}). */
+    /** See {@link CannonReading#setLoadedFuzeTime}. */
     public boolean setLoadedFuzeTime(int ticks) {
         if (level == null || level.isClientSide() || slavedMounts.isEmpty()) return false;
         SlavedMount sm = slavedMounts.get(0);
@@ -847,9 +778,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         return CannonReading.setLoadedFuzeTime(sm.mount.getContraption(), ticks, level.registryAccess());
     }
 
-    // ------------------------------------------------------------------
-    // Tooltip
-    // ------------------------------------------------------------------
+    // --- Tooltip ---
 
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {

@@ -10,11 +10,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-/**
- * Client to server: the player right-clicked a map table's sheet, designating
- * the target at (u, v) (fractions of the sheet, north-west = 0, 0), or
- * clearing it. The server works out the world position from its own maps.
- */
+/** Client to server: target at sheet fractions (u, v), or cleared. The server resolves the world position. */
 public record MapTableTargetPayload(BlockPos table, boolean clear, float u, float v) implements CustomPacketPayload {
 
     public static final Type<MapTableTargetPayload> TYPE =

@@ -8,12 +8,7 @@ import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 
-/**
- * A block with one face (a lens, dials, a screen) that only turns in yaw:
- * vanilla's {@link HorizontalDirectionalBlock} plus this mod's placing and
- * wrenching rules. Placed like Create's directional blocks: the face looks at
- * the player, or away from them when they sneak.
- */
+/** A block with one face that turns only in yaw; faces the player when placed, away when sneaking. */
 public abstract class HorizontalFacedBlock extends HorizontalDirectionalBlock implements IWrenchable {
 
     protected HorizontalFacedBlock(Properties properties) {
@@ -33,10 +28,7 @@ public abstract class HorizontalFacedBlock extends HorizontalDirectionalBlock im
         return defaultBlockState().setValue(FACING, sneaking ? looking : looking.getOpposite());
     }
 
-    /**
-     * Wrenching the top or bottom face turns it clockwise (seen from above);
-     * the side faces do nothing, so it never tips over.
-     */
+    /** Top or bottom face turns it clockwise; sides do nothing, so it never tips. */
     @Override
     public BlockState getRotatedBlockState(BlockState originalState, Direction targetedFace) {
         if (targetedFace.getAxis() != Direction.Axis.Y)

@@ -6,16 +6,12 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.core.Direction;
 
-/**
- * A readout window on a cabinet, with text printed in it in Minecraft's font.
- * Positions are model pixels with the front towards north, as in the models;
- * the text reads for someone standing in front.
- */
+/** Text in a cabinet's readout window, in Minecraft's font. Model pixels, front toward north. */
 public final class PanelText {
 
     private static final float PX = 1 / 16f;
     private static final int COLOR = 0xFF000000;
-    // Height of a glyph's ink, font pixels.
+    // Font pixels.
     private static final int GLYPH_HEIGHT = 7;
 
     private final boolean onTop;
@@ -37,50 +33,42 @@ public final class PanelText {
     }
 
     /**
-     * A window in the front face.
-     *
-     * @param depth how far behind the face the text stands (z)
-     * @param fill  share of the window's width the text fills
+     * @param depth behind the face (z)
+     * @param fill  share of the window's width
      */
     public static PanelText front(float west, float east, float bottom, float top, float depth, float fill) {
         return new PanelText(false, west, east, bottom, top, depth, fill);
     }
 
     /**
-     * A window in a horizontal top surface, read looking down from in front:
-     * its front edge (nearer the reader, lower z) is the text's bottom.
+     * A horizontal window read from in front: its front edge (lower z) is the text's bottom.
      *
-     * @param height the height the text lies at (y)
-     * @param fill   share of the window's width the text fills
+     * @param height y
+     * @param fill   share of the window's width
      */
     public static PanelText top(float west, float east, float frontEdge, float backEdge, float height, float fill) {
         return new PanelText(true, west, east, frontEdge, backEdge, height, fill);
     }
 
-    /**
-     * Prints the text centred in the window, scaled to fill its width. Keep
-     * the text a fixed length (pad it) so the size does not jump about.
-     */
+    /** Centered, scaled to fill the width: pad the text to a fixed length so the size holds. */
     public void draw(Font font, PoseStack ms, MultiBufferSource buffer, Direction front, String text, int light) {
         draw(font, ms, buffer, front, text, text, light);
     }
 
-    /** As {@link #draw}, but sized by a template text, so texts of different widths print the same size. */
+    /** Sized by a template, so different widths print the same size. */
     public void draw(Font font, PoseStack ms, MultiBufferSource buffer, Direction front, String text,
                      String sizeTemplate, int light) {
         float width = east - west;
         float height = highEdge - lowEdge;
-        // Font pixels to model pixels; a glyph's ink is one pixel narrower than its advance.
+        // A glyph's ink is one pixel narrower than its advance.
         float scale = width * fill / (font.width(sizeTemplate) - 1);
         float inkWidth = font.width(text) - 1;
 
         ms.pushPose();
-        // The model faces north; the blockstate turns it like this.
         ms.translate(0.5, 0.5, 0.5);
         ms.mulPose(Axis.YP.rotationDegrees(-(front.toYRot() + 180)));
         ms.translate(-0.5, -0.5, -0.5);
-        // Text runs along +x, down +y, and faces +z. Start at the window's top
-        // left as the reader sees it (its east edge), and turn the text to face them.
+        // Text runs +x, down +y, facing +z: start at the reader's top left (east edge) and turn it to face them.
         if (onTop) {
             ms.translate(east * PX, plane * PX, highEdge * PX);
             ms.mulPose(Axis.YP.rotationDegrees(180));

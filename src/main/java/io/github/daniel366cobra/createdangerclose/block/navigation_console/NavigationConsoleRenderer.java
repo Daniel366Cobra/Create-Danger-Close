@@ -15,24 +15,17 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
-/**
- * The Navigation Console's instruments: the navball, the altimeter and the
- * speedometer. Positions are model pixels with the face towards north, as in
- * the model; the deck is the block's top (y = 16).
- */
+/** Navball, altimeter and speedometer. Model pixels, face toward north; the deck is y = 16. */
 public class NavigationConsoleRenderer extends SafeBlockEntityRenderer<NavigationConsoleBlockEntity> {
 
     private static final float PX = 1 / 16f;
 
-    // Navball: turns about its centre so it stays fixed to the world (sky up,
-    // north to the north), as an attitude indicator does, while the ship moves round it.
+    // Navball: stays fixed to the world, as an attitude indicator.
     private static final float BALL_CENTER_X = 10, BALL_CENTER_Y = 17.51777f, BALL_CENTER_Z = 10.56066f;
-    // Altimeter: the needle slides 3 px up its 45° gauge, towards the back, from
-    // bedrock (as modelled) to build height.
+    // Altimeter: the needle slides 3 px up its 45° gauge from bedrock to build height.
     private static final float ALTIMETER_TRAVEL_PX = 3;
     private static final float ALTIMETER_SLOPE = (float) Math.sqrt(0.5);
-    // Speedometer: the needle turns about the vertical axis through (8, 15.75, 3),
-    // clockwise seen from above, half a turn from stopped (as modelled) to full scale.
+    // Speedometer: vertical axis through (8, 15.75, 3), half a turn clockwise to full scale.
     private static final float SPEEDO_PIVOT_X = 8, SPEEDO_PIVOT_Z = 3;
     private static final float SPEEDO_FULL_DEG = 180;
 
@@ -43,18 +36,13 @@ public class NavigationConsoleRenderer extends SafeBlockEntityRenderer<Navigatio
                               MultiBufferSource buffer, int light, int overlay) {
         BlockState state = be.getBlockState();
         Direction front = state.getValue(NavigationConsoleBlock.FACING);
-        // The instruments stand on the block's top: light them by the space above it.
+        // Light by the space above.
         int deckLight = RenderLight.at(be.getLevel(), be.getBlockPos().above());
-        // The model faces north; the blockstate turns it like this.
         float faceTurn = (float) Math.toRadians(-(front.toYRot() + 180));
         VertexConsumer vb = buffer.getBuffer(RenderType.cutoutMipped());
 
-        // The ship's attitude as a rotation from the world into the ship:
-        // yaw about the vertical (Minecraft yaw: the ship's +Z turns clockwise
-        // from south), then pitch nose-up about its own X, then roll about its
-        // own Z. The ball turns by the inverse to stay put in the world: roll
-        // back, pitch back, yaw back, after first undoing the console's own
-        // facing on the ship.
+        // Attitude is yaw, then pitch nose-up about the ship's X, then roll about its Z. The ball turns by
+        // the inverse, after undoing the console's facing on the ship.
         part(CDCPartialModels.NAV_CONSOLE_BALL, state, faceTurn)
                 .translate(BALL_CENTER_X * PX, BALL_CENTER_Y * PX, BALL_CENTER_Z * PX)
                 .rotate(-faceTurn, Direction.UP)
@@ -73,20 +61,20 @@ public class NavigationConsoleRenderer extends SafeBlockEntityRenderer<Navigatio
 
         part(CDCPartialModels.NAV_CONSOLE_SPEEDOMETER_NEEDLE, state, faceTurn)
                 .translate(SPEEDO_PIVOT_X * PX, 0, SPEEDO_PIVOT_Z * PX)
-                // About +Y: positive is anticlockwise seen from above.
+                // Counterclockwise from above.
                 .rotate(rad(-SPEEDO_FULL_DEG * be.getSpeedometer(partialTicks)), Direction.UP)
                 .translate(-SPEEDO_PIVOT_X * PX, 0, -SPEEDO_PIVOT_Z * PX)
                 .light(deckLight)
                 .renderInto(ms, vb);
     }
 
-    /** The instruments stand on the block's top, above its own space (the ball reaches 3 px up). */
+    /** The ball reaches 3 px above the block. */
     @Override
     public AABB getRenderBoundingBox(NavigationConsoleBlockEntity be) {
         return new AABB(be.getBlockPos()).expandTowards(0, 4 * PX, 0);
     }
 
-    /** A partial, turned to the block's facing; transforms after this are in model space. */
+    /** Transforms after this are in model space. */
     private static SuperByteBuffer part(PartialModel partial, BlockState state, float faceTurn) {
         return CachedBuffers.partial(partial, state).rotateCentered(faceTurn, Direction.UP);
     }

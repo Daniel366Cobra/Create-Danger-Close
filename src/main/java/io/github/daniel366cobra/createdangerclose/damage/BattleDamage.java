@@ -28,36 +28,26 @@ import java.util.Set;
 import java.util.WeakHashMap;
 
 /**
- * Battle damage to equipment ({@link BattleDamageable}): blast, and shells and
- * shrapnel, grapeshot or flak balls striking it.
- *
- * <p>Much equipment cannot be hit by the game itself: a contraption's blocks are
- * not in the world, and CBC's projectiles pass through contraption entities; and
- * a block that survives a blast is not otherwise marked by it. So this does the
- * geometry itself, in world space:
+ * Battle damage to {@link BattleDamageable} equipment, with its own world-space geometry, since
+ * contraption blocks are not in the world and CBC projectiles pass through contraptions:
  * <ul>
- *   <li>blast: on every explosion (CBC's shells raise the normal NeoForge event),
- *       parts within reach and in line of sight of it suffer, the more the closer;</li>
- *   <li>hits: every tick, the paths of CBC projectiles and burst balls near
- *       equipment are tested against its parts. The projectile itself flies on:
- *       there is no way to stop it cleanly.</li>
+ *   <li>blast: on every explosion, parts in reach and line of sight suffer, more when closer;</li>
+ *   <li>hits: every tick, nearby CBC projectile and ball paths are tested against parts (the
+ *       projectile flies on).</li>
  * </ul>
  */
 @EventBusSubscriber(modid = CreateDangerClose.MOD_ID)
 public final class BattleDamage {
 
-    // The line-of-sight check stops this far short of the blast centre, which
-    // often lies on or inside the block the shell struck.
+    // The blast center often lies in the struck block.
     private static final double BLAST_SIGHT_MARGIN = 0.75;
 
-    // How far around equipment to look for projectiles: their paths are tested
-    // a tick at a time, so this must exceed the fastest shell's speed per tick.
+    // Paths are tested a tick at a time: must exceed the fastest shell's speed per tick.
     private static final double PROJECTILE_SEARCH_MARGIN = 16;
-    // How much bigger than its box a part counts as, for a shell and for a ball.
     private static final double SHELL_HIT_MARGIN = 0.25;
     private static final double BALL_HIT_MARGIN = 0.05;
 
-    // Loaded equipment, server side. Weak, so a missed untrack cannot leak.
+    // Server side. Weak, so a missed untrack cannot leak.
     private static final Set<BattleDamageable> LOADED = Collections.newSetFromMap(new WeakHashMap<>());
 
     private BattleDamage() {}
@@ -72,15 +62,14 @@ public final class BattleDamage {
             LOADED.remove(equipment);
     }
 
-    // Only the server thread may touch the set: in single player the client thread would
-    // otherwise change it (a weak map tidies itself on every call) while a blast iterates it.
-    // A level already gone is skipped too: the weak set drops the entry by itself.
+    // Server thread only: in single player the client thread would change the weak set while a
+    // blast iterates it. Levels already gone are skipped.
     private static boolean onServer(BattleDamageable equipment) {
         Level level = equipment.damageLevel();
         return level != null && !level.isClientSide();
     }
 
-    /** The loaded equipment in this level (a copy: damage may change the set). */
+    /** A copy: damage may change the set. */
     private static List<BattleDamageable> loadedIn(Level level) {
         List<BattleDamageable> found = new ArrayList<>();
         for (BattleDamageable equipment : LOADED)
@@ -89,13 +78,13 @@ public final class BattleDamage {
         return found;
     }
 
-    /** How far a blast reaches, in its radii (severity 0 there, 1 at its centre). */
+    /** In blast radii (severity 0 there, 1 at the center). */
     private static double blastReach() {
         return CDCConfig.server().battleDamage.blastReach.getF();
     }
 
-    /** How far from a blast's centre a part it reached with this severity is, in the blast's radii. */
-    public static double radiiFromCentre(double severity) {
+    /** In blast radii. */
+    public static double radiiFromCenter(double severity) {
         return blastReach() * (1 - severity);
     }
 
@@ -115,21 +104,16 @@ public final class BattleDamage {
 
         for (BattleDamageable equipment : loadedIn(level)) {
             for (DamagePart part : equipment.damageParts()) {
-                double distance = part.centreWorld().distanceTo(center);
+                double distance = part.centerWorld().distanceTo(center);
                 if (distance <= reach && hasLineOfSight(level, part, center, distance))
                     equipment.onBlast(part, 1 - distance / reach);
             }
         }
     }
 
-    /**
-     * Whether anything solid stands between a part and a blast. The sight line starts
-     * at the edge of the part, on the blast's side: from inside, a part that is a
-     * block in the world would block its own view.
-     */
+    /** From the part's edge on the blast's side: a world block would otherwise block its own view. */
     private static boolean hasLineOfSight(Level level, DamagePart part, Vec3 center, double distance) {
-        Vec3 partWorld = part.centreWorld();
-        // Out past the part's own box (half its diagonal, and a little).
+        Vec3 partWorld = part.centerWorld();
         double clearance = part.box().getSize() * Math.sqrt(3) / 2 + 0.05;
         if (distance <= clearance + BLAST_SIGHT_MARGIN)
             return true;
@@ -162,7 +146,7 @@ public final class BattleDamage {
                 continue;
             AABB search = null;
             for (DamagePart part : parts) {
-                AABB around = AABB.ofSize(part.centreWorld(), 0, 0, 0);
+                AABB around = AABB.ofSize(part.centerWorld(), 0, 0, 0);
                 search = search == null ? around : search.minmax(around);
             }
             search = search.inflate(1 + PROJECTILE_SEARCH_MARGIN);
@@ -173,7 +157,6 @@ public final class BattleDamage {
                 if (projectile instanceof ProjectileBurst burst) {
                     for (ProjectileBurst.SubProjectile ball : burst.getSubProjectiles()) {
                         double[] d = ball.displacement(), v = ball.velocity();
-                        // The ball is where this tick took it.
                         Vec3 now = burst.position().add(d[0], d[1], d[2]);
                         Vec3 before = now.subtract(v[0], v[1], v[2]);
                         hitPartsOnPath(item, parts, before, now, BALL_HIT_MARGIN);
@@ -186,11 +169,9 @@ public final class BattleDamage {
         }
     }
 
-    /** Hits each part that the world-space path from {@code from} to {@code to} passes through. */
     private static void hitPartsOnPath(BattleDamageable equipment, List<DamagePart> parts, Vec3 from, Vec3 to,
                                        double margin) {
         for (DamagePart part : parts) {
-            // In the part's own frame it is a plain box.
             Vec3 localFrom = part.worldToLocal().apply(from), localTo = part.worldToLocal().apply(to);
             AABB box = part.box().inflate(margin);
             if (box.contains(localTo) || box.clip(localFrom, localTo).isPresent())

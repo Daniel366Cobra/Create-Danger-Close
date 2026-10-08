@@ -10,31 +10,25 @@ import org.jetbrains.annotations.Nullable;
 
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 
-/**
- * The input half of a two-block kinetic pair (Cannon Servo, Kinetic Network Coupler): an
- * ordinary consumer on the input network, charging it whatever the output half's own
- * network draws. The output half sets the charge (see {@link PairOutputBlockEntity}).
- */
+/** The input half of a kinetic pair: a consumer charging its network what the output half draws. */
 public abstract class PairInputBlockEntity extends KineticBlockEntity {
 
-    // What it charges the input network, per RPM.
+    // Per RPM.
     private float drawImpact;
 
     protected PairInputBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
     }
 
-    /** Charges the input network this much per RPM from now on (server). */
+    /** Per RPM, server. */
     public void setDrawImpact(float impact) {
-        // Against what the network has on record for us too: after a reload it may hold an older figure,
-        // and an unchanged draw would never correct it.
+        // After a reload the network may hold an older figure that an unchanged draw would never correct.
         Float recorded = hasNetwork() ? getOrCreateNetwork().members.get(this) : null;
         if (Math.abs(impact - drawImpact) <= Math.max(0.01f, drawImpact * 0.02f) && (impact == 0) == (drawImpact == 0)
                 && (recorded == null || Math.abs(recorded - impact) <= Math.max(0.01f, impact * 0.02f)))
             return;
         drawImpact = impact;
-        // Create subtracts this, as saved, from the network's saved stress on reload: stale, it would
-        // leave the difference behind as phantom stress for good.
+        // Create subtracts this on reload: stale, it would leave phantom stress.
         lastStressApplied = impact;
         if (hasNetwork())
             getOrCreateNetwork().updateStressFor(this, impact);
@@ -46,7 +40,7 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
         return drawImpact;
     }
 
-    /** What the input network can carry in all, and carries now (su). */
+    /** su. */
     public float getNetworkCapacity() {
         return capacity;
     }
@@ -55,18 +49,17 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
         return stress;
     }
 
-    /** What this pair draws from the input network now (su). */
+    /** su. */
     public float getDraw() {
         return drawImpact * Math.abs(getSpeed());
     }
 
-    /** Whether its output half is working now, for sharing the input network's spare power. */
+    /** For sharing the input's spare power. */
     public boolean isPassingPower() {
         PairOutputBlockEntity output = getPairedOutput();
         return output != null && output.isPassingPower();
     }
 
-    /** The output half in front of it, if any. */
     @Nullable
     public PairOutputBlockEntity getPairedOutput() {
         if (level == null)
@@ -75,8 +68,7 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
         return level.getBlockEntity(outputPos) instanceof PairOutputBlockEntity output ? output : null;
     }
 
-    // Saved with the network's stress, which counts it: reloaded without it, the network's
-    // total would charge the input network for a draw the pair no longer accounts for.
+    // Saved with the network's stress, else it would be charged for a draw no longer accounted for.
     @Override
     protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(compound, registries, clientPacket);

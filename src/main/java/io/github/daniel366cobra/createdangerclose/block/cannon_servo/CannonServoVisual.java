@@ -23,14 +23,12 @@ import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.
 
 public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEntity> implements SimpleTickableVisual {
 
-    // Planetary set between the two networks: the input drives the sun, the
-    // output the ring, and the planet carrier runs at the speed in between,
-    // weighted by size (sun radius 2.5 px, ring 5 px in the model).
+    // Planetary set: input drives the sun, output the ring; the carrier runs between, weighted by size.
     private static final float SUN_WEIGHT = 1, RING_WEIGHT = 2;
 
     protected final RotatingInstance shaft;
     protected final RotatingInstance gizmo;
-    // Output only: the planet carrier.
+    // Output only.
     @Nullable protected final RotatingInstance carrier;
     private float carrierSpeed;
     final Direction direction;
@@ -42,16 +40,14 @@ public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEnti
                 CDCPartialModels.SERVO_OUTPUT_COUPLER, CDCPartialModels.SERVO_TRANSFER_COUPLER);
     }
 
-    /** With other transmission parts drawn in the same place (the Kinetic Network Coupler's). */
+    /** With other parts drawn in the same place (the coupler's). */
     public CannonServoVisual(VisualizationContext context, KineticBlockEntity blockEntity, float partialTick, boolean isOutput,
                              PartialModel inputPart, PartialModel outputPart, PartialModel transferPart) {
         super(context, blockEntity, partialTick);
         this.isOutput = isOutput;
 
         Direction facing = blockState.getValue(FACING);
-        // Input: shaft comes from behind (opposite to FACING), gizmo on the face toward FACING
-        // Output: shaft goes out front (along FACING), gizmo on the face away from FACING
-        // In both cases, the visual's "direction" is the direction the shaft points toward.
+        // The visual's direction is the way the shaft points: input from behind, output out front.
         if (isOutput) {
             facing = facing.getOpposite();
         }
@@ -72,15 +68,12 @@ public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEnti
                 .rotateToFace(Direction.SOUTH, opposite)
                 .setChanged();
 
-        // The coupler partials are modelled in the servo item's frame: the input
-        // block at z 0..16, the output block at z -16..0, the input shaft to the
-        // south. All are drawn in that frame, anchored at the input block, so
-        // the output's partials are placed one block back towards the input.
-        Direction towardsInputShaft = blockState.getValue(FACING).getOpposite();
-        BlockPos inputBlock = isOutput ? getVisualPosition().relative(towardsInputShaft) : getVisualPosition();
+        // Coupler partials are modeled in the servo item's frame, anchored at the input block.
+        Direction towardInputShaft = blockState.getValue(FACING).getOpposite();
+        BlockPos inputBlock = isOutput ? getVisualPosition().relative(towardInputShaft) : getVisualPosition();
         gizmo.setup(blockEntity)
                 .setPosition(inputBlock)
-                .rotateToFace(Direction.SOUTH, towardsInputShaft)
+                .rotateToFace(Direction.SOUTH, towardInputShaft)
                 .setChanged();
 
         if (isOutput) {
@@ -90,14 +83,14 @@ public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEnti
                     .createInstance();
             carrier.setup(blockEntity, carrierSpeed)
                     .setPosition(inputBlock)
-                    .rotateToFace(Direction.SOUTH, towardsInputShaft)
+                    .rotateToFace(Direction.SOUTH, towardInputShaft)
                     .setChanged();
         } else {
             carrier = null;
         }
     }
 
-    /** Output only: the carrier's speed from the sun (input network) and the ring (output network). */
+    /** Output only: from the sun (input) and the ring (output). */
     private float computeCarrierSpeed() {
         float sun = level.getBlockEntity(pos.relative(direction)) instanceof KineticBlockEntity input
                 ? input.getSpeed() : 0;
@@ -105,10 +98,7 @@ public class CannonServoVisual extends KineticBlockEntityVisual<KineticBlockEnti
         return (SUN_WEIGHT * sun + RING_WEIGHT * ring) / (SUN_WEIGHT + RING_WEIGHT);
     }
 
-    /**
-     * The input's speed can change without this (the output's) visual being
-     * updated, so the carrier's speed is checked every tick.
-     */
+    /** The input's speed can change without updating this visual: check every tick. */
     @Override
     public void tick(TickableVisual.Context context) {
         if (carrier == null)

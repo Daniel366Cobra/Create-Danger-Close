@@ -11,27 +11,21 @@ import org.joml.Quaterniond;
 import org.joml.Vector3d;
 
 /**
- * Holds the rangefinder's line of sight steady in the world while the ship moves under it.
- * The operator's look is relative to the ship, so each tick the ship's turn since the last
- * tick is undone on it: its pitch and roll with a Gimbal Sensor on the network, its yaw with
- * a heading sensor. The operator's own turning is left as it is.
- *
- * <p>The server takes the player's rotation from the client and judges steadiness from it, so
- * a stabilised sight converges there too without any server-side change. The ship's pose is
- * Sable's logical one, as the server uses to turn the look into the world.
+ * Holds the sight steady in the world as the ship moves: each tick undoes the ship's turn on the
+ * ship-relative look (pitch and roll with a Gimbal Sensor, yaw with a heading sensor). The server
+ * takes the rotation from the client, so it converges there too.
  */
-final class SightStabiliser {
+final class SightStabilizer {
 
-    // The ship's orientation at the last tick, and which ship it was.
     @Nullable private static SubLevel lastShip;
     private static final Quaterniond lastOrientation = new Quaterniond();
 
-    private SightStabiliser() {}
+    private SightStabilizer() {}
 
     static void tick(@Nullable LocalPlayer player, @Nullable RangefinderBearingBlockEntity bearing) {
         SubLevel ship = RangefinderOptics.operatedShip(player);
-        boolean tilt = bearing != null && bearing.isStabilisedTilt();
-        boolean yaw = bearing != null && bearing.isStabilisedYaw();
+        boolean tilt = bearing != null && bearing.isStabilizedTilt();
+        boolean yaw = bearing != null && bearing.isStabilizedYaw();
         if (ship == null || (!tilt && !yaw)) {
             lastShip = null;
             return;
@@ -43,8 +37,7 @@ final class SightStabiliser {
             return;
         }
 
-        // The ship's turn since the last tick, in the world: its yaw about the vertical
-        // (the twist), and the tilt left over (the swing), turn = swing · twist.
+        // The ship's turn since last tick, in the world: turn = swing · twist (twist: yaw about the vertical).
         Quaterniond turn = orientation.mul(new Quaterniond(lastOrientation).conjugate(), new Quaterniond());
         lastOrientation.set(orientation);
         Quaterniond twist = new Quaterniond(0, turn.y, 0, turn.w);
@@ -54,7 +47,7 @@ final class SightStabiliser {
             twist.normalize();
         Quaterniond swing = turn.mul(new Quaterniond(twist).conjugate(), new Quaterniond());
 
-        // Undo the parts the sensors allow, in the world: turn⁻¹ = twist⁻¹ · swing⁻¹.
+        // Undo what the sensors allow: turn⁻¹ = twist⁻¹ · swing⁻¹.
         Quaterniond undo = new Quaterniond();
         if (yaw)
             undo.mul(new Quaterniond(twist).conjugate());
@@ -66,8 +59,7 @@ final class SightStabiliser {
         undo.transform(world);
         Vector3d local = orientation.transformInverse(world).normalize();
 
-        // Back to the player's rotation (Minecraft: x = -sin yaw · cos pitch, y = -sin pitch,
-        // z = cos yaw · cos pitch), keeping yaw continuous and pitch within the optics' travel.
+        // Back to the player's rotation, yaw continuous, pitch within the optics' travel.
         float newPitch = (float) Math.toDegrees(Math.asin(Mth.clamp(-local.y, -1, 1)));
         float newYaw = (float) Math.toDegrees(Math.atan2(-local.x, local.z));
         float yawStep = Mth.wrapDegrees(newYaw - player.getYRot());

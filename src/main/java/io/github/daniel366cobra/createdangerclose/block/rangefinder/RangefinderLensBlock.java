@@ -19,13 +19,9 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
 /**
- * One of the two objective lenses at the ends of a rangefinder tube. The
- * distance between the two lenses of a tube is the rangefinder's baseline.
- *
- * <p>A lens can be {@link #CRACKED} by blast or by a shell or shrapnel ball
- * striking it (see {@link io.github.daniel366cobra.createdangerclose.damage.BattleDamage}), which badly hurts the tube's
- * accuracy until it is repaired with a glass pane. The crack is part of the
- * block state, so it survives assembling and disassembling the tube.
+ * An objective lens; the spacing of a tube's two is its baseline. {@link #CRACKED} by blast or hits
+ * (see {@link io.github.daniel366cobra.createdangerclose.damage.BattleDamage}) until repaired with a glass pane;
+ * kept in the block state through (dis)assembly.
  */
 public class RangefinderLensBlock extends RangefinderOpticBlock {
 
@@ -44,12 +40,12 @@ public class RangefinderLensBlock extends RangefinderOpticBlock {
         builder.add(CRACKED);
     }
 
-    /** Whether this is a cracked lens that the held item (a glass pane) can repair. */
+    /** Cracked, and the held item is a glass pane. */
     public static boolean canRepair(BlockState state, ItemStack held) {
         return state.getBlock() instanceof RangefinderLensBlock && state.getValue(CRACKED) && held.is(Items.GLASS_PANE);
     }
 
-    /** Server side: uses up the pane and credits the repair. The caller replaces the block state. */
+    /** Server: uses up the pane and credits the repair; the caller replaces the state. */
     public static void onRepaired(Player player, ItemStack held, BlockPos soundPos) {
         if (!player.getAbilities().instabuild)
             held.shrink(1);
@@ -57,7 +53,7 @@ public class RangefinderLensBlock extends RangefinderOpticBlock {
         CDCStats.EQUIPMENT_REPAIRED.awardTo(player);
     }
 
-    /** Repairing a lens that is not part of an assembled tube. */
+    /** Not part of an assembled tube. */
     @Override
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
                                               Player player, InteractionHand hand, BlockHitResult hitResult) {

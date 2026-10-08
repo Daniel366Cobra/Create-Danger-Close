@@ -10,17 +10,13 @@ import net.minecraft.core.Registry;
 
 import java.util.function.Supplier;
 
-/**
- * Contraption types, registered into Create's contraption type registry the
- * same way Create and CBC do it. Must be initialised from the mod constructor.
- */
+/** Registered into Create's contraption type registry as Create and CBC do; initialized from the mod constructor. */
 public class CDCContraptionTypes {
 
     public static Holder.Reference<ContraptionType> RANGEFINDER;
 
     private static Holder.Reference<ContraptionType> register(String name, Supplier<? extends Contraption> factory) {
-        // Saved contraptions store the namespaced registry id, so no legacy
-        // name mapping is needed (that map exists for pre-registry Create saves).
+        // Saves store the namespaced id: no legacy name mapping needed.
         return Registry.registerForHolder(CreateBuiltInRegistries.CONTRAPTION_TYPE,
                 CreateDangerClose.asResource(name), new ContraptionType(factory));
     }

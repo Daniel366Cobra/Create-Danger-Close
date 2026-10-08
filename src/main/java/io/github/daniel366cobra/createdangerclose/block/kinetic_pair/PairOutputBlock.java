@@ -23,11 +23,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
-/**
- * The output half of a two-block kinetic pair: placed by its input half, it stands in front
- * of it facing the same way, its shaft out to its own network. It goes when the input half
- * goes, and breaking it breaks the pair (the input half drops the item).
- */
+/** The output half of a kinetic pair, in front of its input half; breaking it breaks the pair. */
 public abstract class PairOutputBlock<BE extends PairOutputBlockEntity> extends DirectionalKineticBlock implements IBE<BE> {
 
     protected PairOutputBlock(Properties properties) {
@@ -40,8 +36,8 @@ public abstract class PairOutputBlock<BE extends PairOutputBlockEntity> extends 
     @Override
     public Direction getPreferredFacing(BlockPlaceContext context) {
         for (Direction side : Iterate.directions) {
-            BlockState neighbour = context.getLevel().getBlockState(context.getClickedPos().relative(side));
-            if (neighbour.is(inputBlock()) && neighbour.getValue(FACING) == side.getOpposite())
+            BlockState neighbor = context.getLevel().getBlockState(context.getClickedPos().relative(side));
+            if (neighbor.is(inputBlock()) && neighbor.getValue(FACING) == side.getOpposite())
                 return side.getOpposite();
         }
         return null;

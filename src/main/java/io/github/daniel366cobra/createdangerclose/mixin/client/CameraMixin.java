@@ -12,12 +12,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Looks through the rangefinder's objectives: in first person, the operator's
- * camera is moved from their head to just in front of the lenses, so the
- * tube's own structure does not block the view. Only the view moves; the
- * player stays in the seat.
- */
+/** First person: the operator's camera moves to just in front of the lenses, so the tube does not block the view. */
 @Mixin(value = Camera.class, remap = false)
 public abstract class CameraMixin {
 

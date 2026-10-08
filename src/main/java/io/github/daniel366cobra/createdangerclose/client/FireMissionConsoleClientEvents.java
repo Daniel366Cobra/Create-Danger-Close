@@ -36,8 +36,7 @@ public final class FireMissionConsoleClientEvents {
         int step = (int) Math.signum(event.getScrollDeltaY()) * console.fuzeStepTicks(Screen.hasShiftDown());
         PacketDistributor.sendToServer(new FireMissionKnobPayload(hit.getBlockPos(), step));
 
-        // Create's scroll-input click, like its elevator controls: rising in pitch from
-        // the earliest setting to the latest, and silent once the knob is at its stop.
+        // Create's scroll-input click: pitch rising toward the latest setting, silent at the stop.
         int max = console.maxFuzeOffsetTicks();
         int turned = Mth.clamp(console.getFuzeOffsetTicks() + step, -max, max);
         if (turned == console.getFuzeOffsetTicks())

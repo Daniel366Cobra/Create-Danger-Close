@@ -28,39 +28,28 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * The Fire Mission Console. Its deck carries three controls side by side, as
- * seen from the player standing at its face: the fuze correction knob on the
- * left (scroll to turn, right-click to zero), the trajectory lever in the
- * middle (direct or plunging fire) and the fire button on the right. A Battle
- * Network Interface facing it connects it to the Ballistic Computer.
- */
+/** Deck controls left to right, seen from the front: fuze knob, trajectory lever, fire button. */
 public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE<FireMissionConsoleBlockEntity> {
 
     public static final MapCodec<FireMissionConsoleBlock> CODEC = simpleCodec(FireMissionConsoleBlock::new);
 
-    // The desk, and the backboard rising above the back of its deck (into the space
-    // above, as a fence does), facing north as in the model.
+    // The desk and its backboard (rising into the space above, like a fence), facing north.
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(Shapes.or(
             Block.box(0, 0, 0, 16, 16, 16),
             Block.box(0, 16, 12, 16, 20, 16)), Direction.NORTH);
 
-    /** The controls on the deck, left to right as seen from in front. */
+    /** Left to right from in front. */
     public enum Control { FUZE_KNOB, TRAJECTORY_LEVER, FIRE_BUTTON }
 
     public FireMissionConsoleBlock(Properties properties) {
         super(properties);
     }
 
-    /**
-     * The control under a point on the deck (a hit on its upper side), or null
-     * elsewhere: the deck is split into thirds across, as seen from in front.
-     */
+    /** Under a point on the deck's top: thirds across from in front. Null elsewhere. */
     @Nullable
     public static Control controlAt(BlockState state, BlockPos pos, BlockHitResult hit) {
         if (hit.getDirection() != Direction.UP || !(state.getBlock() instanceof FireMissionConsoleBlock))
             return null;
-        // The player stands at the face, looking the opposite way to it.
         Direction playersRight = state.getValue(FACING).getCounterClockWise();
         Vec3 fromCenter = hit.getLocation().subtract(Vec3.atCenterOf(pos));
         double across = fromCenter.x * playersRight.getStepX() + fromCenter.z * playersRight.getStepZ() + 0.5;
@@ -106,14 +95,13 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
         return InteractionResult.SUCCESS;
     }
 
-    /** The fire button: a salvo from every big cannon on target (danger close: the second press). */
+    /** A salvo from every big cannon on target. */
     protected void pressFireButton(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
                                    BallisticComputerBlockEntity computer) {
         level.blockEvent(pos, this, FireMissionConsoleBlockEntity.BUTTON_PRESS_EVENT, 0);
         BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo();
         level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
         if (salvo.awaitingConfirmation()) {
-            // Danger close: warn, and wait for a second press to confirm.
             level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
             player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.danger_close",
                     Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
@@ -124,7 +112,7 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
                     salvo.fired(), salvo.held()), true);
     }
 
-    /** The middle lever: direct or plunging fire, for the whole computer. */
+    /** For the whole computer. */
     protected void throwLever(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
                               BallisticComputerBlockEntity computer) {
         boolean plunging = !computer.isPlungingFire();
@@ -133,7 +121,7 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
         status(player, plunging ? "mode.plunging" : "mode.direct");
     }
 
-    /** Block events reach the block entity (and, on the server, go out to clients). */
+    /** Reach the block entity, and go out to clients from the server. */
     @Override
     protected boolean triggerEvent(BlockState state, Level level, BlockPos pos, int id, int param) {
         FireMissionConsoleBlockEntity console = getBlockEntity(level, pos);

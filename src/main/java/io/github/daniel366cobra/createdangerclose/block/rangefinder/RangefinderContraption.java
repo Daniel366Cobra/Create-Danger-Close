@@ -21,23 +21,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The rangefinder tube assembled on a {@link RangefinderBearingBlockEntity}.
- *
- * <p>Extends {@link BearingContraption} so Create's controlled contraption
- * entity treats it as a bearing contraption (rotation axis, anchoring,
- * stabilization). It only ever turns in yaw: elevation is not modelled
- * physically, the optics are assumed to have elevating prisms.
- *
- * <p>A valid tube has exactly two {@link RangefinderLensBlock lenses}, looking
- * the same way, side by side on a horizontal bar across their line of sight,
- * and equally far either side of the bearing axis. Their spacing is the
- * baseline. It also has exactly one {@link RangefinderEyepieceBlock eyepiece},
- * looking the same way and centred on the bearing axis, which is the
- * operator's seat.
+ * The tube on a {@link RangefinderBearingBlockEntity}; a {@link BearingContraption} for Create's
+ * entity. Yaw only: elevation is assumed done by prisms. Two lenses facing the same way, side by side,
+ * symmetric about the bearing axis (their spacing is the baseline); one eyepiece on the axis.
  */
 public class RangefinderContraption extends BearingContraption {
 
-    // How far in front of each lens the tube itself must be clear, in blocks.
+    // Blocks of the tube itself clear in front of each lens.
     private static final int LENS_CLEARANCE = 16;
 
     private int baseline;
@@ -66,7 +56,6 @@ public class RangefinderContraption extends BearingContraption {
         return true;
     }
 
-    /** The eyepiece doubles as a Create contraption seat for the operator. */
     @Override
     public void addBlock(Level level, BlockPos pos, Pair<StructureBlockInfo, BlockEntity> capture) {
         super.addBlock(level, pos, capture);
@@ -74,10 +63,7 @@ public class RangefinderContraption extends BearingContraption {
             getSeats().add(toLocalPos(pos));
     }
 
-    /**
-     * Local positions are relative to the anchor (the block next to the
-     * bearing), so the bearing axis is local x = 0, z = 0.
-     */
+    /** Local positions are relative to the anchor, so the bearing axis is x = 0, z = 0. */
     private void validateLenses() throws AssemblyException {
         List<BlockPos> lenses = positionsOf(RangefinderLensBlock.class);
 
@@ -102,9 +88,7 @@ public class RangefinderContraption extends BearingContraption {
         if (shoulderA + shoulderB != 0)
             throw fail("lens_asymmetric", Math.abs(shoulderA), Math.abs(shoulderB));
 
-        // Nothing on the tube may stand in front of a lens. The sight line is
-        // traced through the world, which the tube's own blocks are not part
-        // of, so they would shield a lens without blocking its view.
+        // The sight trace ignores the tube's own blocks, so they must not stand in front of a lens.
         for (BlockPos lens : lenses)
             for (int distance = 1; distance <= LENS_CLEARANCE; distance++)
                 if (getBlocks().containsKey(lens.relative(facingA, distance)))
@@ -126,7 +110,6 @@ public class RangefinderContraption extends BearingContraption {
         if (getBlocks().get(eyepiece).state().getValue(RangefinderEyepieceBlock.FACING) != lensFacing)
             throw fail("eyepiece_facing");
 
-        // Centred on the bearing axis, i.e. midway between the lenses.
         if (along(eyepiece, lensFacing.getClockWise()) != 0)
             throw fail("eyepiece_offcenter");
 
@@ -169,32 +152,28 @@ public class RangefinderContraption extends BearingContraption {
         return cracked;
     }
 
-    /** Distance between the two lenses, in blocks. */
+    /** Blocks. */
     public int getBaseline() {
         return baseline;
     }
 
-    /** Line of sight in contraption-local (unrotated) coordinates. */
+    /** Local (unrotated). */
     @Nullable
     public Direction getLensFacing() {
         return lensFacing;
     }
 
-    /** Local position of the eyepiece, which is also the operator's seat. */
+    /** Also the operator's seat. */
     @Nullable
     public BlockPos getEyepiecePos() {
         return eyepiecePos;
     }
 
-    // Where the operator sits relative to Create's default seat position,
-    // in model pixels: down, and back (away from the eyepiece's line of sight).
+    // From Create's default seat, model pixels: down, and back from the line of sight.
     private static final double OPERATOR_SEAT_DOWN_PX = 3;
     private static final double OPERATOR_SEAT_BACK_PX = 4;
 
-    /**
-     * Offset from Create's default seat position to the operator's, in local
-     * (unrotated) coordinates, so it turns with the tube.
-     */
+    /** Local (unrotated), so it turns with the tube. */
     public Vec3 getOperatorSeatOffset() {
         if (lensFacing == null)
             return Vec3.ZERO;
@@ -203,16 +182,9 @@ public class RangefinderContraption extends BearingContraption {
                 .add(0, -OPERATOR_SEAT_DOWN_PX / 16, 0);
     }
 
-    // How far in front of the lens centres the operator's view sits, in blocks.
     private static final double OPERATOR_VIEW_FORWARD = 0.5;
 
-    /**
-     * Where the operator looks from: midway between the lens centres, just in
-     * front of them, in local (unrotated) coordinates. The optics relay the
-     * image to the eyepiece, so the view starts at the objectives rather than
-     * at the operator's head. Null for tubes assembled before lens positions
-     * were stored.
-     */
+    /** Midway between the lens centers, just in front: the optics relay the view from the objectives. Local. */
     @Nullable
     public Vec3 getOperatorViewPoint() {
         if (lensA == null || lensB == null || lensFacing == null)

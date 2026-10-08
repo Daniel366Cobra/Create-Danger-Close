@@ -16,34 +16,24 @@ import net.minecraft.world.phys.Vec3;
 import rbasamoyai.createbigcannons.effects.particles.plumes.BigCannonPlumeParticleData;
 import rbasamoyai.createbigcannons.ponder.CBCAnimateBlockEntityInstruction;
 
-/** Ponder scenes for the Fire Mission Console. */
 public final class FireMissionConsoleScenes {
 
     private FireMissionConsoleScenes() {}
 
-    // The first solution: traverse to the left (north-east) and elevation, in
-    // degrees, for direct fire; plunging fire on the same target is this steep.
+    // First solution: traverse left (north-east) and direct elevation; plunging on the same target.
     private static final float TRAVERSE_DEG = 40, DIRECT_DEG = 15, PLUNGING_DEG = 60;
     private static final int TRAINING_TICKS = 40;
-    // The target then moves: the gun traverses back by this much, slowly
-    // enough for an order to fire to come while it is still moving.
+    // The target moves: retrained slowly enough that an order comes mid-move.
     private static final float RETRAIN_DEG = -30;
     private static final int RETRAIN_TICKS = 80;
-    // Output network speed while training, as a multiple of its 1 RPM keep-alive.
+    // Multiple of the 1 RPM keep-alive.
     private static final float TRAINING_SPEED_FACTOR = 32;
-    // The fuze knob demonstration: this many notches early, each this many ticks.
     private static final int FUZE_DEMO_NOTCHES = 4, FUZE_NOTCH_TICKS = 2;
 
     /**
-     * Structure {@code fire_mission_console.nbt}: a 6×6 floor (the bottom
-     * layer), a cogwheel column beside it bringing power from off the scene
-     * to the battle network along z = 5. At its west end a gearbox feeds an
-     * interface facing up into the Ballistic Computer at (0, 3, 4), and a
-     * branch north to an interface facing the Fire Mission Console at
-     * (0, 1, 1). The gun is set up as in the Cannon Servo scene: servos at
-     * x = 2 (traverse, through gearboxes in the floor) and x = 4 (elevation),
-     * a cannon mount at (4, 1, 0) facing east with its cannon two blocks up,
-     * and a lever on its west side.
+     * Structure {@code fire_mission_console.nbt}: 6×6 floor, battle network along z = 5. Interfaces
+     * into the Ballistic Computer (0, 3, 4) and the console (0, 1, 1). The gun as in the Cannon Servo
+     * scene: servos x = 2 (traverse) and x = 4 (elevation), mount (4, 1, 0) facing east, lever west.
      */
     public static void fireMissionConsole(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -65,20 +55,16 @@ public final class FireMissionConsoleScenes {
                 .add(util.select().position(mount))
                 .add(util.select().position(lever));
         Selection consoleBranch = util.select().fromTo(0, 1, 2, 0, 1, 3);
-        // The cannon networks, between the servo outputs and the mount (the
-        // lower gearbox, encased shaft and gearbox under it sit in the floor layer).
+        // Servo outputs to the mount (traverse gearing in the floor layer).
         Selection cannonNetworks = util.select().fromTo(2, 1, 0, 2, 1, 2)
                 .add(util.select().fromTo(2, 0, 0, 4, 0, 0))
                 .add(util.select().fromTo(4, 1, 1, 4, 1, 2));
 
-        // The controls on the console's deck. It faces north, so its user looks
-        // south: left to right (east to west) the fuze knob, the trajectory lever
-        // and the fire button (model pixels, as the console faces).
+        // The console faces north: left to right (east to west) fuze knob, trajectory lever, fire button (model pixels).
         Vec3 fuzeKnob = onConsole(console, 12.5, 17, 7.5);
         Vec3 trajectorySwitch = onConsole(console, 8.5, 18, 7.5);
         Vec3 fireButton = onConsole(console, 3.5, 17, 7.5);
 
-        // The gun comes already assembled.
         scene.world().modifyBlock(lever, state -> state.setValue(BlockStateProperties.POWERED, true), false);
         scene.world().modifyBlock(mount, CannonAim::assembled, false);
 
@@ -91,7 +77,6 @@ public final class FireMissionConsoleScenes {
         scene.world().showSection(guns, Direction.DOWN);
         ElementLink<WorldSectionElement> cannon =
                 scene.world().showIndependentSection(util.select().fromTo(4, 3, 0, 6, 3, 0), Direction.DOWN);
-        // The cannon pivots where it sits on the mount.
         scene.world().configureCenterOfRotation(cannon, util.vector().centerOf(4, 3, 0));
         CannonAim aim = new CannonAim(scene, cannon);
         scene.idle(20);
@@ -255,7 +240,7 @@ public final class FireMissionConsoleScenes {
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 
-    /** A point on the console, in model pixels as it faces (north). */
+    /** Model pixels as it faces (north). */
     private static Vec3 onConsole(BlockPos console, double x, double y, double z) {
         return Vec3.atLowerCornerOf(console).add(x / 16, y / 16, z / 16);
     }
@@ -269,7 +254,6 @@ public final class FireMissionConsoleScenes {
                 FireMissionConsoleBlockEntity::animateButtonPress);
     }
 
-    /** The console's readiness readout, out of the scene's one gun. */
     private static void showGunsReady(CreateSceneBuilder scene, BlockPos console, int ready) {
         scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showGunsReady(ready, 1));
     }
@@ -278,16 +262,12 @@ public final class FireMissionConsoleScenes {
         scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showFuzeOffset(ticks));
     }
 
-    /**
-     * Trains the gun by these changes in traverse (to the left) and elevation,
-     * running the cannon networks fast meanwhile as the servos do. Takes
-     * {@code ticks}; texts shown just before it stay up while it moves.
-     */
+    /** Traverse (left) and elevate, running the cannon networks fast. Texts shown just before stay up meanwhile. */
     private static void train(CreateSceneBuilder scene, Selection cannonNetworks, BlockPos mount,
                               CannonAim aim,
                               float traverseDeg, float elevationDeg, int ticks) {
         scene.world().multiplyKineticSpeed(cannonNetworks, TRAINING_SPEED_FACTOR);
-        // CBC's mount yaw grows the other way round to Ponder's rotation (east is 270, north 180).
+        // CBC's mount yaw runs opposite to Ponder's rotation (east 270, north 180).
         if (traverseDeg != 0)
             scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountYaw(mount, -traverseDeg, ticks));
         if (elevationDeg != 0)

@@ -7,12 +7,7 @@ import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 
-/**
- * A module of the fire control computer: a block that adds one
- * capability to the Ballistic Computer whose bank it touches (directly, or
- * through other modules). It has no shaft; the computer finds it by scanning
- * the bank. Its block entity only animates its moving parts, on the client.
- */
+/** Adds one capability to the Ballistic Computer whose bank it touches. No shaft; client-only animation. */
 public class ComputerModuleBlock extends HorizontalFacedBlock implements IBE<ComputerModuleBlockEntity> {
 
     private final ComputerModule module;

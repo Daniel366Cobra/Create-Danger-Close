@@ -15,11 +15,7 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
-/**
- * The input half of a two-block kinetic pair, the half that is placed: its shaft faces
- * back into the input network, and its output half stands in front of it. It places the
- * output half itself, and takes it along when removed.
- */
+/** The placed half of a kinetic pair: places its output half in front and takes it along when removed. */
 public abstract class PairInputBlock<BE extends PairInputBlockEntity> extends DirectionalKineticBlock implements IBE<BE> {
 
     protected PairInputBlock(Properties properties) {

@@ -6,34 +6,25 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 /**
- * Equipment that battle can damage: it says where its vulnerable parts are, and
- * what blast and hits do to them. Finding the explosions and projectiles that
- * reach those parts is done for it (see {@code BattleDamage}), through ships'
- * poses and moving contraptions alike.
- *
- * <p>Implemented by a block entity, which registers itself with
- * {@code BattleDamage.track} once loaded on the server and unregisters when
- * removed.
+ * Equipment battle can damage: it gives its parts and what blast and hits do; {@code BattleDamage}
+ * finds what reaches them. Block entities register with {@code BattleDamage.track} on the server.
  */
 public interface BattleDamageable {
 
-    /** The level it is in, or null if it is gone (it is then dropped). */
+    /** Null if gone (then dropped). */
     @Nullable
     Level damageLevel();
 
-    /**
-     * Its parts that battle can still damage, as they stand now. A part that is
-     * already as damaged as it can get may be left out.
-     */
+    /** As they stand now; fully damaged parts may be left out. */
     List<DamagePart> damageParts();
 
     /**
-     * A blast reached a part, in line of sight.
+     * In line of sight.
      *
-     * @param severity 1 at the blast's centre, falling to 0 at the edge of its reach
+     * @param severity 1 at the center, 0 at the edge of its reach
      */
     void onBlast(DamagePart part, double severity);
 
-    /** A shell or a burst's ball passed through a part. */
+    /** A shell or a burst's ball passed through. */
     void onHit(DamagePart part);
 }

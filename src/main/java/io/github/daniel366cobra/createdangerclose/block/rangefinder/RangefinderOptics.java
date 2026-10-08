@@ -9,18 +9,14 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * Geometry shared by the server (measurement) and the client (view, readouts):
- * which tube a player operates, and where it is looking in world space.
- */
+/** Geometry shared by server and client: which tube a player operates, and where it looks. */
 public final class RangefinderOptics {
 
-    /** A world-space ray: origin between the lenses, unit direction. */
+    /** Origin between the lenses, unit direction. */
     public record Sight(Vec3 origin, Vec3 direction) {}
 
     private RangefinderOptics() {}
 
-    /** The contraption entity whose eyepiece the player is seated at, if any. */
     @Nullable
     public static AbstractContraptionEntity findOperatedContraption(@Nullable Player player) {
         if (player == null
@@ -37,10 +33,7 @@ public final class RangefinderOptics {
         return contraptionEntity != null ? (RangefinderContraption) contraptionEntity.getContraption() : null;
     }
 
-    /**
-     * The bearing carrying the operated tube. The contraption entity sits at
-     * the anchor block, one block from the bearing along its facing.
-     */
+    /** The contraption entity sits at the anchor, one block from the bearing along its facing. */
     @Nullable
     public static RangefinderBearingBlockEntity findOperatedBearing(@Nullable Player player) {
         AbstractContraptionEntity contraptionEntity = findOperatedContraption(player);
@@ -54,11 +47,7 @@ public final class RangefinderOptics {
         return player.level().getBlockEntity(bearingPos) instanceof RangefinderBearingBlockEntity bearing ? bearing : null;
     }
 
-    /**
-     * Where the operator is looking, in world coordinates. The operator's
-     * rotation is relative to the ship they are on (Sable), so it is turned
-     * into world space with the ship's orientation.
-     */
+    /** World coordinates: the operator's rotation is ship-relative (Sable), so it is turned by the ship's. */
     @Nullable
     public static Sight lineOfSight(@Nullable Player player) {
         AbstractContraptionEntity contraptionEntity = findOperatedContraption(player);
@@ -78,7 +67,7 @@ public final class RangefinderOptics {
         return new Sight(origin, direction.normalize());
     }
 
-    /** The ship the operated tube stands on, or null when not operating or not on a ship. */
+    /** Null when not operating or not on a ship. */
     @Nullable
     public static SubLevel operatedShip(@Nullable Player player) {
         AbstractContraptionEntity contraptionEntity = findOperatedContraption(player);
@@ -90,13 +79,13 @@ public final class RangefinderOptics {
         return Sable.HELPER.getContaining(player.level(), contraptionEntity.toGlobalVector(viewPoint, 1f));
     }
 
-    /** Converts a position that may lie on a ship (Sable plot) to world coordinates. */
+    /** From a Sable plot position, if on a ship. */
     public static Vec3 toWorld(Level level, Vec3 position) {
         SubLevel ship = Sable.HELPER.getContaining(level, position);
         return ship != null ? ship.logicalPose().transformPosition(position) : position;
     }
 
-    /** True bearing in degrees: 0 = north, clockwise, 90 = east. */
+    /** Degrees: 0 = north, clockwise. */
     public static double compassBearing(Vec3 direction) {
         double bearing = Math.toDegrees(Math.atan2(direction.x, -direction.z));
         return bearing < 0 ? bearing + 360 : bearing;

@@ -52,50 +52,39 @@ import java.util.List;
 import java.util.function.UnaryOperator;
 
 /**
- * Trains a rangefinder tube in yaw.
- *
- * <p>Unlike a mechanical bearing, the tube does not spin with the shaft. The
- * bearing is a stress consumer on the battle network and turns the tube
- * towards a target angle, easing in and out, at most
- * {@link #DEG_PER_TICK_PER_RPM} per network RPM per tick. The target follows
- * the operator seated at the eyepiece; with nobody seated it holds their last
- * heading (or the heading it was assembled at).
- *
- * <p>Angles are the contraption's rotation about the vertical axis, in
- * degrees relative to the heading it was assembled at.
+ * Trains a rangefinder tube in yaw. A stress consumer: the tube does not spin with the shaft but
+ * eases toward the seated operator's heading (held after they leave), at most
+ * {@link #DEG_PER_TICK_PER_RPM} per RPM. Angles are relative to the assembled heading.
  */
 public class RangefinderBearingBlockEntity extends KineticBlockEntity
         implements IBearingBlockEntity, IDisplayAssemblyExceptions, SensorReading.Provider, BattleDamageable {
 
-    // Top traverse speed: a quarter of CBC's cannon mount scale (0.0375°/tick
-    // per RPM), i.e. 6°/s at 32 RPM, 48°/s at 256 RPM.
+    // A quarter of CBC's mount scale: 6°/s at 32 RPM.
     private static final float DEG_PER_TICK_PER_RPM = 0.0375f / 4;
-    // Ticks to accelerate from rest to top speed (and to brake from it).
+    // From rest to top speed, and back.
     private static final float ACCELERATION_TICKS = 10;
-    // Client-side angle within this of the server's is kept, so the smoothly
-    // simulated motion is not snapped back on every sync.
+    // Within this of the server, the client keeps its own smooth motion.
     private static final float CLIENT_RESYNC_THRESHOLD_DEG = 2f;
 
     @Nullable protected ControlledContraptionEntity movedContraption;
     protected float angle;
     protected float prevAngle;
-    // Current traverse rate, °/tick. Ramps up and down for ease-in/ease-out.
+    // °/tick.
     protected float angularVelocity;
     protected boolean running;
     @Nullable protected AssemblyException lastException;
-    // Last heading an operator trained to. Held after they dismount, until
-    // the tube is disassembled.
+    // Held after the operator dismounts, until disassembly.
     @Nullable protected Float operatorTarget;
-    // Reticle lamp brightness: the strongest redstone signal into the bearing (0 = unlit).
+    // Strongest redstone signal into the bearing (0 = unlit).
     protected int illumination;
 
     // --- Ranging ---
-    // Tube counts as caught up with the operator's look within this, degrees.
+    // Degrees.
     private static final float ON_TARGET_DEG = 0.5f;
     // Error multiplier at the ranging threshold, falling to 1 when merged.
     private static final double UNMERGED_ERROR_FACTOR = 5;
     private static final int DUST_INTERVAL_TICKS = 20;
-    // Dust on each lens (0 clean to 1 caked), by its place in the tube's lens list. Saved, synced.
+    // 0 clean to 1 caked, by place in the tube's lens list.
     private final float[] lensDust = new float[2];
     private static final int MIN_VELOCITY_SAMPLES = 3;
 
@@ -110,9 +99,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private boolean hasVelocity;
     private float rangeRate;      // blocks per second, positive = opening
     private float bearingRate;    // degrees per second, positive = clockwise
-    // Target solution for the Ballistic Computer (server only). Outlives
-    // the operator and the readouts: fire control keeps shooting on the last
-    // good solution, extrapolated, until it goes stale.
+    // The solution (server only) outlives the operator: fire control keeps shooting on it, extrapolated, until stale.
     public static final long SOLUTION_LIFETIME_TICKS = 200;
     @Nullable private Vec3 targetPosition;
     @Nullable private Vec3 targetVelocity;
@@ -121,27 +108,22 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private double solutionSigma;
     private boolean solutionOnShip;
 
-    /** This rangefinder's role in fire control, as decided by the Ballistic Computer. */
+    /** Set by the Ballistic Computer. */
     public enum FireControlStatus {
-        /** No fire control using rangefinder data (no Ballistic Computer, or nothing ranged). */
         NONE,
-        /** In control: the guns follow this rangefinder. */
         DIRECTING,
-        /** Ranging the same target as the directing rangefinder; readings are merged. */
+    /** Same target as the directing rangefinder; readings are merged. */
         MERGED,
-        /** Another rangefinder is directing; this one's readings are not used. */
+    /** Another rangefinder is directing; readings unused. */
         STANDBY
     }
 
-    // The computer refreshes this every poll (at most every 20 ticks); without
-    // refreshes the status lapses.
+    // Refreshed every poll (at most 20 ticks), else it lapses.
     private static final long STATUS_LIFETIME_TICKS = 40;
     private FireControlStatus fireControlStatus = FireControlStatus.NONE;
     private long fireControlStatusTick;
-    // Sight stabilisation, from the sensors the computer finds on the network (refreshed
-    // and lapsing with the status): a Gimbal Sensor holds the sight against the ship's
-    // pitch and roll, a heading sensor (Navigation Table holding a Redstone Magnet) against its yaw.
-    private boolean stabilisedTilt, stabilisedYaw;
+    // From the computer's sensors: Gimbal Sensor for pitch and roll, Nav Table with a Magnet for yaw.
+    private boolean stabilizedTilt, stabilizedYaw;
 
     public RangefinderBearingBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -162,8 +144,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         if (level == null || !(getBlockState().getBlock() instanceof RangefinderBearingBlock))
             return;
 
-        // Yaw only: standing on a deck (up) or hanging under a hull (down).
-        // Either way the tube turns about the world vertical axis.
+        // Standing on a deck or hanging under a hull: either way it turns about the vertical.
         Direction facing = getBlockState().getValue(BearingBlock.FACING);
         if (facing.getAxis() != Direction.Axis.Y) {
             lastException = new AssemblyException(
@@ -223,15 +204,11 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     // --- Training ---
 
-    /**
-     * Where the tube should point, as a contraption angle: the heading of the
-     * operator who is (or last was) seated; with no operator yet, it stays put.
-     */
+    /** The heading of the seated (or last) operator; with none yet, it stays put. */
     public float getTargetAngle() {
         return operatorTarget != null ? operatorTarget : angle;
     }
 
-    /** The player seated at the eyepiece, if any. */
     @Nullable
     public Player getOperator() {
         if (movedContraption == null || !(movedContraption.getContraption() instanceof RangefinderContraption rc))
@@ -247,13 +224,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     }
 
     /**
-     * Contraption angle that points the lenses along the operator's yaw.
-     *
-     * <p>Create rotates a contraption about Y as x' = x·cos a + z·sin a,
-     * z' = z·cos a − x·sin a, which lowers a direction's Minecraft yaw by a.
-     * So lenses whose local yaw is ψ₀ look along yaw ψ at a = ψ₀ − ψ. The
-     * operator's yaw is taken as ship-relative, matching the contraption's
-     * frame (Sable carries a rider's view with the ship).
+     * Create's Y rotation lowers a direction's yaw by a, so lenses at local yaw ψ₀ look along ψ at
+     * a = ψ₀ − ψ. The operator's yaw is ship-relative (Sable carries the rider's view).
      */
     private static float angleForOperator(RangefinderContraption contraption, Player operator) {
         Direction lensFacing = contraption.getLensFacing();
@@ -261,7 +233,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return Mth.wrapDegrees(localYaw - operator.getYRot());
     }
 
-    /** Reticle lamp brightness, 0 (unlit) to 15. */
+    /** 0 (unlit) to 15. */
     public int getIllumination() {
         return illumination;
     }
@@ -282,10 +254,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 illumination = signal;
                 sendData();
             }
-            if ((fireControlStatus != FireControlStatus.NONE || stabilisedTilt || stabilisedYaw)
+            if ((fireControlStatus != FireControlStatus.NONE || stabilizedTilt || stabilizedYaw)
                     && level.getGameTime() - fireControlStatusTick > STATUS_LIFETIME_TICKS) {
                 fireControlStatus = FireControlStatus.NONE;
-                stabilisedTilt = stabilisedYaw = false;
+                stabilizedTilt = stabilizedYaw = false;
                 sendData();
             }
         }
@@ -326,7 +298,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     // --- Dust (see LensDust) ---
 
-    /** Lets the weather work on the assembled tube's lenses, once a second. */
+    /** Once a second. */
     private void tickDust() {
         if (level.getGameTime() % DUST_INTERVAL_TICKS != 0 || !CDCConfig.server().maintenance.dust.allowDust.get()
                 || movedContraption == null
@@ -363,18 +335,17 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         }
     }
 
-    /** Dust on a lens, 0 to 1, by its place in the tube's lens list. */
     public float getLensDust(int index) {
         return index >= 0 && index < lensDust.length ? lensDust[index] : 0;
     }
 
-    /** A lens's place in the assembled tube's lens list (local position), or -1. */
+    /** Local position to lens list index, or -1. */
     public int lensIndex(BlockPos lens) {
         return movedContraption != null && movedContraption.getContraption() instanceof RangefinderContraption tube
                 ? tube.getLenses().indexOf(lens) : -1;
     }
 
-    /** Wipes a lens of the assembled tube clean (local position). Returns whether it was dusty at all. */
+    /** Returns whether it was dusty at all. */
     public boolean cleanLens(BlockPos lens) {
         if (movedContraption == null || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
             return false;
@@ -387,7 +358,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return true;
     }
 
-    // An assembled tube's lenses: blast or a hit cracks them (see BattleDamage).
+    // Blast or a hit cracks lenses (see BattleDamage).
 
     @Override
     @Nullable
@@ -409,15 +380,15 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         for (BlockPos lens : tube.getLenses()) {
             if (tube.isLensCracked(lens))
                 continue;
-            Vec3 centre = RangefinderOptics.toWorld(level, tubeEntity.toGlobalVector(lens.getCenter(), 1f));
-            parts.add(new DamagePart(lens, DamagePart.PartKind.LENS, new AABB(lens), centre, worldToTube));
+            Vec3 center = RangefinderOptics.toWorld(level, tubeEntity.toGlobalVector(lens.getCenter(), 1f));
+            parts.add(new DamagePart(lens, DamagePart.PartKind.LENS, new AABB(lens), center, worldToTube));
         }
         return parts;
     }
 
     @Override
     public void onBlast(DamagePart part, double severity) {
-        if (BattleDamage.radiiFromCentre(severity) <= CDCConfig.server().battleDamage.lensCrackDistance.getF())
+        if (BattleDamage.radiiFromCenter(severity) <= CDCConfig.server().battleDamage.lensCrackDistance.getF())
             crackLens((BlockPos) part.id());
     }
 
@@ -426,7 +397,6 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         crackLens((BlockPos) part.id());
     }
 
-    /** Cracks a lens of the assembled tube (local position), from blast or a hit. */
     public void crackLens(BlockPos lens) {
         if (level == null || level.isClientSide || movedContraption == null
                 || !(movedContraption.getContraption() instanceof RangefinderContraption tube)
@@ -442,14 +412,13 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 SoundEvents.GLASS_BREAK, SoundSource.BLOCKS, 1f, 0.8f);
     }
 
-    /** Whether the tube has caught up with where it is being trained. */
     public boolean isOnTarget() {
         return Math.abs(AngleHelper.getShortestAngleDiff(angle, getTargetAngle())) < ON_TARGET_DEG;
     }
 
     // --- Ranging ---
 
-    /** From the operator's client: start (RMB pressed) or stop (released) ranging. */
+    /** From the operator's client: RMB pressed or released. */
     public void setRanging(Player player, boolean active) {
         if (player != getOperator())
             return;
@@ -472,9 +441,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
             return;
         steadiness.update(sight.direction(), isOnTarget());
 
-        // Readouts only stand while the images stay converged; once they
-        // drift apart, a fresh reading is needed. (The tracked target is kept
-        // for fire control.)
+        // Readouts stand only while the images stay converged (the tracked target is kept).
         if (hasRange && !steadiness.canRange()) {
             hasRange = hasVelocity = false;
             sendData();
@@ -513,9 +480,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         double trueRange = RangefinderOptics.toWorld(level, hit.getLocation()).distanceTo(sight.origin());
         double convergence = 1 + (UNMERGED_ERROR_FACTOR - 1)
                 * steadiness.getSeparation() / RangefinderSteadiness.RANGING_SEPARATION;
-        // Range error at best is R²·σθ / baseline (σθ the optics' angular resolution, config,
-        // in milliradians): e.g. ~5 blocks at 300 blocks with an 8-block baseline. Each cracked
-        // lens multiplies it; dust adds to it in proportion (half as dusty, half as much more).
+        // Best error R²·σθ / baseline (σθ in mrad, config). Cracked lenses multiply it; dust adds in proportion.
         CServer.Rangefinder config = CDCConfig.server().rangefinder;
         double dusty = config.dustyLensFactor.getF() - 1;
         double sigma = trueRange * trueRange * config.rangingError.getF() * 1e-3 / tube.getBaseline() * convergence
@@ -533,8 +498,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         hasRange = true;
         range = (float) toTarget.length();
 
-        // A new track (new target, or after a pause) has no velocity yet;
-        // don't lead it with the previous target's.
+        // A new track has no velocity yet: don't lead with the previous target's.
         if (tracker.getSamples() < MIN_VELOCITY_SAMPLES)
             targetVelocity = null;
 
@@ -551,14 +515,14 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         sendData();
     }
 
-    /** Everything: view state and the target solution. */
+    /** View state and the target solution. */
     private void clearRanging() {
         clearOperatorState();
         tracker.reset();
         targetPosition = targetVelocity = solutionOrigin = null;
     }
 
-    /** The operator's view state; the target solution is kept. */
+    /** View state only; the solution is kept. */
     private void clearOperatorState() {
         steadiness.reset();
         rangingActive = pendingSample = false;
@@ -566,7 +530,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         range = rangeRate = bearingRate = 0;
     }
 
-    /** Called by the Ballistic Computer on every poll. */
+    /** Every Ballistic Computer poll. */
     public void setFireControlStatus(FireControlStatus status) {
         fireControlStatusTick = level.getGameTime();
         if (status != fireControlStatus) {
@@ -579,29 +543,24 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return fireControlStatus;
     }
 
-    /** Called by the Ballistic Computer on every poll, after {@link #setFireControlStatus}. */
-    public void setStabilisation(boolean tilt, boolean yaw) {
-        if (tilt != stabilisedTilt || yaw != stabilisedYaw) {
-            stabilisedTilt = tilt;
-            stabilisedYaw = yaw;
+    /** Every Ballistic Computer poll, after {@link #setFireControlStatus}. */
+    public void setStabilization(boolean tilt, boolean yaw) {
+        if (tilt != stabilizedTilt || yaw != stabilizedYaw) {
+            stabilizedTilt = tilt;
+            stabilizedYaw = yaw;
             sendData();
         }
     }
 
-    /** Whether the sight holds steady against the ship's pitch and roll (a Gimbal Sensor on the network). */
-    public boolean isStabilisedTilt() {
-        return stabilisedTilt;
+    public boolean isStabilizedTilt() {
+        return stabilizedTilt;
     }
 
-    /** Whether the sight holds steady against the ship's yaw (a heading sensor on the network). */
-    public boolean isStabilisedYaw() {
-        return stabilisedYaw;
+    public boolean isStabilizedYaw() {
+        return stabilizedYaw;
     }
 
-    /**
-     * The target solution as a battle network reading, while it is fresh.
-     * Rangefinder readings outrank navigation tables in the Ballistic Computer.
-     */
+    /** The solution while fresh. Outranks navigation tables. */
     @Override
     public SensorReading getSensorReading() {
         if (level == null || targetPosition == null || solutionOrigin == null
@@ -632,21 +591,16 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     public float getRangeRate() { return rangeRate; }
     public float getBearingRate() { return bearingRate; }
 
-    /** Tracked target position, world space (server only). */
+    /** World space (server only). */
     @Nullable
     public Vec3 getTargetPosition() { return targetPosition; }
 
-    /**
-     * Trapezoidal motion towards the target: accelerate at a fixed rate up to
-     * the top speed, but never faster than we can still brake to a stop at
-     * the target. Top speed and acceleration both scale with network RPM.
-     */
+    /** Trapezoidal motion: accelerate up to top speed, never faster than it can brake to the target. Both scale with RPM. */
     private void stepTraining() {
         float maxSpeed = Math.abs(getSpeed()) * DEG_PER_TICK_PER_RPM;
         if (level.isClientSide)
             maxSpeed *= ServerSpeedProvider.get();
         if (maxSpeed <= 0) {
-            // No rotation, no traverse (and nothing to brake with).
             angularVelocity = 0;
             return;
         }
@@ -657,9 +611,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         float desired = Math.copySign(Math.min(maxSpeed, brakingSpeed), remaining);
         angularVelocity += Mth.clamp(desired - angularVelocity, -acceleration, acceleration);
 
-        // Arrive exactly, without overshooting past the target.
-        boolean towardsTarget = Math.signum(angularVelocity) == Math.signum(remaining);
-        if (towardsTarget && Math.abs(angularVelocity) >= Math.abs(remaining)) {
+        boolean towardTarget = Math.signum(angularVelocity) == Math.signum(remaining);
+        if (towardTarget && Math.abs(angularVelocity) >= Math.abs(remaining)) {
             angle = Mth.wrapDegrees(angle + remaining);
             angularVelocity = 0;
             return;
@@ -683,7 +636,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     @Override
     public float getInterpolatedAngle(float partialTicks) {
-        // Renderers pass (partialTicks - 1), i.e. -1 = last tick, 0 = this tick.
+        // Renderers pass partialTicks - 1: -1 is last tick, 0 this tick.
         if (!running)
             return angle;
         return AngleHelper.angleLerp(partialTicks + 1, prevAngle, angle);
@@ -760,8 +713,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         compound.putFloat("RangeRate", rangeRate);
         compound.putFloat("BearingRate", bearingRate);
         compound.putInt("FireControlStatus", fireControlStatus.ordinal());
-        compound.putBoolean("StabilisedTilt", stabilisedTilt);
-        compound.putBoolean("StabilisedYaw", stabilisedYaw);
+        compound.putBoolean("StabilizedTilt", stabilizedTilt);
+        compound.putBoolean("StabilizedYaw", stabilizedYaw);
         if (operatorTarget != null)
             compound.putFloat("OperatorTarget", operatorTarget);
         AssemblyException.write(compound, registries, lastException);
@@ -792,8 +745,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         int statusOrdinal = compound.getInt("FireControlStatus");
         fireControlStatus = statusOrdinal >= 0 && statusOrdinal < statuses.length
                 ? statuses[statusOrdinal] : FireControlStatus.NONE;
-        stabilisedTilt = compound.getBoolean("StabilisedTilt");
-        stabilisedYaw = compound.getBoolean("StabilisedYaw");
+        stabilizedTilt = compound.getBoolean("StabilizedTilt");
+        stabilizedYaw = compound.getBoolean("StabilizedYaw");
         operatorTarget = compound.contains("OperatorTarget") ? compound.getFloat("OperatorTarget") : null;
         lastException = AssemblyException.read(compound, registries);
         super.read(compound, registries, clientPacket);

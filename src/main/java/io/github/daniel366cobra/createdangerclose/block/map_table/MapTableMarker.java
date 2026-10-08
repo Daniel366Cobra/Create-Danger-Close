@@ -30,33 +30,24 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Markers on a map table's stitched sheet, drawn with vanilla's map
- * decoration sprites: the designated target (a red X), and, once the table is
- * on a battle network, the "you are here" marker for the table and the ship
- * carrying it. On the sheet it is an arrow pointing the way the table's north edge
- * faces in the world, so it turns as the ship turns. Off the sheet it becomes a
- * dot pinned to the nearest edge: large while within 256 map pixels of the
- * sheet, small further out, as vanilla maps do for players.
+ * Markers on a map table's sheet, in vanilla's decoration sprites: the target (red X) and, on a
+ * battle network, the table's own arrow, turning with the ship. Off the sheet it becomes a dot on
+ * the nearest edge, large within 256 map pixels, as vanilla does for players.
  */
 public final class MapTableMarker {
 
-    // Vanilla: players up to 320 map pixels from a map's centre (256 past its edge) get the large dot.
+    // Vanilla: within 320 map pixels of a map's center (256 past its edge).
     private static final float NEAR_OFF_SHEET_PIXELS = 256;
 
     /**
-     * @param x, y  position on the sheet as a fraction of its width, north-west = (0, 0)
-     * @param yaw   Minecraft yaw of the arrow in degrees (0 = south, 90 = west)
+     * @param x, y  fraction of the sheet's width, north-west = (0, 0)
+     * @param yaw   degrees (0 = south, 90 = west)
      */
     public record Marker(Holder<MapDecorationType> type, float x, float y, float yaw) {}
 
     private MapTableMarker() {}
 
-    /**
-     * The table's own position marker: on a ship an arrow showing the ship's
-     * heading, in the world a blue banner. Off the sheet, either becomes a large or
-     * small circle at its edge. Null if the table is not on a battle network, none
-     * of its maps are loaded, or they show another dimension.
-     */
+    /** Ship heading arrow, or a banner ashore; off-sheet dots. Null without a network, loaded maps, or in another dimension. */
     @Nullable
     public static Marker computeOwn(MapTableBlockEntity controller) {
         Level level = controller.getLevel();
@@ -66,7 +57,6 @@ public final class MapTableMarker {
         int width = controller.getWidth();
         float sheetPixels = (float) sheet.sizeInPixels();
 
-        // The middle of the table, and the way its north edge faces, in the world.
         BlockPos origin = controller.getBlockPos();
         Vec3 position = new Vec3(origin.getX() + width / 2.0, origin.getY() + 1, origin.getZ() + width / 2.0);
         Vec3 north = new Vec3(0, 0, -1);
@@ -79,8 +69,7 @@ public final class MapTableMarker {
         float px = (float) sheet.pixelX(position.x);
         float py = (float) sheet.pixelY(position.z);
         if (px >= 0 && py >= 0 && px <= sheetPixels && py <= sheetPixels) {
-            // A table in the world (a fort's plotting room) has no heading to show: a pin.
-            // The Ponder chart keeps the ship's arrow, as its scene describes a ship.
+            // Ashore there is no heading: a pin. The Ponder chart keeps the arrow, as its scene is a ship.
             if (ship == null && controller.getPonderChart() == null)
                 return new Marker(MapDecorationTypes.BLUE_BANNER, px / sheetPixels, py / sheetPixels, 0);
             float yaw = (float) Math.toDegrees(Math.atan2(-north.x, north.z));
@@ -94,11 +83,7 @@ public final class MapTableMarker {
                 Mth.clamp(py, 0, sheetPixels) / sheetPixels, 0);
     }
 
-    /**
-     * The designated target as a red X, or null if there is none or it lies
-     * off the sheet (the maps under it were taken away). Shown whether or not
-     * the table is on a network: without one it is just a memo.
-     */
+    /** Null if none, or off the sheet. Shown without a network too, as a memo. */
     @Nullable
     public static Marker computeTarget(MapTableBlockEntity controller) {
         Vec3 target = controller.getTarget();
@@ -112,12 +97,7 @@ public final class MapTableMarker {
         return new Marker(MapDecorationTypes.RED_X, (float) u, (float) v, 0);
     }
 
-    /**
-     * Spotters: players carrying a copy of one of the table's maps, as green
-     * arrows. Vanilla already tracks them as the map's player markers (and a
-     * spotter holding the copy keeps its pixels up to date). Only on a table on
-     * a battle network, and only while they are within the map they carry.
-     */
+    /** Players carrying a copy of a table map (vanilla's player markers), on a networked table, while within that map. */
     public static List<Marker> computeSpotters(MapTableBlockEntity controller) {
         Level level = controller.getLevel();
         if (level == null || !controller.isLinked())
@@ -137,7 +117,7 @@ public final class MapTableMarker {
                 for (MapDecoration decoration : data.getDecorations()) {
                     if (decoration.type().value() != MapDecorationTypes.PLAYER.value())
                         continue;
-                    // Decoration positions are in half pixels from the map's centre; rotation in 16ths of a turn.
+                    // Decoration positions are in half pixels from the map's center; rotation in 16ths of a turn.
                     float px = dx * 128 + decoration.x() / 2f + 64;
                     float py = dz * 128 + decoration.y() / 2f + 64;
                     spotters.add(new Marker(MapDecorationTypes.FRAME, px / sheetPixels, py / sheetPixels,
@@ -148,10 +128,7 @@ public final class MapTableMarker {
         return spotters;
     }
 
-    /**
-     * Rangefinder aim points from the computer's plot, as white X's. Only on the
-     * sheet; the plot is empty unless the table is on a battle network.
-     */
+    /** Rangefinder aim points from the plot, on the sheet only. */
     public static List<Marker> computeFixes(MapTableBlockEntity controller) {
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         if (sheet == null)
@@ -166,10 +143,7 @@ public final class MapTableMarker {
         return fixes;
     }
 
-    /**
-     * All markers on the table, bottom to top: rangefinder aim points, the
-     * designated target, spotters, and the ship's own marker.
-     */
+    /** Bottom to top: aim points, target, spotters, own marker. */
     public static List<Marker> computeAll(MapTableBlockEntity controller) {
         List<Marker> markers = new ArrayList<>(computeFixes(controller));
         Marker target = computeTarget(controller);
@@ -183,11 +157,9 @@ public final class MapTableMarker {
     }
 
     /**
-     * Draws the marker onto a sheet spanning (0, 0)–(sheetSize, sheetSize) of the
-     * current pose, north at the top (low y), laid out like the maps themselves.
+     * Draws onto a sheet spanning (0, 0)–(sheetSize, sheetSize), north at low y.
      *
-     * @param size  the marker's width in pose units
-     * @param lift  offset along the pose's z axis, to sit in front of the maps
+     * @param lift  along the pose's z, in front of the maps
      */
     public static void render(PoseStack pose, MultiBufferSource buffers, Marker marker, float sheetSize,
                               float size, float lift, int packedLight) {
@@ -198,7 +170,7 @@ public final class MapTableMarker {
         pose.translate(marker.x() * sheetSize, marker.y() * sheetSize, lift);
         pose.mulPose(Axis.ZP.rotationDegrees(marker.yaw()));
         pose.scale(size / 2, size / 2, 1);
-        // Same quad as vanilla's map decorations, so the sprite points the same way.
+        // Vanilla's decoration quad, so the sprite points the same way.
         Matrix4f matrix = pose.last().pose();
         VertexConsumer consumer = buffers.getBuffer(RenderType.text(sprite.atlasLocation()));
         consumer.addVertex(matrix, -1, 1, 0).setColor(-1).setUv(sprite.getU0(), sprite.getV0()).setLight(packedLight);

@@ -12,21 +12,14 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 
-/**
- * Seats the rangefinder operator at a custom spot on the eyepiece instead of
- * Create's default seat position.
- */
+/** Seats the rangefinder operator at a custom spot on the eyepiece. */
 @Mixin(value = AbstractContraptionEntity.class, remap = false)
 public abstract class AbstractContraptionEntityMixin {
 
     @Shadow
     protected Contraption contraption;
 
-    /**
-     * The seat's local position, just before Create converts it to world
-     * coordinates. Ordinal 1 is the seated-passenger branch (0 is the one for
-     * contraptions mounted on other contraptions).
-     */
+    /** The seat's local position before conversion to world. Ordinal 1: the seated-passenger branch. */
     @ModifyArg(method = "getPassengerPosition",
             at = @At(value = "INVOKE",
                     target = "Lcom/simibubi/create/content/contraptions/AbstractContraptionEntity;toGlobalVector(Lnet/minecraft/world/phys/Vec3;F)Lnet/minecraft/world/phys/Vec3;",

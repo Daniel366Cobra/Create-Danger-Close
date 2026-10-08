@@ -70,35 +70,23 @@ import static io.github.daniel366cobra.createdangerclose.foundation.sensor.Servo
 import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.SWIVEL;
 
 /**
- * The Ballistic Computer: the core of the fire control computer, which works
- * out the firing solutions.
+ * Core of the fire control computer. A facing Battle Network Interface drives each poll
+ * ({@link #pollFrom}); when it stops, the computer goes idle.
  *
- * <p>It is not a kinetic block. A Battle Network Interface facing it connects
- * it to the battle network: each time that interface polls, it drives one
- * poll of the computer ({@link #pollFrom}), which reads the sensors and
- * servos on the interface's network. When the interface stops, the link
- * lapses and the computer goes idle.
- *
- * <p>Sensors on the battle network act as <em>gates</em>: they decide which
- * capabilities the computer has, but their readings are not fed into the math.
- * The actual orientation, position and velocity come straight from the Sable
- * sublevel pose of each mount, which is what the sensors derive their own
- * readings from anyway. The only sensor value that is used is the target
- * position from a navigation table, which the pose cannot provide.
+ * <p>Sensors only gate capabilities. Orientation, position and velocity come from the Sable
+ * pose; the only sensor value read is a navigation table's target.
  */
 public class BallisticComputerBlockEntity extends SmartBlockEntity
         implements IHaveGoggleInformation {
 
-    // The link to the interface lapses this long after its last poll
-    // (a powered interface polls at least every 20 ticks).
+    // A powered interface polls at least every 20 ticks.
     private static final int LINK_TIMEOUT_TICKS = 40;
 
     // The network interface driving this computer (server only), and when it last polled.
     @Nullable private BlockPos linkedInterface;
     private long lastLinkTick;
 
-    // Without an Integrator, a rangefinder solution lapses this soon after its
-    // last reading (two polls at the slowest poll rate, so it does not flicker).
+    // Without an Integrator: two polls at the slowest rate, so it does not flicker.
     private static final int UNHELD_SOLUTION_LIFETIME_TICKS = 40;
 
     // --- Module gates: what is in the bank around this computer ---
@@ -106,28 +94,21 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Another Ballistic Computer touches this one's modules: neither works.
     private boolean bankConflict = false;
 
-    // Trajectory: the flat arc (direct fire, default) or the steep arc
-    // (plunging fire). Set from Fire Mission Consoles; the last flip wins.
+    // Set from Fire Mission Consoles; the last flip wins.
     private boolean plungingFire = false;
-    // Fuze correction added to every timed fuze it sets, ticks (negative bursts
-    // early, positive late), and the game time it was set at a Fire Mission
-    // Console: of several consoles, the most recently set one wins.
+    // Added to timed fuzes, ticks (negative bursts early). The most recently set console wins.
     private int fuzeOffsetTicks = 0;
     private long fuzeOffsetSetTick = Long.MIN_VALUE;
-    // The same for the autocannons, set at an Autocannon Control Console: rounds and shells
-    // are corrected apart, each by its own console's knob.
+    // Autocannons are corrected apart, from the Autocannon Control Console.
     private int autocannonFuzeOffsetTicks = 0;
     private long autocannonFuzeOffsetSetTick = Long.MIN_VALUE;
-    // Shortest fuze it sets, ticks: a fuze set to burst at once would go off in the barrel.
+    // A fuze of 0 would go off in the barrel.
     private static final int MIN_FUZE_TICKS = 1;
-    // Re-solves from the muzzle where the last solve aimed the barrel: each pass
-    // shrinks the launch point's error roughly by the change in aim, so two settle it.
+    // Each pass from the last aim's muzzle shrinks the launch point error; two settle it.
     private static final int MUZZLE_REFINEMENT_PASSES = 2;
-    // The frame of a gun ashore: the world itself.
     private static final Quaterniondc WORLD_FRAME = new Quaterniond();
 
-    // Per mount (server only): each gun as its pitch servo read it last poll, for
-    // the firing interlock: where its barrel points, in the frame it stands in.
+    // Each gun's barrel as last read, for the firing interlock.
     private final Map<BlockPos, ServoStatus.MountSnapshot> barrels = new HashMap<>();
     // The swivel bearings on the network this poll, by the sub-level their plate carries.
     private final Map<UUID, Joint> jointByPlate = new HashMap<>();
@@ -141,8 +122,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private static final double PARALLEL_AXES_COS = 0.98;
     // A barrel this close to a bearing's axis (squared sine) cannot be swung by it.
     private static final double ALONG_AXIS_SQ = 1e-4;
-    // The computer's health record, and the bias its jostled cabinets and interfaces add to
-    // every aim (degrees; found anew each poll).
+    // Bias from jostled cabinets and interfaces, degrees, added to every aim.
     private EquipmentHealth health;
     private float bankBiasYaw, bankBiasPitch;
     // Per gun riding bearings laid for another gun: its range to the target, blocks.
@@ -155,14 +135,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
     }
 
-    // Autocannons this computer has set firing, and when a console last ordered them to fire:
-    // with no order for a moment (trigger released, weapons free off) they cease fire.
+    // Autocannons set firing; with no console order for a moment they cease fire.
     private final Set<BlockPos> autocannonsFiring = new HashSet<>();
     private long autocannonOrderTick;
     private static final int AUTOCANNON_ORDER_TIMEOUT_TICKS = 2;
 
-    // Danger close (server): the guns whose shells would land near our own side this poll,
-    // where our own side stands (world), and when a warned salvo was armed (-1: not armed).
+    // Danger close: guns that would land near our own side, where our side stands, and when a warned salvo was armed.
     private final Set<BlockPos> dangerCloseGuns = new HashSet<>();
     private final List<Vec3> friendlies = new ArrayList<>();
     private long dangerArmedTick = -1;
@@ -171,12 +149,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private int gimbalCount = 0;
     private int navHeadingCount = 0;
     private int altitudeCount = 0;
-    // Velocity sensors per ship axis (X, Y, Z). Sensors on an axis that is
-    // already covered are redundant: they count, but add no capability.
+    // Per ship axis (X, Y, Z); extra sensors on a covered axis add nothing.
     private final int[] velocityAxisCounts = new int[3];
 
-    // Whether any gun it directs is on a ship (synced): only those need attitude and
-    // velocity sensors; guns ashore aim in the world's own frame.
+    // Only guns on a ship need attitude and velocity sensors.
     private boolean directsShipGuns = false;
 
     // --- Target: rangefinder solution > map table > navigation table ---
@@ -193,76 +169,63 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private double targetVelX = 0;
     private double targetVelY = 0;
     private double targetVelZ = 0;
-    // Age and 1σ range error of the rangefinder reading, for the tooltip.
     private long targetAgeTicks = 0;
-    // When the directing rangefinder took its reading (server), for telling a live target from a held one.
+    // For telling a live target from a held one.
     private long targetSampleTick;
     private double targetSigma = 0;
-    // How many rangefinders' readings went into the target (1 = just the directing one).
     private int mergedRangefinders = 0;
 
-    // Rangefinder in control of the guns (bearing position, server only). It
-    // keeps control until its solution goes stale, so a second manned
-    // rangefinder cannot yank the guns to a different target.
+    // Keeps control until its solution goes stale, so a second rangefinder cannot yank the guns away.
     @Nullable private BlockPos directingRangefinder;
-    // Solutions within this many combined standard deviations of the
-    // directing one are the same target and get merged...
+    // Solutions within this many combined sigmas of the directing one are merged...
     private static final double MERGE_SIGMAS = 3;
-    // A navigation table's target is a block position: within half a block, a
-    // standard deviation of 1 / √12 blocks.
+    // A block position: uniform within half a block.
     private static final double NAV_TARGET_SIGMA = 1 / Math.sqrt(12);
     // ...with at least this much tolerance, blocks.
     private static final double MIN_MERGE_DISTANCE = 4;
 
-    // For map tables (server only): the rangefinder fixes and gun ranges of the last poll.
+    // For map tables: the last poll's rangefinder fixes and gun ranges.
     private BattlePlot plot = BattlePlot.EMPTY;
     private List<BattlePlot.RangefinderFix> plotFixes = List.of();
 
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new HashMap<>();
-    // Which of those lines are autocannons' (synced): each console lists only its own guns.
+    // Each console lists only its own guns.
     private final Set<BlockPos> autocannonReports = new HashSet<>();
 
-    // Ship-frame solution per mount position, shared by its pitch and yaw servos.
+    // Shared by a mount's pitch and yaw servos.
     private final Map<BlockPos, FireSolution> aimCache = new HashMap<>();
 
-    // Last commanded angles per mount, for estimating how fast they change.
+    // Last commanded angles, for feed-forward rates.
     private record AimSample(double pitchDeg, double yawDeg, long tick, double pitchRate, double yawRate) {}
     private final Map<BlockPos, AimSample> aimHistory = new HashMap<>();
-    // Longest poll gap to still estimate a rate over (poll interval is at most 20 ticks).
+    // Poll interval is at most 20 ticks.
     private static final long MAX_RATE_SAMPLE_GAP = 40;
-    // Faster apparent motion than this is a jump between solutions, not tracking.
+    // Faster is a jump between solutions, not tracking.
     private static final double MAX_RATE_DEG_PER_TICK = 2.0;
     private static final double RATE_SMOOTHING = 0.5;
-    // Last commanded angle per driven swivel bearing, the same way: a turret laid on a moving
-    // target would otherwise trail it by its angular rate over the servo's correction gain.
-    // Kept per gun it is laid for and per elevation sense, since a change of either jumps the angle.
+    // The same for driven swivel bearings, per director gun and elevation sense (a change of either jumps the angle).
     private record JointSample(double angleDeg, long tick, double rate, BlockPos director, int sense) {}
     private final Map<BlockPos, JointSample> jointHistory = new HashMap<>();
 
     private boolean isPowered = false;
 
     // --- Front panel ---
-    // Server-computed readings, synced (all zero without a target): the target's
-    // bearing clockwise from the computer's front (degrees); its horizontal range
-    // (blocks), and that range as a fraction of the first gun's reach; the first
-    // gun's elevation solution (degrees).
+    // Synced readings (zero without a target): bearing clockwise from the front, horizontal range,
+    // range as a fraction of the first gun's reach, and its elevation.
     private float panelBearingDeg;
     private float panelRange;
     private float panelRangeFraction;
     private float panelElevationDeg;
-    // ...and the fuze time set for it, ticks: time of flight plus the fuze correction.
+    // Time of flight plus the fuze correction.
     private int panelFuzeTicks;
-    // Also synced, for the modules: the battle network's speed (RPM, 0 unpowered); the
-    // ship's own speed as the velocity sensors see it (blocks per second, 0 without an
-    // Integrator); and how long the target is still held (ticks left, out of a lifetime,
-    // as of a game time), which the client counts down between syncs if the target ages.
+    // For the modules. The hold is counted down on the client between syncs.
     private float panelNetworkRpm;
     private float panelOwnSpeed;
     private long panelHoldLeftTicks;
     private long panelHoldLifetimeTicks = 1;
     private long panelHoldStampTick;
     private boolean panelHoldAges;
-    // Client only: the panel's needle, counter, cam and follower ease towards the readings.
+    // Client only.
     private final LerpedFloat bearingNeedle = LerpedFloat.angular().startWithValue(0);
     private final LerpedFloat rangeCounter = LerpedFloat.linear().startWithValue(0);
     private final LerpedFloat camAngle = LerpedFloat.angular().startWithValue(0);
@@ -280,12 +243,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 .sharingLubricationWith(() -> ComputerBank.lubricationGroup(level, worldPosition)));
     }
 
-    /**
-     * The battle network: that of the interface driving this computer. Looked
-     * up fresh on every use: Create replaces the {@link KineticNetwork}
-     * instance when a network loses and regains its source, so a cached
-     * reference goes stale.
-     */
+    /** Looked up on every use: Create replaces the network instance when it loses and regains its source. */
     @Nullable
     private KineticNetwork battleNetwork() {
         if (level == null || linkedInterface == null
@@ -295,10 +253,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Called by a powered network interface facing this computer, each time
-     * it polls: links the computer to that interface's network and runs one
-     * poll. Only one interface can drive a computer; a second one is turned
-     * away while the first is still polling.
+     * Called by a powered facing interface each time it polls. A second interface is turned away
+     * while the first still polls.
      *
      * @return whether this interface is the one driving the computer
      */
@@ -326,13 +282,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return true;
     }
 
-    /** Rescans the bank each poll: it is at most a handful of blocks, and needs no bookkeeping. */
+    /** Rescanned each poll: a handful of blocks, no bookkeeping needed. */
     private void scanBank() {
         ComputerBank.Scan scan = ComputerBank.scan(level, worldPosition);
         modules.clear();
         modules.addAll(scan.modules());
         bankConflict = scan.cores().size() > 1;
-        // Every jostled cabinet throws the computation off a little: their biases add up.
         bankBiasYaw = 0;
         bankBiasPitch = 0;
         for (BlockPos member : scan.members()) {
@@ -362,16 +317,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Fires every gun that is ready: it has a firing solution, and its barrel
-     * has settled on it (within the on-target tolerance, whatever turns it; a gun riding
-     * bearings laid for another gun, within the salvo spread of the target: config). The rest hold fire.
-     * Uses the last poll's solutions and barrel angles.
+     * Fires every gun with a solution whose barrel has settled on it (or, riding bearings laid for
+     * another gun, within the salvo spread). The rest hold fire. Uses the last poll.
      */
     public SalvoResult fireSalvo() {
         if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
             return new SalvoResult(0, 0);
-        // Danger close: a gun about to fire would land near our own side. The first press only
-        // warns; a second within the confirmation window fires.
+        // Danger close: the first press only warns; a second within the window fires.
         CServer.DangerClose dangerConfig = CDCConfig.server().dangerClose;
         boolean danger = false;
         for (BlockPos mountPos : dangerCloseGuns)
@@ -417,11 +369,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new SalvoResult(ready, total - ready);
     }
 
-    /**
-     * Fires every autocannon on target, one round each as its breech allows (called every
-     * tick while firing; the breech keeps its own rate). Danger-close ones only once
-     * confirmed. Returns how many fired.
-     */
+    /** Fires every autocannon on target, called every tick while firing. Danger-close ones only once confirmed. */
     public int fireAutocannons(boolean dangerCloseConfirmed) {
         if (!(level instanceof ServerLevel serverLevel))
             return 0;
@@ -465,11 +413,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             setAutocannonFiring(serverLevel, mountPos, false);
     }
 
-    /**
-     * Whether the target is being ranged right now (server): a rangefinder's reading no older
-     * than two of its intervals (readings, like polls, come at the network's pace), or a map or
-     * navigation table's target, which stands. Not a solution the Integrator is only holding.
-     */
+    /** A rangefinder reading no older than two intervals, or a map/nav table target. Not an Integrator hold. */
     public boolean isTargetLive() {
         if (!hasTarget || level == null)
             return false;
@@ -501,11 +445,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return count;
     }
 
-    /**
-     * Whether this gun's barrel actually points along its solution (last poll):
-     * the angle between the two directions, whatever turns the barrel (its mount,
-     * a turret, or the ship steering onto the bearing).
-     */
+    /** Whether the barrel points along its solution, whatever turns it. */
     private boolean isOnTarget(BlockPos mountPos) {
         FireSolution solution = aimCache.get(mountPos);
         ServoStatus.MountSnapshot barrel = barrels.get(mountPos);
@@ -516,9 +456,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 : aimDirection(barrel.currentAngle(), barrel.mountYaw());
         Vector3d wanted = aimDirection(solution.pitchDeg(), solution.yawDeg());
         double off = pointing.angle(wanted);
-        // A gun riding bearings laid for another gun (side by side on one cradle) fires when its
-        // shell would land within the salvo spread: about the guns' spacing, which no bearing
-        // can take out of both at once.
+        // A gun riding bearings laid for another fires when its shell lands within the salvo spread.
         CServer.FireControl config = CDCConfig.server().fireControl;
         if (Math.toDegrees(off) <= config.onTargetTolerance.getF())
             return true;
@@ -526,11 +464,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return range != null && off * range <= config.salvoSpread.getF();
     }
 
-    /**
-     * Takes a console's fuze correction, if it was set more recently than the one in use
-     * (server): a Fire Mission Console's for the big cannons, an Autocannon Control
-     * Console's for the autocannons.
-     */
+    /** Takes a console's fuze correction if it was set more recently than the one in use. */
     public void offerFuzeOffset(int ticks, long setTick, boolean autocannons) {
         long inUseTick = autocannons ? autocannonFuzeOffsetSetTick : fuzeOffsetSetTick;
         int inUse = autocannons ? autocannonFuzeOffsetTicks : fuzeOffsetTicks;
@@ -558,15 +492,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return Math.max(MIN_FUZE_TICKS, timeOfFlightTicks + fuzeOffset(autocannon));
     }
 
-    /**
-     * The delay for delayed impact and inertia fuzes, ticks: the fuze correction
-     * itself (they count from impact, not launch), never below none.
-     */
+    /** Delay for delayed impact and inertia fuzes: they count from impact, so the correction alone. */
     private int impactDelay(boolean autocannon) {
         return Math.max(0, fuzeOffset(autocannon));
     }
 
-    /** Whether the bank has this module, i.e. the computer has its capability. */
     public boolean has(ComputerModule module) {
         return modules.contains(module);
     }
@@ -672,10 +602,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         panelRange = (float) Math.hypot(targetX - here.x, targetZ - here.z);
         double reach = plot.guns().isEmpty() ? 0 : plot.guns().get(0).radius();
         panelRangeFraction = reach > 0 ? (float) Mth.clamp(panelRange / reach, 0, 1) : 0;
-        // The panel follows one gun, chosen so it does not hop between guns: a big cannon (the
-        // lowest-placed of those), else an autocannon, for an anti-aircraft-only network. Its
-        // fuze is shown with its own kind's correction (autocannon fuzes are, notionally, also
-        // set at the Autocannon Control Console's own flak fuze setter).
+        // The panel follows one gun so it does not hop: the lowest big cannon, else an autocannon.
         BallisticSolver.Result bigCannon = panelSolution(false);
         boolean autocannon = bigCannon == null;
         BallisticSolver.Result shown = autocannon ? panelSolution(true) : bigCannon;
@@ -693,7 +620,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 .orElse(null);
     }
 
-    /** Eases the panel's moving parts towards the synced readings (client). */
+    /** Eases the panel's moving parts toward the synced readings (client). */
     private void tickPanel() {
         // Broken or seized: the dials stand frozen where they stopped.
         if (health.isOutOfOrder()) {
@@ -711,28 +638,25 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         camFollower.tickChaser();
     }
 
-    /** Target bearing on the dial, degrees clockwise from the computer's front (client). */
+    /** Degrees clockwise from the computer's front (client). */
     public float getBearingNeedle(float partialTicks) {
         return bearingNeedle.getValue(partialTicks);
     }
 
-    /** Horizontal range to the target shown on the counter, blocks (client). */
     public float getRangeCounter(float partialTicks) {
         return rangeCounter.getValue(partialTicks);
     }
 
-    /** Ballistic cam turn: the panel gun's elevation (a big cannon, else an autocannon), degrees (client). */
+    /** The panel gun's elevation, degrees (client). */
     public float getCamAngle(float partialTicks) {
         return camAngle.getValue(partialTicks);
     }
 
-    /** The fuze time set for the panel gun (time of flight plus its correction), ticks; 0 without one (client). */
     public int getFuzeTicks() {
         return panelFuzeTicks;
     }
 
-    /** The battle network's speed, RPM; 0 while unpowered (client). */
-    /** Ponder only: the network speed its modules' mechanisms show (there is no real network there). */
+    /** Ponder only: there is no real network there. */
     public void setPonderNetworkRpm(float rpm) {
         panelNetworkRpm = rpm;
     }
@@ -741,15 +665,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return panelNetworkRpm;
     }
 
-    /** The ship's own speed as the velocity sensors see it, blocks per second; 0 without an Integrator (client). */
     public float getOwnSpeed() {
         return panelOwnSpeed;
     }
 
-    /**
-     * How much of the target's hold is left, 1 (fresh, or a target that
-     * does not age) to 0 (expired, or no target), counted down between syncs (client).
-     */
+    /** 1 (fresh, or a target that does not age) to 0 (expired), counted down between syncs (client). */
     public float getHoldLeft(float partialTicks) {
         if (level == null)
             return 0;
@@ -759,7 +679,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return Mth.clamp((panelHoldLeftTicks - Math.max(0, elapsed)) / panelHoldLifetimeTicks, 0, 1);
     }
 
-    /** Cam follower travel: the range as a fraction of the first gun's reach (client). */
+    /** The range as a fraction of the first gun's reach (client). */
     public float getCamFollower(float partialTicks) {
         return camFollower.getValue(partialTicks);
     }
@@ -783,9 +703,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 rangefinders.add(rangefinder);
                 friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(rangefinder.getBlockPos())));
             }
-            // Every crew station (a console, a map table, a sensor) is reached through an
-            // interface: where the interfaces are, people stand. And a map table's maps say
-            // where friendlies carrying them are.
+            // Where interfaces are, crew stand. A map table's maps also mark friendlies carrying them.
             if (member instanceof NetworkInterfaceBlockEntity station) {
                 friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(station.getBlockPos())));
                 MapTableBlockEntity table = station.getFacedMapTable();
@@ -794,8 +712,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             }
             if (!(member instanceof SensorReading.Provider provider)) continue;
 
-            // A jostled interface reading the ship's attitude, or driving the computer, skews
-            // every aim as a jostled cabinet does.
+            // A jostled interface reading attitude or driving the computer skews every aim too.
             if (member instanceof NetworkInterfaceBlockEntity networkInterface
                     && (provider.getSensorReading() instanceof SensorReading.Gimbal
                     || provider.getSensorReading() instanceof SensorReading.NavHeading
@@ -864,7 +781,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : pos.equals(directingRangefinder) ? FireControlStatus.DIRECTING
                     : merged.contains(pos) ? FireControlStatus.MERGED
                     : FireControlStatus.STANDBY);
-            rangefinder.setStabilisation(gimbalCount > 0, navHeadingCount > 0);
+            rangefinder.setStabilization(gimbalCount > 0, navHeadingCount > 0);
         }
 
         // Players carrying one of the plotted maps: plotted friendlies.
@@ -889,17 +806,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return age >= 0 && age <= solutionLifetimeTicks();
     }
 
-    /** How long a rangefinder solution stays usable: without an Integrator nothing holds it between readings. */
+    /** Without an Integrator nothing holds a solution between readings. */
     private long solutionLifetimeTicks() {
         return has(ComputerModule.INTEGRATOR)
                 ? RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS : UNHELD_SOLUTION_LIFETIME_TICKS;
     }
 
-    /**
-     * A reading carried forward to now on its tracked velocity. That takes
-     * both the Differentiator (the velocity) and the Integrator (carrying it
-     * forward); otherwise the reading stays where it was measured.
-     */
+    /** Carried forward on its tracked velocity: takes both a Differentiator and an Integrator. */
     private Vector3d extrapolate(SensorReading.Rangefinder reading) {
         long age = level.getGameTime() - reading.sampleTick();
         Vector3d position = new Vector3d(reading.hitWorldPos().x, reading.hitWorldPos().y, reading.hitWorldPos().z);
@@ -909,17 +822,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Picks the target from the fresh rangefinder solutions; any of them
-     * takes over from navigation tables.
-     *
-     * <p>Control: the directing rangefinder keeps control while its solution
-     * is fresh; otherwise the freshest solution takes over. Merging: other
-     * solutions on the same target (within {@link #MERGE_SIGMAS} combined
-     * standard deviations) are averaged in, weighted by 1/σ², which gives a
-     * better fix than any single rangefinder.
-     *
-     * <p>The target is carried forward to now on its tracked velocity, so the
-     * guns keep leading it between readings.
+     * The directing rangefinder keeps control while fresh; otherwise the freshest takes over. Others
+     * on the same target (within {@link #MERGE_SIGMAS}) are averaged in, weighted by 1/σ².
      *
      * @return positions of the rangefinders merged into the directing one's solution
      */
@@ -987,27 +891,21 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     // --- Gates ---
 
-    /** Gimbal (tilt) and magnet navigation table (heading) are both present. */
     public boolean hasOrientationSensors() {
         return gimbalCount > 0 && navHeadingCount > 0;
     }
 
-    /** Number of distinct ship axes covered by at least one velocity sensor. */
     public int velocityAxesCovered() {
         int n = 0;
         for (int count : velocityAxisCounts) if (count > 0) n++;
         return n;
     }
 
-    /** Full 3D velocity is known only with sensors on all three ship axes. */
     public boolean hasFullVelocity() {
         return velocityAxesCovered() == 3;
     }
 
-    /**
-     * Ship-frame mask for the velocity the computer may compensate for: 1 on
-     * axes covered by a velocity sensor, 0 elsewhere.
-     */
+    /** 1 on ship axes covered by a velocity sensor, 0 elsewhere. */
     public Vector3d velocityAxisMask() {
         return new Vector3d(
                 velocityAxisCounts[0] > 0 ? 1 : 0,
@@ -1021,7 +919,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /** A gun the computer aims: a cannon mount with a pitch servo, or a fixed mount read by an interface. */
     private record Gun(ServoStatus.MountSnapshot mount, ServoStatus status, ComputerServo servo) {
         BlockPos pos() { return mount.mountPos(); }
-        /** Where its line on the console is kept: the servo or interface reporting it. */
         BlockPos reportPos() { return status.servoPos(); }
         boolean ownPitchDrive() { return status.axis() == PITCH; }
     }
@@ -1157,13 +1054,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Turns each driven bearing so the gun it serves points along its solution:
-     * from the root outwards, each bearing turns by the angle about its own axis
-     * that brings that gun's barrel closest to the solution, as the bearings
-     * below it will have turned it. Steered by where the barrel really points, so
-     * the bearings' give and the guns' own offsets do not matter. A bearing does
-     * not serve a gun it would have to turn past its dial's limits for: that gun
-     * is out of arc, and holds fire.
+     * Turns each driven bearing, root first, by the angle about its axis that brings its gun's barrel
+     * closest to the solution. Steered by where the barrel really points. A gun needing a turn past the
+     * dial's limits is out of arc and holds fire.
      */
     private void aimBearings(List<Gun> guns, Map<BlockPos, List<Joint>> chains, Set<BlockPos> redundant) {
         List<Joint> joints = new ArrayList<>(jointByPlate.values());
@@ -1241,10 +1134,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /** How a bearing lays a gun: the turn to make (degrees), and which way turning raises the barrel (+1 or -1). */
     private record Lay(double turn, int sense) {}
 
-    /**
-     * The turn this bearing must make to lay this gun: about its own axis, as the
-     * bearings under it (towards the root) will have turned it this poll.
-     */
+    /** About its own axis, as the bearings under it will have turned it this poll. */
     private Lay turnFor(Joint joint, Gun gun, List<Joint> chain, Map<BlockPos, Double> turnOf) {
         int index = chain.indexOf(joint);
         Vector3d barrel = barrelWorld(gun.mount());
@@ -1268,11 +1158,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * The guns a bearing could serve this poll, of those it carries with a
-     * solution, in order of preference: the one the bearing under it serves, so a
-     * turret and its cradle serve the same gun; then the one it served last poll,
-     * until that one fires or loses its solution; then the rest, with the guns
-     * found out of arc last poll last.
+     * In order: the gun the bearing under it serves, the one it served last poll, then the rest,
+     * with last poll's out-of-arc guns last.
      */
     private List<Gun> candidates(Joint joint, List<Gun> guns, Map<BlockPos, List<Joint>> chains,
                                  Set<BlockPos> redundant, Map<BlockPos, BlockPos> directorThisPoll) {
@@ -1293,10 +1180,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * How far this gun may depress and elevate, degrees ({lowest, highest}): its
-     * mount's limits and its pitch servo's dial if it elevates itself; else what
-     * the dials of the bearings tilting it allow, worked out by turning its barrel
-     * to each end of their arcs. For the map table's range rings.
+     * {lowest, highest} elevation, degrees: the mount's limits and pitch dial, or what the tilting
+     * bearings' dials allow. For the map table's range rings.
      */
     private double[] elevationLimits(Gun gun, List<Joint> chain) {
         ServoStatus.MountSnapshot mount = gun.mount();
@@ -1326,12 +1211,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new double[]{lowest, highest};
     }
 
-    /**
-     * The traverse this gun may turn through, as a world bearing arc ({start, width},
-     * degrees, clockwise from the start; width 360 for all round): its yaw servo's
-     * dial, or that of the turret carrying it. For the map table's pie slices; taken
-     * as the ship stands now, level.
-     */
+    /** World bearing arc {start, width}, degrees (360: all round), from the yaw or turret dial. For the map table. */
     private double[] traverseArc(Gun gun, List<Joint> chain, @Nullable ServoStatus yawServo) {
         ServoStatus.MountSnapshot mount = gun.mount();
         if (yawServo != null && yawServo.limits().limitsTurn()) {
@@ -1343,8 +1223,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             if (!joint.driven() || tilts(joint) || !joint.limits().limitsTurn())
                 continue;
             ServoLimits dial = joint.limits();
-            // The barrel turns with the turret, so its bearing moves with the dial: clockwise
-            // from above for a bearing facing up, the other way for one hanging down.
+            // The barrel turns with the turret: clockwise for a bearing facing up, the other way hanging down.
             double barrelYaw = yawOf(barrelWorld(mount));
             double dialNow = dialOf(joint, joint.swivel().actualAngle(), 1);
             double start = axisWorld(joint.swivel()).y >= 0
@@ -1356,10 +1235,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Whether this gun's shell would land near our own side: within its burst radius of
-     * a friendly (our guns, spotters, the computer) or a hull we stand on. A shrapnel shell
-     * bursts at the target and throws its balls on in a cone along its path, so for it
-     * the danger is a forward cone (and a small bubble at the burst).
+     * Whether the shell would land within its burst radius of a friendly or our own hull. Shrapnel
+     * throws its balls on in a forward cone, so for it the danger is that cone.
      */
     private boolean isDangerClose(ServoStatus.MountSnapshot mount, List<SubLevel> hulls) {
         if (!hasTarget || !mount.hasShell() || mount.shellType() == null)
@@ -1392,7 +1269,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             if (endangered.test(friendly))
                 return true;
         for (SubLevel hull : hulls) {
-            // The hull's nearest point to the burst.
             var bounds = hull.boundingBox();
             Vec3 nearest = new Vec3(Mth.clamp(target.x, bounds.minX(), bounds.maxX()),
                     Mth.clamp(target.y, bounds.minY(), bounds.maxY()), Mth.clamp(target.z, bounds.minZ(), bounds.maxZ()));
@@ -1412,10 +1288,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return joint.swivel().facing().getAxis() != Direction.Axis.Y;
     }
 
-    /**
-     * A bearing's dial angle at this swivel angle: a cradle's reads elevation (up
-     * positive, by {@code sense}), a turret's clockwise seen from its face.
-     */
+    /** A cradle's dial reads elevation (by {@code sense}), a turret's clockwise from its face. */
     private static double dialOf(Joint joint, double angle, int sense) {
         return Mth.wrapDegrees(tilts(joint) ? sense * angle : -angle);
     }
@@ -1449,11 +1322,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return depth;
     }
 
-    /**
-     * Whether more drives aim this gun than it has ways to turn: a barrel is pointed
-     * by two rotations, so a third drive, or two about the same axis, would only
-     * fight. Its own mount's axes count, and every driven bearing carrying it.
-     */
+    /** More drives than a barrel's two rotations, or two about the same axis: they would only fight. */
     private boolean hasRedundantDrives(ServoStatus.MountSnapshot mount, boolean ownPitch, boolean ownYaw, List<Joint> chain) {
         List<Vector3d> axes = new ArrayList<>();
         Quaterniondc frame = frameOf(mount);
@@ -1487,16 +1356,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return frameOf(mount).transform(barrel);
     }
 
-    /** The frame a gun stands in: its sub-level's orientation, or the world's. */
     private Quaterniondc frameOf(ServoStatus.MountSnapshot mount) {
         SubLevel subLevel = subLevelOf(mount);
         return subLevel != null ? subLevel.logicalPose().orientation() : WORLD_FRAME;
     }
 
-    /**
-     * The turn about this axis (degrees, right-handed) that brings one direction
-     * closest to another; 0 if either lies along the axis, which turning cannot change.
-     */
+    /** Turn about the axis, degrees, bringing one direction closest to another; 0 if either lies along it. */
     private static double turnAbout(Vector3dc axis, Vector3dc from, Vector3dc to) {
         Vector3d f = new Vector3d(from).fma(-axis.dot(from), axis);
         Vector3d t = new Vector3d(to).fma(-axis.dot(to), axis);
@@ -1505,11 +1370,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return Math.toDegrees(Math.atan2(axis.dot(f.cross(t, new Vector3d())), f.dot(t)));
     }
 
-    /**
-     * Whether this gun's attitude depends on a ship's: whatever its chain of bearings
-     * stands on at the bottom is a ship. Guns ashore, and on turrets ashore, need no
-     * ship sensors.
-     */
+    /** Whether the bottom of its bearing chain stands on a ship. */
     private boolean onShip(ServoStatus.MountSnapshot mount) {
         List<Joint> chain = chainOf(mount);
         if (chain.isEmpty())
@@ -1518,12 +1379,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * How far a mount can reach with its current shell and charge, for the
-     * map table: down to the target's height, or without a target to the
-     * ground (or sea level, if unloaded) under the mount. Uses the same top
-     * pitch as the ballistic solver (45°, or less if the mount cannot elevate that far),
-     * so it matches where solutions turn into "out of range". The ship's own
-     * motion is left out. Its aim line is where the barrel really points.
+     * Reach for the map table with the current shell and charge, down to the target's height (or the
+     * ground). Same top pitch as the solver, so it matches "out of range". Ignores own-ship motion.
      */
     @Nullable
     private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount, double maxElevation, double maxDepression,
@@ -1562,10 +1419,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             aimX = barrel.x / horizontal;
             aimZ = barrel.z / horizontal;
         }
-        // The dead zone around the gun, for a level ship (as a plotting officer
-        // would draw it from the range table). Plunging fire: the steepest shot
-        // comes down this far out. Direct fire, only with the target below the
-        // gun: the lowest the barrel depresses still lands this far out.
+        // Dead zone for a level ship: plunging, where the steepest shot lands; direct with the
+        // target below, where the lowest depression lands.
         double minRadius = 0;
         double relativeY = referenceY - muzzleWorld.y;
         if (plungingFire && !mount.autocannon()) {
@@ -1579,11 +1434,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius, arc[0], arc[1]);
     }
 
-    /**
-     * Attaches the rate at which this mount's commanded angles are changing,
-     * estimated from consecutive polls, so servos can feed it forward instead
-     * of lagging behind a moving aim point.
-     */
+    /** Attaches the rates of the commanded angles from consecutive polls, for servo feed-forward. */
     @Nullable
     private FireSolution withRates(ServoStatus status, @Nullable FireSolution solution) {
         // Rates are the Differentiator's job; without it servos only chase the angles.
@@ -1593,8 +1444,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         long now = level.getGameTime();
         AimSample prev = aimHistory.get(mountPos);
 
-        // Pitch and yaw servos of one mount are solved in the same poll;
-        // the second one reuses the estimate.
+        // Pitch and yaw servos solve in the same poll; the second reuses the estimate.
         if (prev != null && prev.tick() == now) {
             return solution.withRates(prev.pitchRate(), prev.yawRate());
         }
@@ -1619,12 +1469,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return solution.withRates(pitchRate, yawRate);
     }
 
-    /**
-     * How fast a driven swivel bearing's commanded angle is changing (degrees per tick),
-     * estimated from consecutive polls as {@link #withRates} does for mounts, so its servo
-     * keeps pace with a moving solution instead of trailing it. A new director gun or
-     * elevation sense starts the estimate afresh: the angle jumps, which is not motion.
-     */
+    /** The same as {@link #withRates} for a driven swivel bearing; a new director or sense starts afresh. */
     private double jointRate(BlockPos swivelPos, double angleDeg, BlockPos director, int sense) {
         // Rates are the Differentiator's job; without it servos only chase the angles.
         if (level == null || !has(ComputerModule.DIFFERENTIATOR)) {
@@ -1659,8 +1504,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return new FireSolution(cached.pitchDeg(), cached.yawDeg(), 0, true);
         }
 
-        // No ballistic solution for this mount (no pitch servo, no shell, ...).
-        // Keep tracking the target along the line of sight.
+        // No ballistic solution: keep tracking along the line of sight.
         SubLevel mountSubLevel = subLevelOf(mount);
         if (onShip(mount) && !hasOrientationSensors()) return null;
 
@@ -1673,12 +1517,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Solves a gun: the direction its barrel must point, in the frame it stands in,
-     * and its fuze. Its line on the console is kept under {@code servoPos}.
+     * Solves a gun's barrel direction in its own frame, and its fuze.
      *
-     * @param pitchServo the mount's own pitch servo, if it elevates the barrel itself (so its
-     *                   elevation limits apply); null if bearings carrying it do
-     * @param yawServo   the mount's own yaw servo, if any (its traverse limits apply)
+     * @param pitchServo the mount's own pitch servo; null if bearings carrying it elevate it
+     * @param yawServo   the mount's own yaw servo, if any
      */
     private FireSolution solveGun(BlockPos servoPos, ServoStatus.MountSnapshot mount,
                                   @Nullable ServoStatus pitchServo, @Nullable ServoStatus yawServo) {
@@ -1691,8 +1533,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return restSolution(mount);
         }
 
-        // On a ship, aiming in its frame takes knowing its attitude. A gun ashore (a
-        // fort, a battery) needs none: its frame is the world, which neither tilts nor turns.
+        // A gun ashore aims in the world frame and needs no attitude sensors.
         if (onShip(mount) && !hasOrientationSensors()) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_ORIENTATION));
@@ -1715,14 +1556,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         Quaterniondc shipToWorld = mountSubLevel != null ? mountSubLevel.logicalPose().orientation() : WORLD_FRAME;
         Vector3d pivotWorld = launchPivot(mount, mountSubLevel);
         Vector3d targetWorld = new Vector3d(targetX, targetY, targetZ);
-        // The shell leaves from the muzzle, which moves as the barrel turns: start
-        // with the barrel pointing straight at the target, then from where it aims.
+        // The muzzle moves as the barrel turns: start aiming straight at the target.
         Vector3d muzzleWorld = muzzleAt(pivotWorld, new Vector3d(targetWorld).sub(pivotWorld), mount);
 
-        // A map or navigation table gives the target as an absolute position: comparing
-        // heights with it takes knowing your own altitude, which a ship only gets from an
-        // Altitude Sensor. A rangefinder measures the target relative to itself, and a gun
-        // ashore stands at a surveyed height, so neither needs one.
+        // Absolute targets need own altitude, which a ship only gets from an Altitude Sensor.
         boolean absoluteTarget = targetSource == TargetSource.MAP_TABLE || targetSource == TargetSource.NAV_TABLE;
         if (onShip(mount) && absoluteTarget && altitudeCount == 0
                 && Math.abs(targetWorld.y - pivotWorld.y) > CDCConfig.server().fireControl.altitudeGate.getF()) {
@@ -1739,8 +1576,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         Vector3d inheritedVelocity = inheritedLaunchVelocity(mountSubLevel, mount.mountPos());
 
-        // The mount's elevation limits apply in ship frame, so let the ballistic solver
-        // search the whole world-frame arc and check the limits afterwards.
+        // Elevation limits are in ship frame: solve the whole arc, check limits afterward.
         BallisticSolver.Result result = BallisticSolver.solve(
                 muzzleWorld, targetWorld, targetVel, inheritedVelocity,
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
@@ -1763,11 +1599,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return null;
         }
 
-        // The world-frame aim direction from the solve's pitch and yaw.
         Vector3d worldDir = aimDirection(result.pitchDeg(), result.yawDeg());
 
-        // Rotate into ship frame. This is the inverse of the rotation Sable
-        // applies to the shell's velocity when it kicks it out of the plot.
+        // Inverse of Sable's rotation of the shell's velocity when it leaves the plot.
         Vector3d shipDir = shipToWorld.transformInverse(worldDir, new Vector3d());
         double shipPitchDeg = pitchOf(shipDir);
         double shipYawDeg = yawOf(shipDir);
@@ -1798,17 +1632,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * The velocity a shell fired from this mount picks up from the ship,
-     * world frame, blocks/tick.
-     *
-     * <p>When CBC's Sable compat launches a shell out of a sub-level, it adds
-     * the sub-level's velocity at the shell's position (see CBC's
-     * {@code EntitySubLevelUtilMixin}), unless the server config disables it.
-     * The computer only compensates along ship axes it has velocity sensors for.
+     * Velocity a shell inherits from the ship (CBC's {@code EntitySubLevelUtilMixin}), world, blocks/tick.
+     * Only compensated along ship axes with velocity sensors.
      */
     private Vector3d inheritedLaunchVelocity(@Nullable SubLevel mountSubLevel, BlockPos mountPos) {
-        // Compensating for own-ship speed takes an Integrator (and velocity sensors);
-        // a gun ashore does not move.
+        // Takes an Integrator and velocity sensors; a gun ashore does not move.
         if (level == null || mountSubLevel == null || velocityAxesCovered() == 0 || !has(ComputerModule.INTEGRATOR)
                 || !CBCConfigs.server().compat.sableProjectilesInheritPhysicsObjectVelocity.get()) {
             return new Vector3d();
@@ -1822,18 +1650,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return shipToWorld.transform(shipVel).div(20.0); // m/s -> blocks/tick
     }
 
-    /**
-     * Rest position with no target: level barrel, pointing the way the cannon
-     * faced when it was assembled. Ship-frame, so it needs no pose or sensors.
-     */
+    /** No target: level barrel, the way it faced when assembled. */
     private static FireSolution restSolution(ServoStatus.MountSnapshot mount) {
         return new FireSolution(0, mount.facingYaw(), 0, true);
     }
 
-    /**
-     * The sublevel the mount itself sits on. Usually the computer's own, but a
-     * mount on a separately simulated body must use that body's pose.
-     */
+    /** A mount on a separately simulated body uses that body's pose. */
     @Nullable
     private SubLevel subLevelOf(ServoStatus.MountSnapshot mount) {
         if (level == null) return null;
@@ -1846,10 +1668,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new Vector3d(-Math.sin(y) * Math.cos(p), Math.sin(p), Math.cos(y) * Math.cos(p));
     }
 
-    /**
-     * The cannon's rotation centre in the world, where its barrel turns about;
-     * the mount block's centre if the cannon has not been measured (unassembled).
-     */
+    /** The barrel's pivot in the world; the mount block's center if not yet measured. */
     private static Vector3d launchPivot(ServoStatus.MountSnapshot mount, @Nullable SubLevel mountSubLevel) {
         Vector3d local = mount.pivot() != null
                 ? new Vector3d(mount.pivot().x, mount.pivot().y, mount.pivot().z)
@@ -1889,28 +1708,20 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return isLinkFresh() ? linkedInterface : null;
     }
 
-    /** Whether the computer is leading a tracked, moving target (a velocity estimate exists). */
     public boolean isTrackingTarget() {
         return isPowered && !bankConflict && hasTarget && hasTargetVelocity;
     }
 
-    /**
-     * How precisely the guns' target is known, blocks: the rangefinder fix's
-     * uncertainty, or how finely a map or navigation table placed it; NaN
-     * without a target (client).
-     */
+    /** Rangefinder fix uncertainty or map/nav table precision, blocks; NaN without a target (client). */
     public double getFixSigma() {
         return isPowered && !bankConflict && hasTarget ? targetSigma : Double.NaN;
     }
 
-    /** The tracked target's speed, blocks per tick; 0 while not tracking. */
     public double getTargetSpeed() {
         return isTrackingTarget() ? Math.sqrt(targetVelX * targetVelX + targetVelY * targetVelY + targetVelZ * targetVelZ) : 0;
     }
 
-    // --- NBT ---
-    // The state is re-derived from the network and pose each poll, so it is
-    // only synced for the client tooltip.
+    // --- NBT: re-derived each poll, so only synced for the client ---
 
     @Override
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
@@ -2099,8 +1910,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     .forGoggles(tooltip);
         }
 
-        // --- Missing sensors: only guns on a ship need them (the ship's own readings
-        // are on the Navigation Console) ---
+        // --- Missing sensors (only guns on a ship need them) ---
         if (directsShipGuns && !hasOrientationSensors()) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.ballistic_computer.missing_orientation"))
@@ -2131,11 +1941,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return true;
     }
 
-    /**
-     * The fire mission: target, its source and speed, the trajectory mode and
-     * each gun's solution. Shown by Fire Mission Consoles, which read it from
-     * this computer (client side, from its synced data).
-     */
+    /** The fire mission, shown by Fire Mission Consoles from synced data. */
     public void addFireMissionTooltip(List<Component> tooltip, boolean autocannons) {
         // Autocannons always fire direct: their console shows its own fire mode instead.
         if (!autocannons)

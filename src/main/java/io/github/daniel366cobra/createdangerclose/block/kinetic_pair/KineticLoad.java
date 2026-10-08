@@ -11,12 +11,8 @@ public final class KineticLoad {
     private KineticLoad() {}
 
     /**
-     * The load on the network this source drives, per RPM of its own speed (su): each
-     * member's stress impact times its speed relative to the source's (gearing included).
-     * The members' speeds follow the source's at once when it changes, so this holds even
-     * mid-change, unlike the network's stress, which is counted at the speed before.
-     * While the source stands still the ratios are unknown: the last figure is kept, or
-     * before any, the members' impacts as if ungeared.
+     * su per RPM of the source: members' impacts times their speed ratio (gearing included). Holds
+     * mid-change, unlike network stress. While stopped, the last figure is kept (else ungeared impacts).
      */
     public static float perRpmOf(KineticBlockEntity source, float last) {
         if (!source.hasNetwork())

@@ -6,11 +6,7 @@ import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.createmod.ponder.api.registration.PonderTagRegistrationHelper;
 import net.minecraft.resources.ResourceLocation;
 
-/**
- * Registers this mod's Ponder scenes and tags (Ponder is the library behind
- * Create's in-game "hold W to ponder" tutorials). Added to Ponder in client
- * setup, and in datagen, which turns the scene texts into lang entries.
- */
+/** Registers the Ponder scenes and tags; also added in datagen, for the scene lang entries. */
 public class CDCPonderPlugin implements PonderPlugin {
 
     @Override

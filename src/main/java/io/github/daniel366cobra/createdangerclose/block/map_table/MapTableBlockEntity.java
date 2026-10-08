@@ -56,26 +56,18 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * One block of a map table. Tables join into flat squares of up to 3×3 blocks
- * through Create's {@link ConnectivityHandler} (like fluid tanks and item
- * vaults); the controller is the north-west corner.
- *
- * <p>Every block holds the one map lying on its top face, so joining and
- * splitting tables never moves items around. Maps must fit together like the
- * land they show: same zoom and dimension, and each one offset from the others
- * by exactly as many map widths as its block is offset from theirs (east = +X,
- * south = +Z, north up).
+ * One block of a map table: up to 3×3, joined via {@link ConnectivityHandler}, controller north-west.
+ * Each block holds its own map, so joining never moves items. Maps fit like the land: same zoom and
+ * dimension, offset by one map width per block, north up.
  */
 public class MapTableBlockEntity extends SmartBlockEntity
         implements IMultiBlockEntityContainer, MenuProvider, IHaveGoggleInformation {
 
     public static final int MAX_WIDTH = 3;
-    // How often, and how far out, the controller pushes map contents to players.
     private static final int MAP_SYNC_INTERVAL_TICKS = 10;
     private static final double MAP_SYNC_RANGE = 64;
 
-    // A table counts as connected while a network interface keeps polling it
-    // (at most every 20 ticks when powered).
+    // Connected while an interface keeps polling (at most every 20 ticks).
     private static final int LINK_TIMEOUT_TICKS = 40;
 
     protected final ItemStackHandler inventory;
@@ -84,38 +76,32 @@ public class MapTableBlockEntity extends SmartBlockEntity
     protected boolean updateConnectivity;
     protected int width = 1;
 
-    // Controller only: the designated target (world space) and when it was set.
+    // Controller only.
     @Nullable protected Vec3 target;
     protected long targetTick;
-    // Controller only: whether a battle network interface is reading this table.
     protected boolean linked;
     protected long lastLinkTick;
-    // Controller only: the computer's plot, as last carried over by a network interface.
+    // Controller only: as last carried over by an interface.
     protected BattlePlot plot = BattlePlot.EMPTY;
-    // Client: the plot as shown when the current one arrived, and when that was. The
-    // renderers glide from one to the other, as the interface only polls every so often.
+    // Client: renderers glide from the previous plot, as the interface polls only every so often.
     private BattlePlot plotShownBefore = BattlePlot.EMPTY;
     private long plotArrivalTick;
     // About one poll at a typical network speed.
     private static final int PLOT_GLIDE_TICKS = 10;
-    // Controller, server only: per player, a hash of the map pixels last sent to them.
+    // Controller, server only: per player, hashes of map pixels sent.
     private Map<UUID, Map<MapId, Integer>> sentPixels = new HashMap<>();
-    // Client only: where this block's map lies, as sent by the server.
+    // Client only: sent by the server.
     @Nullable protected MapPlacement clientMapPlacement;
-    // Ponder scenes only: a made-up chart, since a scene has neither real maps
-    // nor a network. While set, it stands in for the maps and the link.
+    // Ponder only: stands in for the maps and the link.
     @Nullable protected PonderChart ponderChart;
 
-    /**
-     * Where the stitched sheet lies in the world: its north-west corner, how
-     * many blocks one map pixel covers, and the dimension the maps show.
-     */
+    /** North-west corner, blocks per map pixel, and dimension of the stitched sheet. */
     public record Sheet(double westX, double northZ, int blocksPerPixel, int width, ResourceKey<Level> dimension) {
         public double sizeInPixels() {
             return 128.0 * width;
         }
 
-        /** Sheet position as fractions of its size (north-west = 0, 0) to world X/Z. */
+    /** Sheet fraction (north-west = 0, 0) to world. */
         public double worldX(double u) {
             return westX + u * sizeInPixels() * blocksPerPixel;
         }
@@ -124,7 +110,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
             return northZ + v * sizeInPixels() * blocksPerPixel;
         }
 
-        /** World X/Z to sheet position in map pixels (north-west = 0, 0). */
+    /** World to sheet pixels. */
         public double pixelX(double x) {
             return (x - westX) / blocksPerPixel;
         }
@@ -134,12 +120,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         }
     }
 
-    /**
-     * A chart for a Ponder scene: where the sheet lies, the picture drawn on
-     * every part that holds a map (one image across the whole table), and the
-     * spotters to mark, which in a real game come from players carrying copies.
-     * Markers and plot lines are drawn {@code boldness} times their usual size.
-     */
+    /** A Ponder chart: one image across the table, the spotters to mark, and a {@code boldness} scale for markers and lines. */
     public record PonderChart(Sheet sheet, ResourceLocation texture, List<MapTableMarker.Marker> spotters,
                               float boldness) {}
 
@@ -179,11 +160,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return inventory;
     }
 
-    /**
-     * Whether this block can take the map. Only filled maps; on the server
-     * also that it fits the maps already on the table. (The client does not
-     * reliably have map data, so it defers to the server.)
-     */
+    /** Filled maps only; the server also checks the fit (the client may lack map data). */
     public boolean canHold(ItemStack stack) {
         if (!stack.is(Items.FILLED_MAP))
             return false;
@@ -221,14 +198,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return true;
     }
 
-    /** Where this block's map lies in the world. */
     public record MapPlacement(int centerX, int centerZ, int scale, ResourceKey<Level> dimension) {}
 
-    /**
-     * Where this block's map lies, or null if there is none. Vanilla never
-     * tells clients where a map is centred (they only get its pixels), so the
-     * server sends it along with the block's data.
-     */
+    /** Vanilla never tells clients where a map is centered, so the server sends it. */
     @Nullable
     public MapPlacement getMapPlacement() {
         if (level == null || level.isClientSide)
@@ -238,11 +210,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return data == null ? null : new MapPlacement(data.centerX, data.centerZ, data.scale, data.dimension);
     }
 
-    /**
-     * The sheet of this (controller's) table, fixed by any of its maps, or
-     * null if it has none. Each block's map lies one map width from its
-     * neighbours', so one map places them all.
-     */
+    /** Fixed by any one map, since each lies one map width from its neighbors'. Null without maps. */
     @Nullable
     public Sheet getSheet() {
         if (ponderChart != null)
@@ -272,16 +240,12 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return target;
     }
 
-    /** Game time the target was designated, so the newest of several tables wins. */
+    /** So the newest of several tables wins. */
     public long getTargetTick() {
         return targetTick;
     }
 
-    /**
-     * Designates the target at a point of the sheet, given as fractions of
-     * its size. The height is the ground (or water) there if the chunk is
-     * loaded, otherwise sea level.
-     */
+    /** At sheet fractions; the height is the ground (or water) if loaded, else sea level. */
     public void designateTarget(double u, double v) {
         Sheet sheet = getSheet();
         if (level == null || sheet == null || !sheet.dimension().equals(level.dimension()))
@@ -307,7 +271,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     // --- Battle network link (controller only) ---
 
-    /** Called by a network interface each time it reads this table, with the computer's latest plot. */
+    /** Called each time an interface reads this table. */
     public void markLinked(BattlePlot plot) {
         if (level == null)
             return;
@@ -322,24 +286,19 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     // --- Charting (controller, server) ---
-    // A table on a battle network keeps its maps up to date where its crew can see:
-    // around itself, as a player holding the maps there would, and around each
-    // target being ranged, as seen through the rangefinder. Unloaded ground stays stale.
+    // On a battle network, maps stay charted around the table and each ranged target. Unloaded ground stays stale.
 
     private int chartStep;
 
-    /** Draws a sixteenth of the area around the table each tick, as vanilla does for a held map. */
+    /** A sixteenth of the area each tick, as vanilla does for a held map. */
     private void chartSurroundings(ServerLevel serverLevel) {
-        Vec3 here = worldCentre();
+        Vec3 here = worldCenter();
         int step = chartStep++ % MapCharting.STAGGER_COLUMNS;
         forEachChartedMap(serverLevel, data ->
                 MapCharting.chart(serverLevel, data, here.x, here.z, MapCharting.holderRadius(serverLevel, data), step));
     }
 
-    /**
-     * Draws the patch around each target being ranged, all at once (once per poll): the
-     * ground seen through the optics, out to the configured radius.
-     */
+    /** Charts around each ranged target once per poll, out to the configured radius. */
     private void chartRangedTargets(ServerLevel serverLevel, BattlePlot plot) {
         int radius = CDCConfig.server().mapTable.rangefinderChartRadius.get();
         for (BattlePlot.RangefinderFix fix : plot.fixes())
@@ -347,7 +306,6 @@ public class MapTableBlockEntity extends SmartBlockEntity
                     Math.max(1, Mth.ceil((double) radius / (1 << data.scale))), -1));
     }
 
-    /** The maps laid on this table (controller). */
     public Set<MapId> getMapIds() {
         Set<MapId> ids = new HashSet<>();
         for (int dx = 0; dx < width; dx++) {
@@ -373,30 +331,26 @@ public class MapTableBlockEntity extends SmartBlockEntity
         }
     }
 
-    /** The middle of the table's top in the world (out of its ship, if on one). */
-    private Vec3 worldCentre() {
-        Vec3 centre = new Vec3(worldPosition.getX() + width / 2.0, worldPosition.getY() + 1, worldPosition.getZ() + width / 2.0);
-        SubLevel ship = level != null ? Sable.HELPER.getContaining(level, centre) : null;
-        return ship != null ? ship.logicalPose().transformPosition(centre) : centre;
+    /** Out of its ship, if on one. */
+    private Vec3 worldCenter() {
+        Vec3 center = new Vec3(worldPosition.getX() + width / 2.0, worldPosition.getY() + 1, worldPosition.getZ() + width / 2.0);
+        SubLevel ship = level != null ? Sable.HELPER.getContaining(level, center) : null;
+        return ship != null ? ship.logicalPose().transformPosition(center) : center;
     }
 
-    /** Rangefinder fixes and gun ranges to draw; empty unless on a battle network with a Ballistic Computer. */
+    /** Empty unless linked to a Ballistic Computer. */
     public BattlePlot getPlot() {
         return plot;
     }
 
-    /**
-     * The plot as drawn now (client): gliding from the previous plot to the
-     * latest over a moment, so aim lines turn and fixes move instead of jumping.
-     */
+    /** Client: glides from the previous plot so lines and fixes move instead of jumping. */
     public BattlePlot getShownPlot(float partialTicks) {
         if (level == null)
             return plot;
         double t = (level.getGameTime() + partialTicks - plotArrivalTick) / PLOT_GLIDE_TICKS;
-        return t >= 1 ? plot : plotShownBefore.blendTowards(plot, Math.max(0, t));
+        return t >= 1 ? plot : plotShownBefore.blendToward(plot, Math.max(0, t));
     }
 
-    /** Whether the table is on a battle network, which shows the ship and the plot. */
     public boolean isLinked() {
         return linked;
     }
@@ -408,23 +362,20 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return ponderChart;
     }
 
-    /** Lays a made-up chart on the table, for a Ponder scene. */
     public void setPonderChart(@Nullable PonderChart chart) {
         ponderChart = chart;
     }
 
-    /** Marks a target on the Ponder chart, as a player would on the screen. */
     public void setPonderTarget(@Nullable Vec3 target) {
         this.target = target;
     }
 
-    /** Connects the Ponder table to a made-up battle plot; it stays connected. */
+    /** It stays connected. */
     public void setPonderPlot(BattlePlot plot) {
         linked = true;
         this.plot = plot;
     }
 
-    /** The table block at an offset from this controller, or null. */
     @Nullable
     public MapTableBlockEntity partAt(int dx, int dz) {
         if (level == null)
@@ -434,15 +385,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * Vanilla only syncs maps that players hold or that hang in item frames,
-     * so the table pushes its maps to players who can see it or have its
-     * screen open, in vanilla's map packets: the markers every time, the
-     * pixels only when they changed since that player last got them.
-     *
-     * <p>This keeps its own record of what each player has, rather than
-     * registering them as vanilla map holders: vanilla drops holders without
-     * the map in their inventory whenever someone who does carry it (a
-     * spotter) ticks, and a re-registered holder gets the whole map again.
+     * Vanilla only syncs held or framed maps, so the table pushes markers every time, and pixels when
+     * changed. It tracks recipients itself: vanilla would drop holders without the map whenever a spotter
+     * ticks, then resend whole maps.
      */
     private void syncMapsToPlayers() {
         if (!(level instanceof ServerLevel serverLevel))
@@ -583,7 +528,6 @@ public class MapTableBlockEntity extends SmartBlockEntity
         sendData();
     }
 
-    /** Tables are flat: they grow sideways in squares, never upwards. */
     @Override
     public Direction.Axis getMainConnectionAxis() {
         return Direction.Axis.Y;
@@ -619,7 +563,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     // --- Tooltip ---
 
-    /** Any block of the table shows the whole table's state, which the controller holds. */
+    /** The controller holds the whole table's state. */
     @Override
     public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
         MapTableBlockEntity table = getControllerBE();

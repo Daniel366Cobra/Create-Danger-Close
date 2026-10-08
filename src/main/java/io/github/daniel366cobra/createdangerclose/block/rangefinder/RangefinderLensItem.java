@@ -7,13 +7,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.BlockItemStateProperties;
 import net.minecraft.world.level.block.Block;
 
-/**
- * The lens as an item. A cracked lens stays cracked when mined or wrenched
- * off: its loot table copies the block's {@code cracked} state onto the
- * stack (vanilla's block state component), and placing the stack puts the
- * cracked block back. Such a stack has its own name and model, and does not
- * stack with intact lenses.
- */
+/** A cracked lens stays cracked as an item (its state rides on the stack), with its own name and model. */
 public class RangefinderLensItem extends BlockItem {
 
     public RangefinderLensItem(Block block, Properties properties) {

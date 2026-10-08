@@ -3,20 +3,14 @@ package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * Alpha-beta filter over measured target positions (world space). Smooths the
- * noisy range samples into a position and estimates the target's velocity, so
- * steady ranging of a moving target yields a usable lead, and erratic ranging
- * a noisy one.
- */
+/** Alpha-beta filter over measured world positions: smooths range noise and estimates velocity for lead. */
 public class RangeTracker {
 
     private static final double ALPHA = 0.5;
     private static final double BETA = 0.2;
     // Start over after a pause this long...
     private static final long RESET_GAP_TICKS = 100;
-    // ...or when a sample lands this far off the prediction (blocks, or
-    // this many standard deviations of the sample, whichever is larger).
+    // ...or a sample this far off the prediction (blocks, or that many sample sigmas if larger).
     private static final double RESET_JUMP_BLOCKS = 32;
     private static final double RESET_JUMP_SIGMAS = 5;
 
@@ -38,7 +32,6 @@ public class RangeTracker {
                 return;
             }
         }
-        // First sample, a long pause, or a different target.
         position = measured;
         velocity = Vec3.ZERO;
         samples = 1;
@@ -56,7 +49,7 @@ public class RangeTracker {
         return position;
     }
 
-    /** Blocks per tick, world space. */
+    /** World space. */
     public Vec3 getVelocity() {
         return velocity;
     }

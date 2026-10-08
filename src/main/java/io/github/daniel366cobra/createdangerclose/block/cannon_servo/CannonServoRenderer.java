@@ -72,9 +72,7 @@ public class CannonServoRenderer extends KineticBlockEntityRenderer<KineticBlock
         SuperByteBuffer shaftHalf = CachedBuffers.partialFacing(
                 AllPartialModels.SHAFT_HALF, be.getBlockState(),
                 isOutput ? direction : direction.getOpposite());
-        // Coupler partials are modelled in the servo item's frame (input block at
-        // z 0..16, output block at z -16..0), anchored at the input block: same
-        // orientation for both, the output's drawn one block back towards the input.
+        // Coupler partials are modeled in the servo item's frame, anchored at the input block.
         SuperByteBuffer gizmo = CachedBuffers.partialFacing(
                 isOutput ? outputPart : inputPart,
                 be.getBlockState(),

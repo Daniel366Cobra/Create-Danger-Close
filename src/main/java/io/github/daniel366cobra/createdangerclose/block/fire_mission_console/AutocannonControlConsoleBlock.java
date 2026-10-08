@@ -17,10 +17,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
-/**
- * The Autocannon Control Console: the Fire Mission Console's desk, with the fuze knob on
- * the left, the auto switch (weapons free) in the middle and the trigger on the right.
- */
+/** The Fire Mission Console's desk with fuze knob, auto switch and trigger. */
 public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
 
     public static final MapCodec<AutocannonControlConsoleBlock> CODEC = simpleCodec(AutocannonControlConsoleBlock::new);
@@ -29,10 +26,7 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
         super(properties);
     }
 
-    /**
-     * The trigger is held, not clicked: it takes the use without swinging the hand
-     * (CONSUME on both sides, as the server's answer swings it for other players).
-     */
+    /** Held, not clicked: CONSUME on both sides so the hand does not swing. */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
                                                BlockHitResult hitResult) {
@@ -41,7 +35,7 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
                 ? InteractionResult.CONSUME : result;
     }
 
-    /** The trigger: every autocannon on target fires while it is held (right-click repeats). */
+    /** Fires while held (right-click repeats). */
     @Override
     protected void pressFireButton(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
                                    BallisticComputerBlockEntity computer) {
@@ -61,7 +55,7 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
             message(player, "no_autocannons");
     }
 
-    /** The auto switch: weapons free, or fire only on the trigger. */
+    /** Weapons free, or trigger only. */
     @Override
     protected void throwLever(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
                               BallisticComputerBlockEntity computer) {

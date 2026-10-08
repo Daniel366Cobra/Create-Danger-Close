@@ -11,9 +11,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * @param mounts the cannon mounts the servo drives (one), for a mount axis
- * @param swivel the swivel bearing the servo drives, for {@link ServoAxis#SWIVEL}; else null
- * @param limits the angles the servo may turn what it drives through (set on its dial)
+ * @param mounts the one cannon mount driven, for a mount axis
+ * @param swivel for {@link ServoAxis#SWIVEL}; else null
+ * @param limits as set on the dial
  */
 public record ServoStatus(
         BlockPos servoPos,
@@ -26,9 +26,9 @@ public record ServoStatus(
     public record MountSnapshot(
             BlockPos mountPos,
             float facingYaw,
-            // Pitch servo: the barrel's elevation; yaw servo: the mount's yaw.
+            // Pitch: barrel elevation. Yaw: the mount's yaw.
             float currentAngle,
-            // The mount's yaw (CBC's), whichever axis the servo drives.
+            // CBC's, whichever axis the servo drives.
             float mountYaw,
             float maxElevation,
             float maxDepression,
@@ -43,37 +43,29 @@ public record ServoStatus(
             float addedChargePower,
             float minimumChargePower,
             float totalChargePower,
-            // Where the shell is launched from: the cannon's rotation centre (level
-            // coordinates; null if unassembled) and the distance along the barrel to
-            // the point the shell appears at, blocks.
+            // The cannon's rotation center (level coordinates; null if unassembled) and the shell's spawn distance along the barrel.
             @Nullable Vec3 pivot,
             double muzzleDistance,
-            // Where the barrel points: a unit vector in the frame the cannon stands in
-            // (its sub-level's, or the world's); null if unassembled.
+            // Unit vector in the cannon's own frame; null if unassembled.
             @Nullable Vec3 barrel,
-            // An autocannon (fires in bursts; fired from the Autocannon Control Console), and how
-            // long its rounds fly before they expire, ticks (0: no limit).
+            // Rounds expire after this many ticks (0: no limit).
             boolean autocannon,
             int maxFlightTicks
     ) {}
 
     /**
-     * A swivel bearing turning what its plate carries.
-     *
-     * @param plate       the sub-level its plate carries (a turret, a cradle), or null if unassembled
-     * @param hull        the sub-level the bearing itself stands on, or null if it stands in the world
-     * @param facing      the way the bearing faces, in its hull's frame: its angle turns the plate
-     *                    right-handed about this direction
-     * @param targetAngle the angle it is turning to, degrees (what its cog has wound in)
-     * @param actualAngle the angle the plate is at now, degrees (it follows the target physically)
+     * @param plate       the sub-level its plate carries, or null if unassembled
+     * @param hull        the sub-level it stands on, or null in the world
+     * @param facing      in its hull's frame; the angle turns the plate right-handed about it
+     * @param targetAngle degrees, as its cog has wound in
+     * @param actualAngle degrees, physically following the target
      */
     public record SwivelSnapshot(
             BlockPos swivelPos,
             @Nullable UUID plate,
             @Nullable UUID hull,
             Direction facing,
-            // For a swivel lying on its side (tilting a cradle): which way its angle raises
-            // the barrels, as last found (+1 or -1).
+            // Tilting a cradle: which way its angle raises the barrels (+1 or -1).
             int elevationSense,
             double targetAngle,
             double actualAngle

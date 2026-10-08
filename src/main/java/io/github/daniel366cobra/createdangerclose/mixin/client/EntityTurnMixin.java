@@ -9,11 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Limits the rangefinder operator's pitch to the optics' elevation range.
- * The server takes the player's rotation from the client, so clamping the
- * mouse-driven turn here is enough.
- */
+/** Clamps the operator's pitch to the optics' range; the server takes the rotation from the client. */
 @Mixin(value = Entity.class, remap = false)
 public abstract class EntityTurnMixin {
 

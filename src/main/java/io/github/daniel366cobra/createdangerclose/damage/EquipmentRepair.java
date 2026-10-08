@@ -21,16 +21,9 @@ import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Repairing equipment by hand:
- * <ul>
- *   <li>jostled: left-click with a wrench (left, so a hurried double right-click in
- *       battle cannot knock anything out of true). Bonk.</li>
- *   <li>broken cog: right-click with a cogwheel; broken mechanism: with a precision
- *       mechanism. The item is used up.</li>
- *   <li>honeycomb: lubricates (see {@link EquipmentHealth#lubricate}), freeing a seized one.</li>
- * </ul>
- * The click is taken on both sides when it repairs, so it neither mines the block
- * nor places the cogwheel.
+ * Repairs by hand: wrench left-click realigns (left, so a hurried double right-click cannot knock
+ * anything out of true); cogwheel or precision mechanism right-click mends, used up; honeycomb lubricates.
+ * A repairing click is taken on both sides, so it neither mines nor places.
  */
 @EventBusSubscriber(modid = CreateDangerClose.MOD_ID)
 public final class EquipmentRepair {
@@ -83,10 +76,7 @@ public final class EquipmentRepair {
         level.playSound(null, event.getPos(), SoundEvents.SMITHING_TABLE_USE, SoundSource.BLOCKS, 0.8f, 1.1f);
     }
 
-    /**
-     * The health record a click on this block reaches: its own, or for a cannon servo's
-     * or coupler's input half, the one kept by its output half.
-     */
+    /** Its own, or for a servo's or coupler's input half, its output half's. */
     @Nullable
     private static EquipmentHealth healthAt(Level level, BlockPos pos) {
         if (level.getBlockEntity(pos) instanceof PairInputBlockEntity input) {
@@ -96,7 +86,6 @@ public final class EquipmentRepair {
         return EquipmentHealth.at(level, pos);
     }
 
-    /** The fault a held item repairs, if any. */
     @Nullable
     private static Fault faultRepairedBy(ItemStack held) {
         if (AllBlocks.COGWHEEL.isIn(held))

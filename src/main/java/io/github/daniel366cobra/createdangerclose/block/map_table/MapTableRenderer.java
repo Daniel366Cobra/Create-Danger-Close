@@ -11,20 +11,15 @@ import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 
-/**
- * Lays the table's maps on its top face as one stitched sheet, inset one
- * pixel inside the frame trim that runs along the table's outer edge. Drawn by
- * the controller for the whole table.
- */
+/** The table's maps as one sheet on its top face, inset one pixel from the trim. Drawn by the controller. */
 public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity> {
 
-    // Frame trim left visible around the sheet, in blocks (one texture pixel).
+    // One texture pixel, blocks.
     public static final float BORDER = 1 / 16f;
-    // Lift above the top face, against z-fighting.
+    // Against z-fighting.
     private static final float LIFT = 0.001f;
-    // Further lift for the position marker, above the maps.
     private static final float MARKER_LIFT = 0.002f;
-    // Size of one plot line pixel on the table top, in blocks.
+    // Blocks.
     private static final float PLOT_PIXEL = 1 / 64f;
 
     public MapTableRenderer(BlockEntityRendererProvider.Context context) {}
@@ -50,7 +45,7 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
 
                 pose.pushPose();
                 pose.translate(BORDER + dx * cell, 1 + LIFT, BORDER + dz * cell);
-                // Map x → east, map y (down the page) → south, facing up.
+        // Map x → east, map y → south, facing up.
                 pose.mulPose(Axis.XP.rotationDegrees(90));
                 pose.scale(texel, texel, texel);
                 int mapLight = RenderLight.at(table.getLevel(), part.getBlockPos().above());
@@ -64,13 +59,12 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
         }
 
         int light = RenderLight.at(table.getLevel(), table.getBlockPos().above());
-        // A Ponder chart draws its lines and markers bolder, to read in the small view.
+        // Ponder charts are bolder, for the small view.
         MapTableBlockEntity.PonderChart chart = table.getPonderChart();
         float bold = chart != null ? chart.boldness() : 1;
         pose.pushPose();
         pose.translate(BORDER, 1 + LIFT, BORDER);
         pose.mulPose(Axis.XP.rotationDegrees(90));
-        // Plot lines between the maps and the markers; 1/64 block per line pixel.
         MapTablePlot.render(pose, buffers, table, width * cell, PLOT_PIXEL * bold, -MARKER_LIFT / 2, light);
         pose.popPose();
 
@@ -79,8 +73,7 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
             pose.pushPose();
             pose.translate(BORDER, 1 + LIFT, BORDER);
             pose.mulPose(Axis.XP.rotationDegrees(90));
-            // Vanilla size: 8 map pixels. The pose's -Z is up, so a negative lift clears the maps;
-            // each later marker sits a little higher, over the earlier ones.
+            // Vanilla size: 8 map pixels. The pose's -Z is up; later markers sit higher.
             for (int i = 0; i < markers.size(); i++)
                 MapTableMarker.render(pose, buffers, markers.get(i), width * cell, 8 * texel * bold,
                         -MARKER_LIFT * (i + 1), light);
@@ -88,7 +81,7 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
         }
     }
 
-    /** The controller draws across the whole table, not just its own block. */
+    /** It draws across the whole table. */
     @Override
     public AABB getRenderBoundingBox(MapTableBlockEntity table) {
         int width = table.getWidth();

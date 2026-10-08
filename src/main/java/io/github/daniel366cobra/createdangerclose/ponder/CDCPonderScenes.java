@@ -18,15 +18,8 @@ import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * Which item opens which scene. Each scene is a storyboard: a structure file
- * at {@code assets/createdangerclose/ponder/<name>.nbt} (saved with a
- * Structure Block) animated by a script method in {@code ponder/scenes}.
- *
- * <p>Register a scene only once its structure file exists, e.g.:
- * <pre>
- * HELPER.forComponents(CDCBlocks.NETWORK_INTERFACE)
- *         .addStoryBoard("network_interface", NetworkInterfaceScenes::networkInterface, CDCPonderTags.FIRE_CONTROL);
- * </pre>
+ * Which item opens which scene: a structure at {@code assets/createdangerclose/ponder/<name>.nbt}
+ * animated by a method in {@code ponder/scenes}. Register a scene only once its structure exists.
  */
 public final class CDCPonderScenes {
 

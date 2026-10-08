@@ -17,45 +17,36 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Locale;
 
-/**
- * The moving parts of the computer modules. Positions are model pixels with
- * the face towards north, as in the models.
- */
+/** Model pixels, face toward north. */
 public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModuleBlockEntity> {
 
     private static final float PX = 1 / 16f;
 
     // Differentiator: the differential turns about its east-west axis through (8, 8, 5)...
     private static final float DIFFERENTIAL_PIVOT_Y = 8, DIFFERENTIAL_PIVOT_Z = 5;
-    // ...and the tracking flag tilts about the axis out of the face through (6, 10, 0.75),
-    // a quarter turn clockwise (seen from in front) from red to green.
+    // ...and the flag tilts about the face normal through (6, 10, 0.75), a quarter turn clockwise to green.
     private static final float FLAG_PIVOT_X = 6, FLAG_PIVOT_Y = 10, FLAG_PIVOT_Z = 0.75f;
     private static final float FLAG_GREEN_DEG = 90;
 
-    // Integrator: the disk turns about the vertical axis through (8, 4.5, 5); the
-    // ball rolls about the east-west axis through its centre (8, 6, 5), carried
-    // along x with the carriage; the output shaft turns about the east-west axis
-    // through (8, 8, 5).
+    // Integrator pivots: disk vertical through (8, 4.5, 5); ball east-west through (8, 6, 5), riding the
+    // carriage; output shaft east-west through (8, 8, 5).
     private static final float DISK_PIVOT_X = 8, DISK_PIVOT_Z = 5;
     private static final float BALL_PIVOT_Y = 6, BALL_PIVOT_Z = 5;
     private static final float OUTPUT_SHAFT_PIVOT_Y = 8, OUTPUT_SHAFT_PIVOT_Z = 5;
-    // The hold countdown needle slides from x = 11 (expired) to x = 4 (full hold).
+    // x = 11 (expired) to x = 4 (full).
     private static final float HOLD_NEEDLE_FULL_TRAVEL_PX = 4 - 11;
 
-    // Correlator: two coincidence needles swing apart about the axis out of the face
-    // through (8, 5.5), one each way, up to this far. The same needle model is drawn
-    // twice: once where modelled (z 0.75), once nearer the glass (z 0.25), so they
-    // never share a plane.
+    // Correlator: needles swing apart about the face normal through (8, 5.5); the second copy sits
+    // nearer the glass (z 0.25) so they never share a plane.
     private static final float COINCIDENCE_PIVOT_X = 8, COINCIDENCE_PIVOT_Y = 5.5f, COINCIDENCE_PIVOT_Z = 0.75f;
     private static final float COINCIDENCE_MAX_DEG = 50;
     private static final float COINCIDENCE_FRONT_NEEDLE_Z = 0.25f - 0.75f;
 
-    // Fuze Computer: the setting ring turns about the axis out of the face through
-    // (8, 7, 0.75), clockwise (seen from in front) as the time grows. The time is
-    // printed in the window x 6..10, y 4..7, 0.25 px in front of its back wall (0.74 deep).
+    // Fuze Computer: ring about the face normal through (8, 7, 0.75), clockwise as time grows. Readout
+    // window x 6..10, y 4..7.
     private static final float RING_PIVOT_X = 8, RING_PIVOT_Y = 7, RING_PIVOT_Z = 0.75f;
     private static final PanelText FUZE_WINDOW = PanelText.front(6, 10, 4, 7, 0.74f - 0.25f, 0.9f);
-    // Four digits of ticks, like a counter (the longest flight solved is 1200).
+    // Four digits (the longest flight solved is 1200).
     private static final int FUZE_MAX_TICKS = 9999;
 
     private final Font font;
@@ -71,9 +62,8 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
         if (!(state.getBlock() instanceof ComputerModuleBlock block))
             return;
         Direction front = state.getValue(ComputerModuleBlock.FACING);
-        // The block itself is solid: light the parts by the space in front of it.
+        // Solid block: light by the space in front.
         int partLight = RenderLight.at(be.getLevel(), be.getBlockPos().relative(front));
-        // The models face north; the blockstate turns them like this.
         float faceTurn = (float) Math.toRadians(-(front.toYRot() + 180));
         Parts parts = new Parts(state, faceTurn, partLight, ms, buffer.getBuffer(RenderType.cutoutMipped()));
 
@@ -95,7 +85,7 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
 
         parts.start(CDCPartialModels.COMPUTER_TRACKING_FLAG)
                 .translate(FLAG_PIVOT_X * PX, FLAG_PIVOT_Y * PX, FLAG_PIVOT_Z * PX)
-                // About +Z: positive is clockwise as seen from in front.
+                // Clockwise from in front.
                 .rotate(rad(FLAG_GREEN_DEG * be.getTrackingFlag(partialTicks)), Direction.SOUTH)
                 .translate(-FLAG_PIVOT_X * PX, -FLAG_PIVOT_Y * PX, -FLAG_PIVOT_Z * PX);
         parts.finish();
@@ -158,7 +148,7 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
         return (float) Math.toRadians(degrees);
     }
 
-    /** Draws partials turned with the block and lit by the space in front of it. */
+    /** Turned with the block, lit by the space in front. */
     private static final class Parts {
         private final BlockState state;
         private final float faceTurn;
@@ -175,7 +165,7 @@ public class ComputerModuleRenderer extends SafeBlockEntityRenderer<ComputerModu
             this.vb = vb;
         }
 
-        /** A partial, already turned to the block's facing; transforms after this are in model space. */
+    /** Transforms after this are in model space. */
         SuperByteBuffer start(PartialModel partial) {
             current = CachedBuffers.partial(partial, state).rotateCentered(faceTurn, Direction.UP);
             return current;

@@ -1,14 +1,10 @@
 package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
-/**
- * The modules of a fire control computer. Each one placed in the bank around
- * a Ballistic Computer switches on one capability; a second one of the same
- * kind adds nothing.
- */
+/** Each module in a Ballistic Computer's bank switches on one capability; duplicates add nothing. */
 public enum ComputerModule {
-    /** Target lead from the rangefinders' tracked speed, and rate feed-forward to the servos. */
+    /** Target lead, and rate feed-forward to the servos. */
     DIFFERENTIATOR("differentiator"),
-    /** Holds a rangefinder solution between readings, and compensates for own-ship speed. */
+    /** Holds rangefinder solutions between readings; compensates own-ship speed. */
     INTEGRATOR("integrator"),
     /** Merges several rangefinders on one target into a better fix. */
     CORRELATOR("correlator"),
@@ -21,7 +17,7 @@ public enum ComputerModule {
         this.id = id;
     }
 
-    /** Registry path of the module's block, also used in translation keys. */
+    /** Also used in translation keys. */
     public String id() {
         return id;
     }

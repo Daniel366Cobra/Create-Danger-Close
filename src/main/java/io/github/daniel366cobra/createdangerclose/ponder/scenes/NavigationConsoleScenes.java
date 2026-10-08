@@ -8,17 +8,13 @@ import net.createmod.ponder.api.scene.Selection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
-/** Ponder scenes for the Navigation Console. */
 public final class NavigationConsoleScenes {
 
     private NavigationConsoleScenes() {}
 
     /**
-     * Structure {@code navigation_console.nbt}: a 6×6 floor (the bottom layer), a
-     * cogwheel column beside it bringing power from off the scene to the
-     * battle network along z = 4. Two gearboxes on it feed interfaces facing
-     * up into a Gimbal Sensor at (1, 3, 4) and a Navigation Table at (2, 3, 4);
-     * a branch north ends in an interface facing the Navigation Console at (4, 1, 1).
+     * Structure {@code navigation_console.nbt}: 6×6 floor, battle network along z = 4, interfaces up into a
+     * Gimbal Sensor (1, 3, 4) and a Navigation Table (2, 3, 4), and one facing the console (4, 1, 1).
      */
     public static void navigationConsole(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);

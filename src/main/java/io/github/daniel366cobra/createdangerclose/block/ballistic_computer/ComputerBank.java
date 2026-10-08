@@ -15,31 +15,20 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 
-/**
- * The bank of a fire control computer: a Ballistic Computer and the modules
- * touching it, directly or through other modules, in any shape. Found by
- * following touching faces; nothing is stored in the blocks.
- */
+/** A Ballistic Computer and the modules touching it, directly or through modules. Nothing is stored in the blocks. */
 public final class ComputerBank {
 
-    /** Most modules a bank is followed through. */
     public static final int MAX_MODULES = 16;
 
     /**
-     * @param modules the kinds of module in the bank
-     * @param cores   the Ballistic Computers touching it; more than one is a conflict
-     * @param members every block of the bank: its modules, and the computers touching them
+     * @param cores   more than one is a conflict
+     * @param members its modules and the computers touching them
      */
     public record Scan(Set<ComputerModule> modules, Set<BlockPos> cores, List<BlockPos> members) {}
 
     private ComputerBank() {}
 
-    /**
-     * Follows the bank from one of its blocks, a Ballistic Computer or a
-     * module. Modules chain on to their neighbours; computers do not, other
-     * than the one the scan starts at, so two computers only share a bank if
-     * their modules touch.
-     */
+    /** Modules chain on; other computers do not, so two only share a bank if their modules touch. */
     public static Scan scan(Level level, BlockPos start) {
         Set<ComputerModule> modules = EnumSet.noneOf(ComputerModule.class);
         Set<BlockPos> cores = new HashSet<>();
@@ -63,7 +52,6 @@ public final class ComputerBank {
                 if (++moduleCount > MAX_MODULES)
                     break;
                 members.add(pos);
-                // A broken or seized module does not count: its capability is lost.
                 EquipmentHealth health = EquipmentHealth.at(level, pos);
                 if (health == null || !health.isOutOfOrder())
                     modules.add(module.getModule());
@@ -79,14 +67,11 @@ public final class ComputerBank {
         return new Scan(modules, cores, members);
     }
 
-    /**
-     * The blocks sharing a bank's lubrication: every cabinet, and the network interface
-     * driving its computer (part of the same machinery).
-     */
+    /** Every cabinet, and the interface driving the computer. */
     public static List<BlockPos> lubricationGroup(Level level, BlockPos pos) {
         Scan scan = scan(level, pos);
         Set<BlockPos> members = new HashSet<>(scan.members());
-        // A scan stops at a computer it did not start from: from each, the cabinets on its far side.
+        // A scan stops at other computers: add the cabinets on their far side.
         for (BlockPos core : scan.cores())
             members.addAll(scan(level, core).members());
         List<BlockPos> group = new ArrayList<>(members);
@@ -97,11 +82,7 @@ public final class ComputerBank {
         return group;
     }
 
-    /**
-     * The Ballistic Computer of the bank a block belongs to, for a network
-     * interface facing any block of it. Null if the block is not part of a
-     * bank, or the bank has no computer.
-     */
+    /** For an interface facing any block of the bank. Null without a bank or computer. */
     @Nullable
     public static BallisticComputerBlockEntity findComputer(Level level, BlockPos pos) {
         for (BlockPos core : scan(level, pos).cores())

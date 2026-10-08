@@ -4,15 +4,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.util.Mth;
 
 /**
- * The angles a servo may turn what it drives through, set on its protractor
- * dial: an arc from {@code start}, {@code length} degrees on. Dial angles count
- * from the assembled position: for a mount's pitch the barrel's elevation (up
- * positive); for a mount's yaw and for a swivel bearing, the turn from the way it
- * was assembled, clockwise as seen looking at the bearing's face (from above, for
- * a mount or an upright turret).
- *
- * <p>A full circle ({@code length} 360) does not limit a turn at all; nor does
- * -90..90 for pitch.
+ * The arc set on a servo's dial: from {@code start}, {@code length} degrees on. Dial angles count from
+ * the assembled position: elevation (up positive) for pitch; clockwise seen facing the bearing for yaw
+ * and swivels. 360 (or -90..90 for pitch) does not limit at all.
  */
 public record ServoLimits(float start, float length) {
 
@@ -23,33 +17,26 @@ public record ServoLimits(float start, float length) {
         return start + length;
     }
 
-    /** Whether this arc leaves out any of a full turn. */
+    /** Leaves out any of a full turn. */
     public boolean limitsTurn() {
         return length < 360;
     }
 
-    /** How far round the arc a dial angle lies from its start, 0..360. */
+    /** 0..360 from the start. */
     public float along(float dial) {
         float along = (dial - start) % 360;
         return along < 0 ? along + 360 : along;
     }
 
-    /** Whether a turn may reach this dial angle. */
     public boolean containsTurn(double dial) {
         return !limitsTurn() || along((float) dial) <= length + 1e-3f;
     }
 
-    /** Whether the barrel may elevate to this angle. */
     public boolean containsElevation(double elevation) {
         return elevation >= start - 1e-3f && elevation <= end() + 1e-3f;
     }
 
-    /**
-     * How far to turn, degrees, from one dial angle towards another, staying
-     * inside the arc: never through the part left out (a turret swings the long
-     * way round rather than through its own bridge), and stopping at the nearer
-     * end if the target lies outside it.
-     */
+    /** Degrees, never through the excluded part (the long way round), stopping at the nearer end if outside. */
     public float turnWithin(float from, float to) {
         if (!limitsTurn())
             return Mth.wrapDegrees(to - from);

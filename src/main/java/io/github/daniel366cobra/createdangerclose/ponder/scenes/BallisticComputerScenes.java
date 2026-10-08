@@ -8,18 +8,13 @@ import net.createmod.ponder.api.scene.Selection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
-/** Ponder scenes for the Ballistic Computer and its modules. */
 public final class BallisticComputerScenes {
 
     private BallisticComputerScenes() {}
 
     /**
-     * Structure {@code ballistic_computer.nbt}: a 5×5 floor (the bottom layer), a
-     * cogwheel column beside it bringing power from off the scene to the shaft
-     * line along z = 4, a branch north to an interface facing the computer at
-     * (1, 1, 1), and four modules clustered
-     * east of it: differentiator and correlator in a row, integrator and fuze
-     * computer stacked on top of them.
+     * Structure {@code ballistic_computer.nbt}: 5×5 floor, shaft line along z = 4, an interface facing the
+     * computer at (1, 1, 1), and four modules east of it (two in a row, two stacked on top).
      */
     public static void ballisticComputer(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);

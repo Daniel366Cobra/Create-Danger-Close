@@ -21,7 +21,6 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
-/** Ponder scenes for the Map Table. */
 public final class MapTableScenes {
 
     private MapTableScenes() {}
@@ -29,25 +28,22 @@ public final class MapTableScenes {
     private static final ResourceLocation CHART =
             ResourceLocation.fromNamespaceAndPath(CreateDangerClose.MOD_ID, "ponder/map_texture.png");
     private static final int WIDTH = 3;
-    // The made-up chart: one block per map pixel, so the 3×3 table shows 384 blocks across.
+    // One block per map pixel.
     private static final double SHEET_BLOCKS = 128.0 * WIDTH;
 
-    // Where things lie on the chart, as fractions of it (north-west = 0, 0):
-    // the ship out at sea, the target inland, a spotter on the hills north-west of it.
+    // Fractions of the chart (north-west = 0, 0): ship at sea, target inland, spotter north-west of it.
     private static final double SHIP_U = 0.70, SHIP_V = 0.55;
     private static final double TARGET_U = 0.33, TARGET_V = 0.45;
     private static final double FIX_U = 0.337, FIX_V = 0.458, FIX_SIGMA = 12;
     private static final double SPOTTER_U = 0.22, SPOTTER_V = 0.30;
-    // The gun's reach and its dead zone, blocks.
+    // Blocks.
     private static final double GUN_RANGE = 230, GUN_MIN_RANGE = 30;
-    // Markers and plot lines this many times their in-game size, to read in the small Ponder view.
+    // Readable in the small Ponder view.
     private static final float BOLDNESS = 3.0f;
 
     /**
-     * Structure {@code map_table.nbt}: a 5×5 floor (the bottom layer), a 3×3
-     * Map Table at (1..3, 1, 1..3) with its controller at (1, 1, 1), and east
-     * of it a Network Interface at (4, 1, 2) facing it, driven by a cogwheel
-     * column bringing power from off the scene.
+     * Structure {@code map_table.nbt}: 5×5 floor, a 3×3 Map Table (controller (1, 1, 1)), and a powered
+     * Network Interface at (4, 1, 2) facing it.
      */
     public static void mapTable(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -61,8 +57,7 @@ public final class MapTableScenes {
         Selection table = util.select().fromTo(1, 1, 1, 3, 1, 3);
         Selection drive = util.select().fromTo(5, 0, 2, 5, 1, 2);
 
-        // The sheet is placed so the middle of the table, where the ship
-        // marker goes, lies out at sea on the chart.
+        // The table's middle (the ship marker) lies at sea on the chart.
         Vec3 middle = new Vec3(controller.getX() + WIDTH / 2.0, 0, controller.getZ() + WIDTH / 2.0);
         double westX = middle.x - SHIP_U * SHEET_BLOCKS;
         double northZ = middle.z - SHIP_V * SHEET_BLOCKS;
@@ -73,7 +68,7 @@ public final class MapTableScenes {
                         northZ + FIX_V * SHEET_BLOCKS, FIX_SIGMA, middle.x, middle.z)),
                 List.of(new BattlePlot.GunRange(middle.x, middle.z, GUN_RANGE,
                         aimX / aimLength, aimZ / aimLength, GUN_MIN_RANGE, 0, 360)));
-        // Looking towards the target; marker yaw 0 points south, 180 north.
+        // Marker yaw 0 points south.
         float spotterYaw = (float) Math.toDegrees(Math.atan2(-(TARGET_U - SPOTTER_U), TARGET_V - SPOTTER_V));
         List<MapTableMarker.Marker> spotters = List.of(new MapTableMarker.Marker(
                 MapDecorationTypes.FRAME, (float) SPOTTER_U, (float) SPOTTER_V, spotterYaw));
@@ -190,7 +185,7 @@ public final class MapTableScenes {
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 
-    /** A point on the table's top, at a fraction of its chart (north-west = 0, 0). */
+    /** At chart fractions (north-west = 0, 0). */
     private static Vec3 onChart(BlockPos controller, double u, double v) {
         double size = WIDTH - 2 * MapTableRenderer.BORDER;
         return new Vec3(controller.getX() + MapTableRenderer.BORDER + u * size, controller.getY() + 1,

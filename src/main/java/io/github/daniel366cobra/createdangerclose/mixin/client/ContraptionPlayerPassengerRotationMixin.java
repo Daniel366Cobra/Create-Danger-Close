@@ -10,12 +10,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Create turns a seated player's view along with a rotating contraption
- * (client config "rotateWhenSeated"). On a rangefinder tube the operator's
- * look is what the tube follows, so turning the look with the tube would feed
- * back into itself and make the aim behave like a rate joystick.
- */
+/** No view turning with the tube ("rotateWhenSeated"): the tube follows the look, so it would feed back. */
 @Mixin(value = ContraptionPlayerPassengerRotation.class, remap = false)
 public abstract class ContraptionPlayerPassengerRotationMixin {
 

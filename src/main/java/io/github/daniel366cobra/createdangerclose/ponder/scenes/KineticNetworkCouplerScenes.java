@@ -11,28 +11,22 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.Vec3;
 
-/** Ponder scenes for the Kinetic Network Coupler. */
 public final class KineticNetworkCouplerScenes {
 
     private KineticNetworkCouplerScenes() {}
 
-    // The structure was saved at 32 RPM, the default floor speed: the scene runs at twice
-    // that, so the coupler has room to gear down before it overstresses.
+    // Saved at 32 RPM (the default floor): run at twice that, so it can gear down before overstressing.
     private static final float SCENE_SPEED_FACTOR = 2;
     private static final float FLOOR_RPM = 32;
-    // Stressometer readings (share of capacity), and the overstressed reading.
+    // Share of capacity.
     private static final float BASE_ONLY = 0.3f, BASE_ONE_WHEEL = 0.55f, BASE_TWO_WHEELS = 0.85f;
     private static final float ISOLATED_ONE_WHEEL = 0.5f, ISOLATED_TWO_WHEELS = 0.9f;
     private static final float OVERSTRESSED = 1.125f;
 
     /**
-     * Structure {@code kinetic_network_coupler.nbt}: an 8×8 floor (the bottom layer), a
-     * cogwheel column at (8, 0..1, 2) bringing power from off the scene into a gearbox at
-     * (7, 1, 2). The base network runs south from it and up to two Mechanical Presses over
-     * depots, with a Stressometer at (3, 3, 5); west, a shaft feeds the coupler's input
-     * half at (5, 1, 2), facing west, with its output half at (4, 1, 2). The isolated
-     * network behind it has its own Stressometer at (3, 1, 2) and gearboxes up to a line of
-     * three crushing wheels at (1, 2, 3..5).
+     * Structure {@code kinetic_network_coupler.nbt}: 8×8 floor, power into a gearbox at (7, 1, 2). The base
+     * network runs south to two presses (Stressometer (3, 3, 5)) and west to the coupler (input (5, 1, 2),
+     * output (4, 1, 2)). The isolated network has a Stressometer (3, 1, 2) and crushing wheels at (1, 2, 3..5).
      */
     public static void kineticNetworkCoupler(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -57,7 +51,7 @@ public final class KineticNetworkCouplerScenes {
         Selection isolatedLine = util.select().fromTo(1, 1, 2, 3, 1, 2)
                 .add(util.select().position(1, 2, 2))
                 .add(util.select().position(1, 2, 3));
-        // The isolated network's two halves, by sense of rotation (as saved).
+        // By sense of rotation, as saved.
         Selection isolatedBackward = util.select().fromTo(1, 1, 2, 4, 1, 2);
         Selection isolatedForward = util.select().fromTo(1, 2, 2, 1, 2, 5);
         Selection baseNetwork = base.copy().add(feed).add(util.select().position(couplerInput));
@@ -180,7 +174,7 @@ public final class KineticNetworkCouplerScenes {
                 nbt -> nbt.putFloat("Value", value));
     }
 
-    /** Sets the isolated network turning at this speed, each part its own way round as built. */
+    /** Each part its own way round as built. */
     private static void setIsolatedSpeed(CreateSceneBuilder scene, Selection backward, Selection forward, float rpm) {
         scene.world().setKineticSpeed(backward, -rpm);
         scene.world().setKineticSpeed(forward, rpm);

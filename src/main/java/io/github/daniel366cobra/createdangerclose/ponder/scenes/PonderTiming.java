@@ -1,11 +1,8 @@
 package io.github.daniel366cobra.createdangerclose.ponder.scenes;
 
 /**
- * Shared text timing for this mod's Ponder scenes, in ticks (20 per second).
- * A text block shows for {@link #TEXT} ticks ({@link #LONG_TEXT} if its text
- * is over {@link #LONG_TEXT_CHARS} characters); the next block appears
- * {@link #GAP} ticks after it fades out. So after a text,
- * a scene idles for {@link #AFTER_TEXT} or {@link #AFTER_LONG_TEXT}.
+ * Text timing in ticks: a text shows {@link #TEXT} ({@link #LONG_TEXT} past {@link #LONG_TEXT_CHARS}
+ * characters), then the next follows {@link #GAP} after it fades.
  */
 public final class PonderTiming {
 

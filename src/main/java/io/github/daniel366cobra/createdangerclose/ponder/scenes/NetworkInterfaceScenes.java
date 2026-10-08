@@ -8,17 +8,13 @@ import net.createmod.ponder.api.scene.Selection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
-/** Ponder scenes for the Network Interface. */
 public final class NetworkInterfaceScenes {
 
     private NetworkInterfaceScenes() {}
 
     /**
-     * Structure {@code network_interface.nbt}: a 5×5 floor (the bottom layer), a
-     * cogwheel column beside it on the east side bringing power from off
-     * the scene, a shaft and gearbox line along z = 4 (the battle network), two interfaces with a
-     * gimbal and an altitude sensor on it, and a branch north to an interface
-     * facing a Ballistic Computer with an integrator and a differentiator.
+     * Structure {@code network_interface.nbt}: 5×5 floor, battle network along z = 4 with two sensor interfaces
+     * (gimbal, altitude), and a branch north to an interface facing a computer bank.
      */
     public static void networkInterface(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);

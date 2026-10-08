@@ -1,9 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.config;
 
-/**
- * Gameplay settings: kept per world and sent to every player, so everyone in a
- * world plays by the same rules. Defaults are the mod's intended balance.
- */
+/** Gameplay settings, per world and synced. Defaults are the intended balance. */
 public class CServer extends CDCConfigBase {
 
     public final BattleDamage battleDamage = nested(0, BattleDamage::new,
@@ -131,7 +128,7 @@ public class CServer extends CDCConfigBase {
 
     public static class DangerZones extends CDCConfigBase {
         public final ConfigDouble armorPiercingRadius = d(8, 0, 64, "armorPiercingRadius",
-                "[in blocks]", "How far from where it bursts an armour-piercing shell is dangerous.");
+                "[in blocks]", "How far from where it bursts an armor-piercing shell is dangerous.");
         public final ConfigDouble flakRadius = d(6, 0, 64, "flakRadius",
                 "[in blocks]", "How far from where it bursts a flak autocannon round is dangerous.");
         public final ConfigDouble fluidShellRadius = d(9, 0, 64, "fluidShellRadius",
@@ -140,7 +137,7 @@ public class CServer extends CDCConfigBase {
                 "[in blocks]", "How far from where it bursts a high-explosive shell (or mortar shell) is dangerous.");
         public final ConfigDouble otherShellRadius = d(3, 0, 64, "otherShellRadius",
                 "[in blocks]", "How far from where it lands anything without a burst is dangerous",
-                "(solid and armour-piercing shot, mortar stones, smoke, grapeshot).");
+                "(solid and armor-piercing shot, mortar stones, smoke, grapeshot).");
         public final ConfigDouble shrapnelConeAngle = d(30, 1, 90, "shrapnelConeAngle",
                 "[in degrees]", "How wide the cone of balls a shrapnel shell throws forward is, either side of its path.");
         public final ConfigDouble shrapnelConeLength = d(32, 0, 256, "shrapnelConeLength",

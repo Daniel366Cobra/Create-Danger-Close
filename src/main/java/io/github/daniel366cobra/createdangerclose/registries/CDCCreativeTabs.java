@@ -31,14 +31,12 @@ public class CDCCreativeTabs {
     private static class CDCDisplayItemsGenerator implements CreativeModeTab.DisplayItemsGenerator {
         @Override
         public void accept(CreativeModeTab.ItemDisplayParameters parameters, CreativeModeTab.Output output) {
-            // Iterate all your registered blocks
             for (RegistryEntry<Block, Block> entry : CreateDangerClose.getRegistrate().getAll(Registries.BLOCK)) {
                 Item item = entry.get().asItem();
                 if (item != Items.AIR) {
                     output.accept(item);
                 }
             }
-            // Iterate all your registered items
             for (RegistryEntry<Item, Item> entry : CreateDangerClose.getRegistrate().getAll(Registries.ITEM)) {
                 Item item = entry.get();
                 if (!(item instanceof BlockItem)) {

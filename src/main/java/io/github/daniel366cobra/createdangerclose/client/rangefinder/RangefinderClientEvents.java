@@ -22,7 +22,7 @@ import java.util.Set;
 @EventBusSubscriber(modid = CreateDangerClose.MOD_ID, value = Dist.CLIENT)
 public final class RangefinderClientEvents {
 
-    // HUD elements that would sit on top of the eyepiece view.
+    // They would sit over the eyepiece view.
     private static final Set<ResourceLocation> HIDDEN_LAYERS = Set.of(
             VanillaGuiLayers.CROSSHAIR,
             VanillaGuiLayers.HOTBAR,
@@ -43,18 +43,14 @@ public final class RangefinderClientEvents {
         RangefinderSight.tick();
     }
 
-    /** Zoom the world view (not the hand, which is hidden anyway). */
+    /** The world view, not the hand. */
     @SubscribeEvent
     static void onComputeFov(ViewportEvent.ComputeFov event) {
         if (event.usedConfiguredFov() && RangefinderSight.isViewActive())
             event.setFOV(event.getFOV() * RangefinderSight.getZoom());
     }
 
-    /**
-     * Scale mouse turning by the zoom factor. Vanilla turns by
-     * (s·0.6 + 0.2)³ for sensitivity s, so scaling the base term by ∛zoom
-     * scales the turn rate by exactly the zoom.
-     */
+    /** Vanilla turns by (s·0.6 + 0.2)³, so scaling the base term by ∛zoom scales the turn rate by zoom. */
     @SubscribeEvent
     static void onCalculateTurn(CalculatePlayerTurnEvent event) {
         if (!RangefinderSight.isViewActive())
@@ -74,11 +70,7 @@ public final class RangefinderClientEvents {
         }
     }
 
-    /**
-     * RMB is the ranging button while operating (see {@link RangefinderSight#tick()}).
-     * Cancel it first, so neither Create's contraption interaction nor vanilla
-     * item use also handles the click.
-     */
+    /** RMB is the ranging button while operating: cancel it first, so neither Create nor item use handles it. */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     static void onInteractionKey(InputEvent.InteractionKeyMappingTriggered event) {
         if (event.isUseItem() && RangefinderSight.isOperating()) {
@@ -99,7 +91,6 @@ public final class RangefinderClientEvents {
             event.setCanceled(true);
     }
 
-    /** Mod-bus event; the subscriber routes it to the mod bus automatically. */
     @SubscribeEvent
     static void registerGuiLayers(RegisterGuiLayersEvent event) {
         event.registerAbove(VanillaGuiLayers.CAMERA_OVERLAYS,

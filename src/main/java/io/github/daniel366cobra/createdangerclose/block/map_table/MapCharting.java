@@ -17,30 +17,23 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 
-/**
- * Draws terrain onto a map around a point, as vanilla does around a player
- * holding the map ({@code MapItem.update}), with one difference: it never loads
- * chunks. Ground in unloaded chunks stays as last charted.
- */
+/** Charts terrain as vanilla's {@code MapItem.update} does, but never loads chunks. */
 final class MapCharting {
 
     private MapCharting() {}
 
-    /** Columns per full pass when drawing a little at a time: vanilla's 16. */
+    /** Vanilla's 16. */
     static final int STAGGER_COLUMNS = 16;
 
-    /** The radius a player holding this map charts around them, map pixels. */
+    /** Map pixels. */
     static int holderRadius(ServerLevel level, MapItemSavedData data) {
         int radius = 128 / (1 << data.scale);
         return level.dimensionType().hasCeiling() ? radius / 2 : radius;
     }
 
     /**
-     * Charts the map around a world position.
-     *
-     * @param radius radius, map pixels
-     * @param step   draw only the columns of this step (0..15) out of {@link #STAGGER_COLUMNS},
-     *               as vanilla spreads a holder's drawing over ticks; -1 draws them all
+     * @param radius map pixels
+     * @param step   only this column step (0..15), as vanilla spreads drawing over ticks; -1 for all
      */
     static void chart(ServerLevel level, MapItemSavedData data, double x, double z, int radius, int step) {
         if (data.locked || level.dimension() != data.dimension || radius <= 0)
@@ -67,7 +60,7 @@ final class MapCharting {
                 int worldX = (centerX / scale + column - 64) * scale;
                 int worldZ = (centerZ / scale + row - 64) * scale;
                 int chunkX = SectionPos.blockToSectionCoord(worldX), chunkZ = SectionPos.blockToSectionCoord(worldZ);
-                // The one change from vanilla: unloaded ground is left as it was.
+        // The one change from vanilla.
                 if (!level.hasChunk(chunkX, chunkZ))
                     continue;
                 LevelChunk chunk = level.getChunk(chunkX, chunkZ);
@@ -137,7 +130,7 @@ final class MapCharting {
         }
     }
 
-    /** A fluid's own block, unless something solid tops it (as vanilla's MapItem does). */
+    /** As vanilla's MapItem. */
     private static BlockState fluidSurface(ServerLevel level, BlockState state, BlockPos pos) {
         FluidState fluid = state.getFluidState();
         return !fluid.isEmpty() && !state.isFaceSturdy(level, pos, Direction.UP) ? fluid.createLegacyBlock() : state;

@@ -19,11 +19,7 @@ public sealed interface SensorReading {
         SensorReading getSensorReading();
     }
 
-    /**
-     * Gimbal sensor tilt, as the sensor itself reports it: the angles of world
-     * "down" in the sub-level's X and Z planes. These are sub-level-frame
-     * values regardless of how the gimbal block is placed.
-     */
+    /** Angles of world "down" in the sub-level's X and Z planes, whatever the block's placement. */
     record Gimbal(double xAngleDeg, double zAngleDeg) implements SensorReading {
         @Override public Kind kind() { return Kind.GIMBAL; }
 
@@ -78,7 +74,7 @@ public sealed interface SensorReading {
     record Velocity(Vector3d localVelocity, Vector3d normal) implements SensorReading {
         @Override public Kind kind() { return Kind.VELOCITY; }
 
-        /** The ship axis (0 = X, 1 = Y, 2 = Z) this sensor measures along, as mounted. */
+    /** 0 = X, 1 = Y, 2 = Z, as mounted. */
         public int dominantAxis() {
             double ax = Math.abs(normal.x), ay = Math.abs(normal.y), az = Math.abs(normal.z);
             if (ax >= ay && ax >= az) return 0;
@@ -120,12 +116,11 @@ public sealed interface SensorReading {
     }
 
     /**
-     * A target tracked by a rangefinder, world space.
+     * World space.
      *
-     * @param hitWorldPos    tracked target position as of {@code sampleTick}
-     * @param targetVelocity tracked target velocity, blocks per tick; null until tracked
-     * @param sampleTick     game time of the latest reading, for freshness and extrapolation
-     * @param rangeSigma     1σ range error of the latest reading, blocks
+     * @param hitWorldPos    as of {@code sampleTick}
+     * @param targetVelocity blocks per tick; null until tracked
+     * @param rangeSigma     1σ range error, blocks
      */
     record Rangefinder(
             double bearingDeg,
@@ -176,14 +171,9 @@ public sealed interface SensorReading {
     }
 
     /**
-     * A map table on the network, and the target designated on it, world space.
-     *
-     * @param worldPos       the target, or null if none is designated
-     * @param designatedTick game time it was designated, so the newest of several tables wins
-     */
-    /**
-     * @param sigma how precisely the target was placed, blocks: a map pixel is
-     *              this coarse, so the point is off by up to half a pixel
+     * @param worldPos       null if none is designated
+     * @param designatedTick so the newest of several tables wins
+     * @param sigma          placement precision, blocks (half a map pixel)
      */
     record MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma) implements SensorReading {
         @Override public Kind kind() { return Kind.MAP_TARGET; }
@@ -209,31 +199,25 @@ public sealed interface SensorReading {
         }
     }
 
-    /**
-     * Not a sensor: the interface is the one connecting a fire control
-     * computer to the network and driving it.
-     */
+    /** Not a sensor: the interface connects and drives a computer. */
     record Computer() implements SensorReading {
         @Override public Kind kind() { return Kind.COMPUTER; }
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
     }
 
-    /** Not a sensor: the interface connects a navigation console to the network. */
+    /** Not a sensor. */
     record NavConsole() implements SensorReading {
         @Override public Kind kind() { return Kind.NAV_CONSOLE; }
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
     }
 
-    /** Not a sensor: the interface connects a fire mission console to the network. */
+    /** Not a sensor. */
     record FireConsole() implements SensorReading {
         @Override public Kind kind() { return Kind.FIRE_CONSOLE; }
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
     }
 
-    /**
-     * Not a sensor: the interface faces a fixed cannon mount, and the computer aims
-     * and fires its gun through it. Whether the gun is loaded, for the goggles.
-     */
+    /** Not a sensor: the computer aims and fires the fixed mount's gun through it. */
     record FixedGun(boolean loaded) implements SensorReading {
         @Override public Kind kind() { return Kind.FIXED_GUN; }
 

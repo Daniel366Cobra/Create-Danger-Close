@@ -21,22 +21,17 @@ import net.minecraft.world.level.block.PipeBlock;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-/** Ponder scene for battle damage, repairs and upkeep of the mechanical equipment. */
 public final class BattleDamageScenes {
 
     private BattleDamageScenes() {}
 
-    // What the computer's modules show turning: the network the structure was saved on.
+    // The network speed the structure was saved on.
     private static final float NETWORK_RPM = 64;
-    // How long a click hint stays up.
     private static final int CLICK_HINT_TICKS = 30;
 
     /**
-     * Structure {@code battle_damage.nbt}: a 7×6 floor, power coming in from a cogwheel
-     * column at its east edge and along the south side. On the east, a computer bank
-     * facing west: the Ballistic Computer at (6, 1, 2) with a Differentiator beside it,
-     * an Integrator and a Fuze Computer on top, and a Network Interface behind it. On the
-     * west, two Cannon Servos facing north, each driving a shaft down into the floor.
+     * Structure {@code battle_damage.nbt}: 7×6 floor, power from the east. East: a computer bank facing
+     * west (core at (6, 1, 2)), interface behind. West: two Cannon Servos facing north.
      */
     public static void battleDamage(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -100,7 +95,7 @@ public final class BattleDamageScenes {
                 .withItem(AllItems.WRENCH.asStack());
         scene.idle(15);
         setFault(scene, core, Fault.JOSTLED, false);
-        // Let the first click's hint go (15 of its ticks are past) before the second shows.
+        // Let the first hint go (15 ticks are past) before the second.
         scene.idle(CLICK_HINT_TICKS - 15 + 5);
         scene.overlay().showControls(util.vector().blockSurface(integrator, Direction.WEST), Pointing.LEFT, CLICK_HINT_TICKS)
                 .leftClick()
@@ -115,7 +110,6 @@ public final class BattleDamageScenes {
                 .text("Left-click jostled equipment with a Wrench to set it true");
         scene.idle(PonderTiming.AFTER_TEXT);
 
-        // On its north face, clear of the text pointing at the west one.
         scene.overlay().showControls(util.vector().blockSurface(differentiator, Direction.NORTH), Pointing.DOWN, 30)
                 .rightClick()
                 .withItem(AllItems.PRECISION_MECHANISM.asStack());
@@ -152,7 +146,6 @@ public final class BattleDamageScenes {
                 .text("Right-click it with a Cogwheel: either half of a servo will do");
         scene.idle(PonderTiming.AFTER_TEXT);
 
-        // Upkeep.
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .pointAt(util.vector().topOf(fuzeComputer))
                 .placeNearTarget()
@@ -186,12 +179,9 @@ public final class BattleDamageScenes {
     }
 
     /**
-     * Structure {@code piped_lubrication.nbt}: a 7×6 floor, power in from a cogwheel column
-     * at the east edge. A computer bank in a row facing north (Fuze Computer, Integrator,
-     * Differentiator, Ballistic Computer from west to east) with its Network Interface
-     * behind the core, a Cannon Servo facing west in the south-west corner, and in the
-     * south-east a tank of spindle oil over a pump, piping down into the interface and the
-     * servo. A second run lies across the tops of the cabinets: hidden until the end.
+     * Structure {@code piped_lubrication.nbt}: a computer bank facing north, interface behind the core, a
+     * servo in the south-west, and a spindle oil tank and pump piping to both. A second run over the cabinets
+     * is hidden until the end.
      */
     public static void pipedLubrication(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -215,7 +205,7 @@ public final class BattleDamageScenes {
         Selection pipes = util.select().fromTo(2, 2, 4, 5, 2, 4).add(util.select().fromTo(5, 2, 2, 5, 2, 3));
         Selection redundantPipes = util.select().fromTo(2, 2, 1, 5, 2, 1);
 
-        // Until the run over the cabinets is laid, the pipe over the interface has no branch north.
+        // No branch north until the run over the cabinets is laid.
         scene.world().modifyBlock(teeAboveInterface, state -> state.setValue(PipeBlock.NORTH, false), false);
         scene.world().showSection(floor, Direction.UP);
         scene.idle(10);
@@ -271,7 +261,6 @@ public final class BattleDamageScenes {
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 
-    /** A shell bursting: a flash and some smoke. */
     private static void burst(CreateSceneBuilder scene, SceneBuildingUtil util, Vec3 at) {
         scene.effects().emitParticles(at, scene.effects().particleEmitterWithinBlockSpace(
                 ParticleTypes.EXPLOSION, Vec3.ZERO), 1, 1);

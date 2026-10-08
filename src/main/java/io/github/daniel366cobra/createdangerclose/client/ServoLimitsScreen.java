@@ -28,23 +28,19 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.joml.Matrix4f;
 
 /**
- * A cannon servo's protractor dial: drag the two ends of the arc the servo may
- * turn through. A full ring for a mount's traverse or a turret's swivel bearing
- * (0 at the top, the way it was assembled; clockwise), a half dial for a mount's
- * elevation or a swivel tilting a cradle (0 level, up positive). Sent to the server when closed.
+ * A servo's protractor dial: drag the arc's two ends. A full ring for traverse (0 at the top, clockwise),
+ * a half dial for elevation (0 level). Sent to the server on close.
  */
 public class ServoLimitsScreen extends AbstractSimiScreen {
 
-    // The dial art: 128 x 128, centred. The ring_lit / elevation_lit sheets are
-    // shown only inside the arc that is allowed.
+    // 128 x 128, centered; the _lit sheets show only inside the allowed arc.
     private static final ResourceLocation RING = texture("ring");
     private static final ResourceLocation RING_LIT = texture("ring_lit");
     private static final ResourceLocation ELEVATION = texture("elevation");
     private static final ResourceLocation ELEVATION_LIT = texture("elevation_lit");
-    // 16 x 32: the grabber, and below it the grabber held or hovered.
+    // 16 x 32: normal above, held or hovered below.
     private static final ResourceLocation GRABBER = texture("grabber");
-    // 16 x 64, drawn pointing straight up with its pivot at the bottom centre; and the
-    // 16 x 16 hub drawn over its root at the dial's centre.
+    // 16 x 64 pointing up, pivot at bottom center; the 16 x 16 hub over its root.
     private static final ResourceLocation NEEDLE = texture("needle");
     private static final ResourceLocation CENTER = texture("center");
 
@@ -63,7 +59,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
 
     private final CannonServoOutputBlockEntity servo;
     private final boolean elevation;
-    // The arc as dragged (unsnapped), dial degrees.
+    // Unsnapped, dial degrees.
     private float start, length;
     private Drag drag = Drag.NONE;
     private float lastMouseAngle;
@@ -81,7 +77,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
         this.needle = LerpedFloat.angular().startWithValue(servo.getDialAngle());
     }
 
-    /** Whether a servo driving this has a dial: a mount's pitch or yaw, or a swivel bearing. */
+    /** A mount's pitch or yaw, or a swivel bearing. */
     public static boolean hasDial(ServoAxis axis) {
         return axis == ServoAxis.PITCH || axis == ServoAxis.YAW || axis == ServoAxis.SWIVEL;
     }
@@ -106,17 +102,17 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
         super.init();
     }
 
-    private int centreX() {
+    private int centerX() {
         return width / 2;
     }
 
-    private int centreY() {
+    private int centerY() {
         return height / 2;
     }
 
     // --- Dial geometry ---
 
-    /** Screen direction of a dial angle: the ring from the top clockwise, elevation from the right upwards. */
+    /** The ring from the top clockwise, elevation from the right upward. */
     private float dirX(float dial) {
         float rad = (float) Math.toRadians(dial);
         return elevation ? Mth.cos(rad) : Mth.sin(rad);
@@ -128,7 +124,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
     }
 
     private float mouseAngle(double mouseX, double mouseY) {
-        double dx = mouseX - centreX(), dy = mouseY - centreY();
+        double dx = mouseX - centerX(), dy = mouseY - centerY();
         return (float) Math.toDegrees(elevation ? Math.atan2(-dy, dx) : Math.atan2(dx, -dy));
     }
 
@@ -161,7 +157,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
 
     @Override
     protected void renderWindow(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
-        int cx = centreX(), cy = centreY();
+        int cx = centerX(), cy = centerY();
         ServoLimits limits = snapped();
 
         graphics.blit(elevation ? ELEVATION : RING, cx - HALF, cy - HALF, 0, 0, DIAL, DIAL, DIAL, DIAL);
@@ -189,7 +185,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
                 cx, cy + LABEL_RADIUS + 24, TEXT_DIM);
     }
 
-    /** The lit dial, shown in a fan from the centre over the allowed arc. */
+    /** A fan from the center over the allowed arc. */
     private void renderLitSector(GuiGraphics graphics, ServoLimits limits, int cx, int cy) {
         RenderSystem.setShaderTexture(0, elevation ? ELEVATION_LIT : RING_LIT);
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
@@ -221,7 +217,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
         PoseStack pose = graphics.pose();
         pose.pushPose();
         pose.translate(cx, cy, 0);
-        // Drawn pointing up, turned clockwise to the angle: the ring's 0 is up, elevation's is to the right.
+        // Drawn up, turned clockwise: the ring's 0 is up, elevation's to the right.
         pose.mulPose(Axis.ZP.rotationDegrees(elevation ? 90 - dial : dial));
         graphics.blit(NEEDLE, -NEEDLE_WIDTH / 2, -NEEDLE_LENGTH, 0, 0, NEEDLE_WIDTH, NEEDLE_LENGTH, NEEDLE_WIDTH, NEEDLE_LENGTH);
         pose.popPose();
@@ -230,20 +226,20 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
     }
 
     private void renderGrabber(GuiGraphics graphics, float dial, boolean lit) {
-        int x = Math.round(centreX() + dirX(dial) * GRAB_RADIUS) - GRABBER_SIZE / 2;
-        int y = Math.round(centreY() + dirY(dial) * GRAB_RADIUS) - GRABBER_SIZE / 2;
+        int x = Math.round(centerX() + dirX(dial) * GRAB_RADIUS) - GRABBER_SIZE / 2;
+        int y = Math.round(centerY() + dirY(dial) * GRAB_RADIUS) - GRABBER_SIZE / 2;
         graphics.blit(GRABBER, x, y, 0, lit ? GRABBER_SIZE : 0, GRABBER_SIZE, GRABBER_SIZE, GRABBER_SIZE, 2 * GRABBER_SIZE);
     }
 
     private void renderLabel(GuiGraphics graphics, float dial) {
-        int x = Math.round(centreX() + dirX(dial) * LABEL_RADIUS);
-        int y = Math.round(centreY() + dirY(dial) * LABEL_RADIUS) - font.lineHeight / 2;
+        int x = Math.round(centerX() + dirX(dial) * LABEL_RADIUS);
+        int y = Math.round(centerY() + dirY(dial) * LABEL_RADIUS) - font.lineHeight / 2;
         int value = Math.round(elevation ? dial : Mth.wrapDegrees(dial));
         graphics.drawCenteredString(font, (value > 0 ? "+" : "") + value + "°", x, y, TEXT);
     }
 
     private boolean grabberHit(double mouseX, double mouseY, float dial) {
-        double x = centreX() + dirX(dial) * GRAB_RADIUS, y = centreY() + dirY(dial) * GRAB_RADIUS;
+        double x = centerX() + dirX(dial) * GRAB_RADIUS, y = centerY() + dirY(dial) * GRAB_RADIUS;
         return Math.abs(mouseX - x) <= GRABBER_SIZE / 2f + 1 && Math.abs(mouseY - y) <= GRABBER_SIZE / 2f + 1;
     }
 
@@ -281,7 +277,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
         if (delta == 0)
             return true;
         if (drag == Drag.EITHER_END)
-            // Both ends together (a full ring): whichever end the drag can move.
+            // A full ring: whichever end the drag can move.
             drag = delta > 0 ? Drag.START : Drag.END;
         if (elevation)
             dragElevation(delta);

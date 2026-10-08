@@ -53,8 +53,7 @@ public class CreateDangerClose {
         CDCMenuTypes.register();
         CDCFluids.register();
 
-        // Create's contraption type registry only accepts entries while it is
-        // being populated, i.e. during its RegisterEvent (same as CBC).
+        // Create's contraption type registry only accepts entries during its RegisterEvent (as CBC does).
         eventBus.addListener(RegisterEvent.class, event -> {
             if (event.getRegistryKey().equals(CreateRegistries.CONTRAPTION_TYPE))
                 CDCContraptionTypes.init();
@@ -63,8 +62,7 @@ public class CreateDangerClose {
         // Things Registrate does not handle.
         CDCCreativeTabs.register(eventBus);
         CDCStats.register(eventBus);
-        // Custom stats only show in the statistics screen once looked up after
-        // registration. Load-complete handlers run in parallel, so on the main thread.
+        // Stats only show once looked up after registration; load-complete runs in parallel, so on the main thread.
         eventBus.addListener(FMLLoadCompleteEvent.class, event -> event.enqueueWork(CDCStats::bootstrap));
     }
 

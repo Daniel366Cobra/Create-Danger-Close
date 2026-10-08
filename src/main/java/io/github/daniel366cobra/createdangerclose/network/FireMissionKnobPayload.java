@@ -10,10 +10,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.util.Mth;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-/**
- * Client to server: the player scrolled over a Fire Mission Console's fuze
- * correction knob, turning it by this many ticks (a notch, or a fine step).
- */
+/** Client to server: the fuze knob turned by this many ticks. */
 public record FireMissionKnobPayload(BlockPos console, int deltaTicks) implements CustomPacketPayload {
 
     // Largest turn one scroll may make, ticks (a coarse notch).

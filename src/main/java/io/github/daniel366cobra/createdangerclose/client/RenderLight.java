@@ -6,12 +6,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockAndTintGetter;
 
-/**
- * Light for renderers that sample it at a position other than their own
- * block. On a ship, Sable scales the sky light it gives block entity renderers
- * by how much sky the ship sees; this does the same, so parts lit this way
- * match the ship's blocks around them.
- */
+/** Light sampled away from a renderer's own block, with Sable's ship sky-light scaling, to match the ship. */
 public final class RenderLight {
 
     private RenderLight() {}

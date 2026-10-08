@@ -13,39 +13,32 @@ import org.jetbrains.annotations.Nullable;
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 
 /**
- * The output half of a two-block kinetic pair: a source turning a network of its own,
- * paid for by the input half's network. Every pair on an input network gets an equal share
- * of its spare power: its capacity, less a margin, less everything but the pairs working now.
- * The subclass decides how fast to run on that share, and what to offer its own network.
+ * The output half of a kinetic pair: a source for its own network, paid for by the input network.
+ * Each working pair gets an equal share of the input's spare power ({@link #fairShare}).
  */
 public abstract class PairOutputBlockEntity extends GeneratingKineticBlockEntity {
 
-    // The share of the input network's capacity never claimed, and how much a speed
-    // limit may rise per update (it drops at once).
+    // Capacity never claimed, and how much a limit may rise per update (it drops at once).
     protected static final float POWER_MARGIN = 0.1f;
     protected static final float POWER_RAMP_UP = 1.25f;
-    // Overstressed below the operating speed; back only with this much to spare over it.
+    // Resume only with this much to spare.
     protected static final float RESUME_FACTOR = 1.1f;
-    // Overstressed, it offers no more than this share of the load.
+    // Overstressed, it offers at most this share of the load.
     protected static final float UNDER_OFFER = 0.99f;
-    // Capacity offered over the load (so rounding never overstresses it), and at the least.
+    // Over the load (so rounding never overstresses), and the floor.
     protected static final float CAPACITY_HEADROOM = 1.1f, MIN_CAPACITY = 0.5f;
 
-    // What it offers its own network, per RPM.
+    // Per RPM.
     private float outputCapacity = MIN_CAPACITY;
 
     protected PairOutputBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
     }
 
-    /** Whether it is working now, for sharing the input network's spare power. */
+    /** Working now, for sharing the input's spare power. */
     public abstract boolean isPassingPower();
 
-    /**
-     * This pair's share of the input network's spare power (su): its capacity less the
-     * margin, less everything but the pairs working now (this one counted as working),
-     * split equally among those. Servos and couplers on one network share alike.
-     */
+    /** Capacity less the margin and everything but the working pairs (this one included), split equally among them, su. */
     protected static float fairShare(PairInputBlockEntity input) {
         KineticNetwork network = input.getOrCreateNetwork();
         int working = 0;
@@ -59,21 +52,20 @@ public abstract class PairOutputBlockEntity extends GeneratingKineticBlockEntity
         return Math.max(0, (input.getNetworkCapacity() * (1 - POWER_MARGIN) - otherLoad) / Math.max(1, working));
     }
 
-    /** A speed limit that drops at once to what is affordable, and rises towards it gently. */
+    /** Drops at once, rises gently. */
     protected static float rampedLimit(float limit, float affordable) {
         return Math.min(affordable, limit >= Float.MAX_VALUE / 2 ? affordable : limit * POWER_RAMP_UP + 1);
     }
 
-    /** Offers its own network this capacity per RPM, from now on (server). */
+    /** Per RPM, server. */
     protected void offerCapacity(float capacity) {
-        // Against what the network has on record for us too: it may have been rebuilt with an older figure.
+        // The network may have been rebuilt with an older figure.
         Float recorded = hasNetwork() ? getOrCreateNetwork().sources.get(this) : null;
         if (Math.abs(capacity - outputCapacity) <= Math.max(0.01f, outputCapacity * 0.02f)
                 && (recorded == null || Math.abs(recorded - capacity) <= Math.max(0.01f, capacity * 0.02f)))
             return;
         outputCapacity = capacity;
-        // Create subtracts this, as saved, from the network's saved capacity on reload: stale, it
-        // would leave the difference behind as phantom capacity for good.
+        // Create subtracts this on reload: stale, it would leave phantom capacity.
         lastCapacityProvided = capacity;
         if (hasNetwork())
             getOrCreateNetwork().updateCapacityFor(this, capacity);
@@ -85,7 +77,6 @@ public abstract class PairOutputBlockEntity extends GeneratingKineticBlockEntity
         return outputCapacity;
     }
 
-    /** The input half behind it, if any. */
     @Nullable
     public PairInputBlockEntity getPairedInput() {
         if (level == null)
@@ -94,8 +85,7 @@ public abstract class PairOutputBlockEntity extends GeneratingKineticBlockEntity
         return level.getBlockEntity(inputPos) instanceof PairInputBlockEntity input ? input : null;
     }
 
-    // What it offers its own network, saved so the network is rebuilt with it on load (else it
-    // is rebuilt before anything is measured, short of the load).
+    // Saved, so the network is rebuilt with it rather than short of the load.
     @Override
     protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(compound, registries, clientPacket);

@@ -20,27 +20,20 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-/** Ponder scenes for the rangefinder. */
 public final class RangefinderScenes {
 
     private RangefinderScenes() {}
 
-    // The showcase turn: a full circle, at the pace of a bearing on a fast network.
+    // A full circle at a fast network's pace.
     private static final int SHOWCASE_TICKS = 160;
-    // How long the Super Glue selection box takes to grow over the tube.
     private static final int GLUE_TICKS = 40;
-    // In the upkeep scene: turn the lenses to face the viewer.
     private static final float LENS_TURN_DEG = 180;
     private static final int LENS_TURN_TICKS = 60;
 
     /**
-     * Structure {@code rangefinder.nbt}: a 6×6 floor (the bottom layer), a
-     * cogwheel column beside it bringing power from off the scene to the
-     * battle network, which runs up into a Rangefinder Bearing at (2, 1, 4)
-     * facing up and north to an interface and a Ballistic Computer (with an
-     * integrator and a differentiator on top). On the bearing stands the
-     * tube: an industrial iron mast, girders out to two lenses looking south
-     * (a baseline of 4) and the eyepiece bolted to the mast's north side.
+     * Structure {@code rangefinder.nbt}: 6×6 floor; the battle network runs into a Rangefinder Bearing
+     * (2, 1, 4) facing up, and north to an interface and computer bank. The tube: a mast, girders to two
+     * lenses looking south (baseline 4), the eyepiece on the mast's north side.
      */
     public static void rangefinder(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -105,11 +98,10 @@ public final class RangefinderScenes {
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .pointAt(util.vector().blockSurface(eyepiece, Direction.NORTH))
                 .placeNearTarget()
-                .text("The Rangefinder Eyepiece bolts onto the back of the tube, centred between the lenses");
+                .text("The Rangefinder Eyepiece bolts onto the back of the tube, centered between the lenses");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
-        // Glue the tube together, as Create's bearing scenes do: the selection
-        // box grows from one lens to cover the whole tube, then the joints glue.
+        // As Create's bearing scenes: the glue box grows from one lens over the tube.
         AABB glueStart = new AABB(westLens);
         AABB glueBox = new AABB(Vec3.atLowerCornerOf(util.grid().at(0, 3, 3)),
                 Vec3.atLowerCornerOf(util.grid().at(5, 5, 5)));
@@ -181,11 +173,7 @@ public final class RangefinderScenes {
 
     }
 
-    /**
-     * Structure {@code rangefinder.nbt} again (see {@link #rangefinder}): looking after
-     * the lenses, on the assembled tube turned to face the viewer. Cracks from battle and
-     * dust from the weather, and what puts each right.
-     */
+    /** Structure {@code rangefinder.nbt} again: lens cracks and dust, and their fixes, with the lenses turned to the viewer. */
     public static void rangefinderUpkeep(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
         scene.title("rangefinder_upkeep", "Looking after a Rangefinder's lenses");
@@ -199,7 +187,6 @@ public final class RangefinderScenes {
                 .add(util.select().fromTo(2, 1, 4, 5, 1, 4))
                 .add(util.select().fromTo(4, 1, 0, 4, 1, 3)).add(util.select().fromTo(4, 2, 0, 4, 2, 1))
                 .add(util.select().position(bearing));
-        // The tube: mast, girders, lenses and eyepiece.
         Selection tubeBlocks = util.select().fromTo(2, 3, 4, 2, 4, 4)
                 .add(util.select().fromTo(0, 4, 4, 4, 4, 4))
                 .add(util.select().position(2, 3, 3));
@@ -209,14 +196,14 @@ public final class RangefinderScenes {
         scene.world().configureCenterOfRotation(tube, util.vector().centerOf(2, 3, 4));
         scene.idle(20);
 
-        // Turn the lenses to face the viewer. The pointers then follow the lens to where it turned.
+        // The pointers then follow the lens.
         scene.world().rotateBearing(bearing, LENS_TURN_DEG, LENS_TURN_TICKS);
         scene.world().rotateSection(tube, 0, LENS_TURN_DEG, 0, LENS_TURN_TICKS);
         scene.idle(LENS_TURN_TICKS + PonderTiming.GAP);
 
         Vec3 pivot = util.vector().centerOf(2, 3, 4);
         Vec3 lensCenter = turned(util.vector().centerOf(eastLens), pivot, LENS_TURN_DEG);
-        // The lens looks south when built; after the turn, along this.
+        // South when built.
         Vec3 lensFacing = turned(new Vec3(0, 0, 1), Vec3.ZERO, LENS_TURN_DEG);
         Vec3 lensFront = lensCenter.add(lensFacing.scale(0.5));
         Vec3 lensTop = lensCenter.add(0, 0.5, 0);
@@ -280,11 +267,7 @@ public final class RangefinderScenes {
         scene.idle(PonderTiming.AFTER_TEXT);
     }
 
-    /**
-     * Where a point ends up after turning the tube by this many degrees about
-     * the vertical axis through the pivot, the same way {@code rotateSection}
-     * turns it (right-handed about +Y: east swings towards north).
-     */
+    /** As {@code rotateSection} turns it about the vertical through the pivot (right-handed: east swings north). */
     private static Vec3 turned(Vec3 point, Vec3 pivot, double degrees) {
         double a = Math.toRadians(degrees);
         double x = point.x - pivot.x, z = point.z - pivot.z;

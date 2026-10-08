@@ -5,28 +5,9 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
 /**
- * Pure-math ballistic solver for indirect fire.
- *
- * <p>Units are CBC-native: blocks, blocks/tick, blocks/tick². This matches
- * {@code AbstractCannonProjectile} so the predicted trajectory is identical
- * to what the fired shell actually follows.
- *
- * <p>Drag model mirrors CBC's {@code getForces}:
- * <pre>
- *   speed = |vel|
- *   dragForce = formDrag * density * speed
- *   if (quadratic) dragForce *= speed
- *   dragForce = min(dragForce, speed)
- *   accel = -normalize(vel) * dragForce + (0, gravity, 0)
- * </pre>
- * Integrated with CBC's kinematic step:
- * <pre>
- *   pos += vel + 0.5 * accel
- *   vel += accel
- * </pre>
- *
- * <p>Atmospheric density is assumed to be 1.0 (overworld air). Fluid drag is
- * ignored — the shell is assumed to fly through air.
+ * Ballistic solver in CBC-native units (blocks, ticks), mirroring {@code AbstractCannonProjectile}'s
+ * drag ({@code getForces}) and kinematic step, so predictions match the fired shell.
+ * Assumes air at density 1.0; fluid drag is ignored.
  */
 public final class BallisticSolver {
 
@@ -34,18 +15,16 @@ public final class BallisticSolver {
 
     private static final double DENSITY = 1.0;
     private static final int MAX_TICKS = 1200;          // 60 seconds
-    // Elevation search: 1e-4 rad (0.006°) is still far finer than a servo holds a gun
-    // (0.2°); the cap only matters if the bracket starts unusually wide.
+    // 1e-4 rad: far finer than a servo holds a gun.
     private static final int BISECTION_ITERATIONS = 20;
     private static final double BISECTION_TOLERANCE = 1e-4;
     private static final double MOVING_TARGET_ITERATIONS = 10;
     private static final double MOVING_TARGET_TOLERANCE_TICKS = 0.5;
     private static final int LAUNCH_OFFSET_ITERATIONS = 10;
     private static final double LAUNCH_OFFSET_TOLERANCE = 0.25; // blocks
-    // If the aim correction does not converge, the best attempt is still
-    // accepted when it lands this close.
+    // A non-converging aim correction is still accepted within this miss.
     private static final double LAUNCH_OFFSET_ACCEPTABLE_MISS = 1.0; // blocks
-    // Steepest pitch searched for plunging fire: near-vertical shots are useless.
+    // Near-vertical shots are useless.
     private static final double MAX_HIGH_ARC_DEG = 85;
 
     public record Result(
@@ -69,13 +48,10 @@ public final class BallisticSolver {
             DEGENERATE,
             // Plunging fire: even the steepest shot lands beyond the target.
             TOO_CLOSE,
-            // A gun on a ship without an Altitude Sensor, at an absolute target (map or
-            // navigation table) well above or below it: its own height is unknown.
+            // Ship gun without an Altitude Sensor, absolute target well above or below.
             NO_ALTITUDE,
-            // More drives aim a gun than it has ways to turn: two turn it about the same
-            // axis, or there are more than two.
+            // Two drives about the same axis, or more than two.
             REDUNDANT_DRIVES,
-            // An autocannon round would expire before getting there.
             ROUND_EXPIRES
         }
 
@@ -85,17 +61,11 @@ public final class BallisticSolver {
     }
 
     /**
-     * Solves for the firing solution to hit a target.
-     *
-     * @param muzzleWorld        muzzle position, world frame
-     * @param targetWorld        target position, world frame
-     * @param targetVelocity     target velocity per tick, world frame
-     * @param muzzleVelocity     initial projectile speed, blocks/tick
-     * @param gravity            CBC gravity, negative, blocks/tick²
-     * @param drag               CBC formDrag coefficient
-     * @param isQuadraticDrag    CBC drag mode
-     * @param maxElevationDeg    upper pitch limit, degrees (positive)
-     * @param maxDepressionDeg   lower pitch limit, degrees (negative)
+     * @param targetVelocity   per tick
+     * @param muzzleVelocity   blocks/tick
+     * @param gravity          CBC gravity, negative, blocks/tick²
+     * @param maxElevationDeg  positive
+     * @param maxDepressionDeg negative
      */
     public static Result solve(
             Vector3d muzzleWorld,
@@ -148,19 +118,9 @@ public final class BallisticSolver {
     }
 
     /**
-     * Solves for a shell that inherits extra launch velocity, e.g. from the
-     * moving ship it is fired from: the shell starts with
-     * {@code muzzleVelocity * barrelDir + launchVelocityOffset}.
-     *
-     * <p>Drag acts on the combined velocity, so the trajectory leaves the
-     * vertical plane of the barrel and cannot be solved by pitch bisection
-     * alone. Instead the aim point is corrected iteratively: solve for the
-     * aim point, simulate the real shot, and shift the aim point against the
-     * miss until the simulated shot lands on the target.
-     *
-     * <p>The returned pitch and yaw are the barrel direction, world frame.
-     *
-     * @param launchVelocityOffset extra launch velocity, blocks/tick, world frame
+     * For a shell with extra launch velocity (from a moving ship). Drag then pulls the shot out of
+     * the barrel's vertical plane, so the aim point is corrected iteratively against the simulated miss.
+     * Returns the barrel direction, world frame.
      */
     public static Result solve(
             Vector3d muzzleWorld,
@@ -245,9 +205,7 @@ public final class BallisticSolver {
                 aimResult.timeOfFlightTicks(), aimResult.range(), aimResult.fuzeTicks());
     }
 
-    /**
-     * Solves the static-target problem by bisecting the elevation angle.
-     */
+    /** Static target: bisects the elevation. */
     public static Result solveStatic(
             Vector3d muzzleWorld,
             Vector3d targetWorld,
@@ -278,7 +236,6 @@ public final class BallisticSolver {
         double maxElevRad = Math.min(Math.toRadians(maxElevationDeg), Math.toRadians(45));
         double maxDepRad = Math.toRadians(maxDepressionDeg);
 
-        // Max-elevation reachability check.
         IntegrationResult highTraj = integrate(cosYaw, sinYaw, maxElevRad,
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
                 horizontalRange, dy);
@@ -287,9 +244,7 @@ public final class BallisticSolver {
             return Result.invalid(Result.Reason.OUT_OF_RANGE);
         }
 
-        // Direct fire: the flat arc, between the lowest pitch and 45°, where a
-        // steeper barrel lands further. Plunging fire: the steep arc, between
-        // 45° and the steepest pitch, where a steeper barrel lands shorter.
+        // Direct: the flat arc (lowest pitch to 45°). Plunging: the steep arc (45° to the steepest).
         double lo, hi;
         if (highArc) {
             double steepestRad = Math.toRadians(steepestPlungingPitch(maxElevationDeg));
@@ -349,12 +304,10 @@ public final class BallisticSolver {
     }
 
     /**
-     * How far a shell fired at {@code pitchDeg} travels before coming down to
-     * {@code relativeY} (relative to the muzzle), horizontally. With the pitch
-     * {@link #solveStatic} tops out at (45° or the mount's limit), this is the
-     * range beyond which it reports {@link Result.Reason#OUT_OF_RANGE}.
+     * Horizontal range at which a shell fired at {@code pitchDeg} comes down to {@code relativeY}.
+     * At {@link #solveStatic}'s top pitch, the {@link Result.Reason#OUT_OF_RANGE} boundary.
      *
-     * @return the range, or 0 if the shell never reaches that height
+     * @return 0 if the shell never reaches that height
      */
     public static double maxRange(
             double muzzleVelocity, double gravity, double drag, boolean isQuadraticDrag,
@@ -363,10 +316,7 @@ public final class BallisticSolver {
         return maxRange(muzzleVelocity, gravity, drag, isQuadraticDrag, pitchDeg, relativeY, MAX_TICKS);
     }
 
-    /**
-     * As {@link #maxRange(double, double, double, boolean, double, double)}, for a round that
-     * only flies this many ticks (an autocannon's expires): no further than it gets by then.
-     */
+    /** For a round that expires after this many ticks (an autocannon's). */
     public static double maxRange(
             double muzzleVelocity, double gravity, double drag, boolean isQuadraticDrag,
             double pitchDeg, double relativeY, int maxTicks
@@ -406,21 +356,13 @@ public final class BallisticSolver {
         return px; // still in the air after the tick budget
     }
 
-    // ------------------------------------------------------------------
-    // Integration
-    // ------------------------------------------------------------------
+    // --- Integration ---
 
     private record IntegrationResult(double horizontalRange, double vertical, double ticks) {}
 
     /**
-     * CBC-compatible per-tick trajectory integration. Stops when the
-     * horizontal range crosses {@code targetHorizontalRange} or the max tick
-     * budget is exhausted.
-     *
-     * <p>The height is interpolated to exactly the target range within the
-     * crossing tick. Reading it at the first whole tick past the range would
-     * make the result jump whenever that tick changes, which breaks the
-     * iterative solves built on top of this.
+     * Integrates until the horizontal range crosses {@code targetHorizontalRange}. The height is
+     * interpolated within the crossing tick, so iterative solves on top see no jumps.
      */
     private static IntegrationResult integrate(
             double cosYaw, double sinYaw, double pitchRad,
@@ -475,7 +417,6 @@ public final class BallisticSolver {
             }
         }
 
-        // Exhausted the tick budget.
         double hRange = Math.sqrt(px * px + pz * pz);
         return new IntegrationResult(hRange, py, MAX_TICKS);
     }
@@ -484,10 +425,8 @@ public final class BallisticSolver {
     private record Impact(Vector3d relativePos, double ticks) {}
 
     /**
-     * Full 3D CBC-compatible integration from an arbitrary launch velocity.
-     * Stops when the shell's progress along {@code alongTrack} (a horizontal
-     * unit vector towards the target) reaches {@code targetRange}, and
-     * interpolates the position within that tick.
+     * 3D integration from any launch velocity, until progress along {@code alongTrack} reaches
+     * {@code targetRange}; interpolated within that tick.
      *
      * @return null if the shell never gets there
      */

@@ -7,31 +7,29 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 
 /**
- * Dust settling on lenses: 0 (clean) to 1 (caked). It settles at a rate set by
- * the biome's heat and dryness: a desert or the Nether cakes a lens in a few
- * days, a temperate plain takes over a week, and cold biomes raise none. Rain
- * falling on the lens washes it off; so does a water bucket. (Rates: config.)
+ * Lens dust, 0 (clean) to 1 (caked), settling with biome heat and dryness (none when cold). Rain or a
+ * water bucket washes it off. Rates: config.
  */
 public final class LensDust {
 
     private static final float TICKS_PER_DAY = 24000;
-    // Below this biome temperature no dust settles (snowy and cold biomes).
+    // Biome temperature below which none settles.
     private static final float COLD_TEMPERATURE = 0.15f;
-    // The hottest biomes' temperature (desert, badlands, the Nether).
+    // Desert, badlands, the Nether.
     private static final float HOT_TEMPERATURE = 2.0f;
-    /** From this much on a lens counts as dusty (goggles, particles). */
+    /** Goggles and particles show it from here. */
     public static final float DUSTY = 0.25f;
 
     private LensDust() {}
 
-    /** A lens's dust after {@code ticks} of weather at this position (in the world). */
+    /** After {@code ticks} of weather here. */
     public static float weather(Level level, BlockPos pos, float dust, int ticks) {
         if (level.isRainingAt(pos))
             return Math.max(0, dust - ticks / (20 * CDCConfig.server().maintenance.dust.rainWashSeconds.getF()));
         return Math.min(1, dust + settlingPerTick(level, pos) * ticks);
     }
 
-    /** How fast dust settles here, per tick. */
+    /** Per tick. */
     public static float settlingPerTick(Level level, BlockPos pos) {
         Biome biome = level.getBiome(pos).value();
         float temperature = biome.getBaseTemperature();

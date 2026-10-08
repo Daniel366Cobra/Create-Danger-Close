@@ -18,17 +18,15 @@ import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import org.joml.Matrix4f;
 
-/** Client-side map drawing shared by the table's top face and its screen. */
+/** Client map drawing for the table top and its screen. */
 public final class MapTableMaps {
 
     private MapTableMaps() {}
 
     /**
-     * Draws a filled map into the square (0, 0)–(128, 128) of the current
-     * pose, north at the top (low y), as vanilla does for item frames. The
-     * quad faces −Z of the pose.
+     * Into (0, 0)–(128, 128), north at low y, as on an item frame; faces −Z.
      *
-     * @return false if there is no map, or its contents have not arrived yet
+     * @return false without a map, or before its contents arrive
      */
     public static boolean render(PoseStack pose, MultiBufferSource buffers, ItemStack stack, int packedLight) {
         Minecraft mc = Minecraft.getInstance();
@@ -38,17 +36,13 @@ public final class MapTableMaps {
         MapItemSavedData data = MapItem.getSavedData(mapId, mc.level);
         if (data == null)
             return false;
-        // As on an item frame ("active"): player markers hidden, frames and banners shown.
+        // As on an item frame: player markers hidden, frames and banners shown.
         mc.gameRenderer.getMapRenderer().render(pose, buffers, mapId, data, true, packedLight);
         renderPlayers(pose, buffers, data, packedLight);
         return true;
     }
 
-    /**
-     * The players on this map (friendlies carrying it), as vanilla draws their arrows for a
-     * map in hand. Not vanilla's own way: that also puts a dot at the edge of every map a
-     * player is off, which on a table of several maps dots the seams between them.
-     */
+    /** Player arrows only: vanilla's own way also dots every map's edge, marking the seams between them. */
     private static void renderPlayers(PoseStack pose, MultiBufferSource buffers, MapItemSavedData data, int packedLight) {
         MapDecorationTextureManager textures = Minecraft.getInstance().getMapDecorationTextures();
         int index = 0;
@@ -72,11 +66,7 @@ public final class MapTableMaps {
         }
     }
 
-    /**
-     * Draws one part of a Ponder chart in place of a map: the slice of the
-     * picture for the part at (dx, dz) of a table this many blocks wide, into
-     * the same square and the same way up as {@link #render}.
-     */
+    /** The slice of a Ponder chart for the part at (dx, dz), drawn as {@link #render}. */
     public static void renderPonderChart(PoseStack pose, MultiBufferSource buffers, ResourceLocation texture,
                                          int dx, int dz, int width, int packedLight) {
         float u0 = (float) dx / width, u1 = (float) (dx + 1) / width;

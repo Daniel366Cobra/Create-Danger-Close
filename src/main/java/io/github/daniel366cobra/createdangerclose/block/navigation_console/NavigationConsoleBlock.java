@@ -16,17 +16,12 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 
-/**
- * Shows the ship's own attitude, speed and altitude, as far as the battle
- * network has sensors for them. A Battle Network Interface facing it connects
- * it, like a map table.
- */
+/** The ship's own attitude, speed and altitude, as far as the network has sensors. */
 public class NavigationConsoleBlock extends HorizontalFacedBlock implements IBE<NavigationConsoleBlockEntity> {
 
     public static final MapCodec<NavigationConsoleBlock> CODEC = simpleCodec(NavigationConsoleBlock::new);
 
-    // The desk, and the backboard rising above the back of its deck (into the space
-    // above, as a fence does), facing north as in the model.
+    // The desk and its backboard (rising into the space above, like a fence), facing north.
     private static final VoxelShaper SHAPE = VoxelShaper.forHorizontal(Shapes.or(
             Block.box(0, 0, 0, 16, 16, 16),
             Block.box(0, 16, 12, 16, 20, 16)), Direction.NORTH);

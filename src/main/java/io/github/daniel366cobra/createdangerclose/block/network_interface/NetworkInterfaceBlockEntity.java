@@ -78,7 +78,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 }));
     }
 
-    /** Its health record: a jostled interface skews what it passes on (see the computer). */
+    /** A jostled interface skews what it passes on. */
     public EquipmentHealth getHealth() {
         return health;
     }
@@ -123,10 +123,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return;
         }
 
-        // Facing any block of a fire control computer's bank (the Ballistic
-        // Computer or a module): not a sensor. This interface connects the
-        // computer to the network and drives it, one poll of the computer per
-        // poll of its own.
+        // Any block of a computer bank: this interface drives the computer, one poll per poll.
         Block facing = level.getBlockState(checkPos).getBlock();
         if (facing instanceof BallisticComputerBlock || facing instanceof ComputerModuleBlock) {
             BallisticComputerBlockEntity computer = ComputerBank.findComputer(level, checkPos);
@@ -156,17 +153,15 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return buildMapReading(mapTable);
         }
         if (be instanceof NavigationConsoleBlockEntity console) {
-            // Not a sensor: the console reads the network's sensors through this interface.
             console.pollFrom(this);
             return new SensorReading.NavConsole();
         }
         if (be instanceof FixedCannonMountBlockEntity mount) {
-            // Not a sensor: the computer aims (through the bearings carrying it) and fires this gun.
+            // The computer aims (through carrying bearings) and fires this gun.
             ServoStatus.MountSnapshot gun = CannonReading.readFixedGun(mount, level.registryAccess());
             return new SensorReading.FixedGun(gun != null && gun.hasShell());
         }
         if (be instanceof FireMissionConsoleBlockEntity console) {
-            // Not a sensor: the console reaches the fire control computer through this interface.
             console.pollFrom(this);
             return new SensorReading.FireConsole();
         }
@@ -184,7 +179,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 ? mount : null;
     }
 
-    /** Facing a fixed cannon mount: its gun, read now, as a gun with no drive of its own. */
+    /** Facing a fixed cannon mount: its gun, with no drive of its own. */
     @Override
     @Nullable
     public ServoStatus getServoStatus() {
@@ -196,10 +191,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                 gun != null ? List.of(gun) : List.of(), null, ServoLimits.FULL_ELEVATION);
     }
 
-    /**
-     * The gun's solution: nothing to drive, but its fuze is set as a pitch servo sets
-     * a mount's, a timed fuze to the time of flight and a delayed one to its delay.
-     */
+    /** Nothing to drive, but fuzes are set as a pitch servo would. */
     @Override
     public void receiveFiringSolution(@Nullable FireSolution solution) {
         FixedCannonMountBlockEntity mount = facedFixedMount();
@@ -219,7 +211,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             CannonReading.setFixedGunFuze(mount, wanted, level.registryAccess());
     }
 
-    /** The map table this interface faces (its controller), if any. */
+    /** Its controller. */
     @Nullable
     public MapTableBlockEntity getFacedMapTable() {
         if (level == null || !(reading instanceof SensorReading.MapTarget))
@@ -228,7 +220,6 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return level.getBlockEntity(facing) instanceof MapTableBlockEntity table ? table.getControllerBE() : null;
     }
 
-    /** The fire control computer this interface faces and drives, if any. */
     @Nullable
     public BallisticComputerBlockEntity getLinkedComputer() {
         if (level == null || !(reading instanceof SensorReading.Computer)) {
@@ -237,26 +228,21 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return ComputerBank.findComputer(level, worldPosition.relative(getBlockState().getValue(FACING)));
     }
 
-    /**
-     * Any block of a map table connects the whole table: it now shows the
-     * ship and the computer's plot, and its target (if any) goes onto the
-     * network. This is the one place data flows back from the network.
-     */
+    /** Connects the whole table: it shows the ship and plot, and its target goes onto the network. */
     private SensorReading buildMapReading(MapTableBlockEntity mapTable) {
         MapTableBlockEntity controller = mapTable.getControllerBE();
         if (controller == null) {
             return new SensorReading.None();
         }
         controller.markLinked(findComputerPlot());
-        // Placed on a pixel: off by up to half of one, a standard deviation of a pixel over √12.
+        // Placed on a pixel: sigma of a pixel over √12.
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         double sigma = sheet != null ? sheet.blocksPerPixel() / Math.sqrt(12) : 0;
         return new SensorReading.MapTarget(controller.getTarget(), controller.getTargetTick(), sigma);
     }
 
     private SensorReading buildGimbalReading(GimbalSensorBlockEntity gimbal) {
-        // The gimbal computes its angles in sub-level frame from the pose,
-        // independent of the block's placement, and reports them in radians.
+        // Sub-level frame from the pose, independent of placement; radians.
         return new SensorReading.Gimbal(
                 Math.toDegrees(gimbal.getXAngle()),
                 Math.toDegrees(gimbal.getZAngle()));
@@ -268,7 +254,6 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return new SensorReading.None();
         }
 
-        // Distinguish magnet (heading) from lodestone/map (target).
         if (isMagnetItem(held)) {
             float rawAngle = navTable.getRelativeAngle();
             // Apply UP/DOWN constant correction per mount orientation
@@ -284,13 +269,11 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return new SensorReading.NavHeading(((headingDeg % 360.0) + 360.0) % 360.0);
         }
 
-        // Simulated points a compass without a live lodestone at world spawn.
-        // That is not a fire mission, so report no target instead.
+        // Simulated points a compass without a live lodestone at spawn: not a fire mission.
         if (held.is(Items.COMPASS) && !hasLiveLodestone(held)) {
             return new SensorReading.None();
         }
 
-        // Lodestone compass or banner map -> target reference
         var targetPos = navTable.getTargetPosition(true);
         if (targetPos == null) {
             return new SensorReading.None();
@@ -299,20 +282,12 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return new SensorReading.NavTarget(targetPos, navTable.getRelativeAngle());
     }
 
-    /**
-     * The plot of the fire control computer on this interface's network, or
-     * an empty one.
-     */
     private BattlePlot findComputerPlot() {
         BallisticComputerBlockEntity computer = findComputer();
         return computer != null ? computer.getPlot() : BattlePlot.EMPTY;
     }
 
-    /**
-     * The fire control computer on this interface's network, or null. The
-     * computer is not on the network itself; it is found through the
-     * interface that drives it.
-     */
+    /** Found through the interface driving it; the computer is not on the network itself. */
     @Nullable
     public BallisticComputerBlockEntity findComputer() {
         KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
@@ -331,8 +306,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     }
 
     private SensorReading buildVelocityReading(VelocitySensorBlockEntity velocity) {
-        // The sensor's measurement axis in sub-level frame, and the signed
-        // scalar it reports along that axis.
+        // Measurement axis in sub-level frame, and the signed value along it.
         Vector3d normal = new Vector3d(velocity.getCurrentNormal());
         double magnitude = velocity.getAdjustedVelocity();
 
@@ -345,7 +319,6 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return (stack.is(SimBlocks.REDSTONE_MAGNET.asItem()));
     }
 
-    /** Whether the compass is bound to a lodestone that still exists. */
     private boolean hasLiveLodestone(ItemStack compass) {
         UUID trackerId = compass.get(SimDataComponents.LODESTONE_COMPASS_SUBLEVEL_TRACKER);
         if (trackerId == null) return false;
@@ -353,7 +326,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         return map != null && map.getInformation(trackerId) != null;
     }
 
-    /** Clients only need the reading for goggles, so it is sent when it changes. */
+    /** Only goggles need it on the client: sent on change. */
     private void setSensorReading(SensorReading newReading) {
         if (newReading.equals(reading))
             return;

@@ -15,26 +15,21 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.List;
 
 /**
- * The Autocannon Control Console: the Fire Mission Console's desk, giving orders to
- * the autocannons instead of the big guns. Its trigger fires every autocannon on
- * target for as long as it is held; the auto switch sets weapons free, when they fire
- * by themselves whenever they are on target. Danger close is never fired on its own:
- * it takes letting go of the trigger and pressing it again, within the confirmation
- * window, and then holds for as long as the trigger does.
+ * The Fire Mission Console's desk for autocannons: the trigger fires those on target while held; the
+ * switch sets weapons free. Danger close takes a release and a second pull within the window.
  */
 public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlockEntity {
 
-    // A held right-click repeats every 4 ticks: the trigger counts as held this long after the last.
+    // Held right-click repeats every 4 ticks.
     private static final int TRIGGER_HOLD_TICKS = 6;
-    // Client: the trigger stays pulled between repeats, and a moment after a single click.
+    // Client: stays pulled between repeats.
     private static final int TRIGGER_ANIMATION_HOLD_TICKS = 8;
 
-    /** What pulling the trigger did. */
     public enum Pull { HELD, PRESSED, DANGER_CLOSE_WARNING }
 
     private boolean weaponsFree;
     private long lastTriggerTick = Long.MIN_VALUE / 2;
-    // Danger close: when a warned press was made (-1: none), and whether this hold confirms it.
+    // -1: no warned press.
     private long dangerArmedTick = -1;
     private boolean dangerConfirmed;
 
@@ -62,7 +57,7 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
         return true;
     }
 
-    /** Its fire mode, in place of the trajectory (autocannons always fire direct). */
+    /** In place of the trajectory: autocannons always fire direct. */
     @Override
     protected void addModeTooltip(List<Component> tooltip) {
         CDCLang.builder()
@@ -73,7 +68,7 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
                 .forGoggles(tooltip);
     }
 
-    // Rounds fly a second or two: the knob counts single ticks, up to a second either way.
+    // Rounds fly a second or two: single ticks, up to a second either way.
     private static final int MAX_ROUND_FUZE_OFFSET_TICKS = 20;
 
     @Override
@@ -100,7 +95,7 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
         return weaponsFree;
     }
 
-    /** Ponder scenes only: sets the auto switch, as right-clicking it would. */
+    /** Ponder only: as right-clicking would. */
     public void showWeaponsFree(boolean free) {
         weaponsFree = free;
     }
@@ -111,7 +106,7 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
         sendData();
     }
 
-    /** The trigger, pressed or held (server). */
+    /** Server. */
     Pull pullTrigger(BallisticComputerBlockEntity computer) {
         long now = level.getGameTime();
         boolean newPress = now - lastTriggerTick > TRIGGER_HOLD_TICKS;
@@ -143,9 +138,7 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
         if (!held && !weaponsFree)
             return;
         BallisticComputerBlockEntity computer = getComputer();
-        // Weapons free fires only on a target being ranged now, not on one the Integrator is
-        // only holding: that drifts, and the rounds would wander off it. The trigger is the
-        // gunner's call either way.
+        // Weapons free needs a live target: an Integrator hold drifts. The trigger is the gunner's call.
         if (computer != null && (held || computer.isTargetLive()))
             computer.fireAutocannons(held && dangerConfirmed);
     }

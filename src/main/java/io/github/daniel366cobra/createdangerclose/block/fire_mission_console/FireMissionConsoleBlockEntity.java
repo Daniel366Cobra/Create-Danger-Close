@@ -23,29 +23,22 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * The Fire Mission Console: the gunnery officer's station. Shows the fire
- * mission (target, trajectory mode, each gun's solution) and gives the orders:
- * the fuze correction knob, the trajectory lever and the fire button on its top.
- *
- * <p>A Battle Network Interface facing it connects it, like the Navigation
- * Console: each time that interface polls, the console finds the Ballistic
- * Computer on the network. The trajectory mode lives in the computer, so every
- * console shows the same; the fuze correction is the console's own, and the
- * computer takes it from whichever console set it last.
+ * The gunnery officer's station: shows the fire mission; fuze knob, trajectory lever and fire button.
+ * Connected by a facing Battle Network Interface. The trajectory lives in the computer; the fuze
+ * correction is per console, and the most recently set wins.
  */
 public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
 
-    // The link lapses this long after the interface's last poll
-    // (a powered interface polls at least every 20 ticks).
+    // A powered interface polls at least every 20 ticks.
     private static final int LINK_TIMEOUT_TICKS = 40;
 
-    /** The fuze correction knob's range either way, ticks (2 s). */
+    /** Either way, ticks (2 s). */
     public static final int MAX_FUZE_OFFSET_TICKS = 40;
 
-    /** Block event: the fire button was pressed (animates it on clients). */
+    /** Animates the fire button on clients. */
     static final int BUTTON_PRESS_EVENT = 0;
 
-    // Client: the controls ease to their positions; the button springs back slowly.
+    // Client: the button springs back slowly.
     private static final float LEVER_EASING = 0.35f;
     private static final float KNOB_EASING = 0.4f;
     private static final float BUTTON_PULL_EASING = 0.6f;
@@ -53,25 +46,23 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     private boolean linked = false;
     private long lastLinkTick;
-    // The Ballistic Computer on the network, if any.
     @Nullable private BlockPos computerPos;
 
-    // The fuze correction this console sets, ticks, and when it was last set
-    // (the most recently set console wins).
+    // The most recently set console wins.
     private int fuzeOffsetTicks;
     private long fuzeOffsetSetTick = Long.MIN_VALUE;
 
-    // From the computer, for the readouts and the lever (synced).
+    // Synced.
     private boolean plunging;
     private int gunsReady, gunsTotal;
 
-    // Ponder scenes only: the readouts show a mission set by the scene, with no computer.
+    // Ponder only: a mission set by the scene, with no computer.
     private boolean ponderMission;
 
     private final LerpedFloat lever = LerpedFloat.linear().startWithValue(0);
     private final LerpedFloat knob = LerpedFloat.linear().startWithValue(0);
     private final LerpedFloat button = LerpedFloat.linear().startWithValue(0);
-    // Client: ticks the fire control stays pressed before it springs back.
+    // Client.
     private int buttonHeldTicks;
 
     public FireMissionConsoleBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
@@ -81,7 +72,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
 
-    /** Called by a powered network interface facing the console, each time it polls. */
+    /** Called by a powered facing interface each time it polls. */
     public void pollFrom(NetworkInterfaceBlockEntity networkInterface) {
         if (level == null || level.isClientSide())
             return;
@@ -97,7 +88,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
             sendData();
     }
 
-    /** Takes the mode and the guns' readiness from the computer; whether they changed. */
+    /** Returns whether they changed. */
     protected boolean readComputer(@Nullable BallisticComputerBlockEntity computer) {
         boolean newPlunging = computer != null && computer.isPlungingFire();
         BallisticComputerBlockEntity.SalvoResult guns = computer != null
@@ -110,30 +101,29 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         return changed;
     }
 
-    /** The guns this console orders, and how many are on target: the big cannons. */
+    /** The big cannons. */
     protected BallisticComputerBlockEntity.SalvoResult gunsOnTarget(BallisticComputerBlockEntity computer) {
         return computer.gunsOnTarget();
     }
 
-    /** Where the lever stands: down (1) for plunging fire. */
+    /** Down for plunging fire. */
     protected boolean isLeverDown() {
         return plunging;
     }
 
-    /** Whether this console orders the autocannons (else the big cannons). */
+    /** Else the big cannons. */
     protected boolean ordersAutocannons() {
         return false;
     }
 
-    /** Lines this console adds above the fire mission (none: the computer shows the trajectory). */
+    /** None here: the computer shows the trajectory. */
     protected void addModeTooltip(List<Component> tooltip) {}
 
-    /** The goggles' title. */
     protected String titleKey() {
         return "createdangerclose.fire_mission_console.title";
     }
 
-    /** After an order at the console: show its effect at once rather than at the next poll (server). */
+    /** After an order: show its effect now rather than at the next poll (server). */
     protected void refreshFromComputer() {
         if (readComputer(getComputer()))
             sendData();
@@ -161,7 +151,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         return linked;
     }
 
-    /** The Ballistic Computer this console gives orders to, if connected and loaded. */
+    /** Connected and loaded. */
     @Nullable
     public BallisticComputerBlockEntity getComputer() {
         if (level == null || !linked || computerPos == null)
@@ -175,7 +165,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         return fuzeOffsetTicks;
     }
 
-    /** Turns the knob by this many ticks (server); the computer takes it at once if connected. */
+    /** Server; the computer takes it at once if connected. */
     public void adjustFuzeOffset(int deltaTicks) {
         setFuzeOffset(fuzeOffsetTicks + deltaTicks);
     }
@@ -195,35 +185,33 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
             computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick, ordersAutocannons());
     }
 
-    /** The knob's stop either way, ticks. */
+    /** Ticks either way. */
     public int maxFuzeOffsetTicks() {
         return MAX_FUZE_OFFSET_TICKS;
     }
 
-    /** Ticks per scroll notch, or with shift held. */
+    /** Per scroll notch, or with Shift held. */
     public int fuzeStepTicks(boolean fine) {
         return fine ? 1 : 5;
     }
 
-    /** The correction as the readout shows it: signed ticks. */
+    /** Signed ticks. */
     public String fuzeText() {
         return String.format(Locale.ROOT, "%+dt", fuzeOffsetTicks);
     }
 
-    /** The correction with its unit, for the goggles. */
     protected Component fuzeTooltipText() {
         return Component.literal(String.format(Locale.ROOT, "%+d", fuzeOffsetTicks))
                 .append(Component.translatable("createdangerclose.unit.ticks"));
     }
 
-    /** The widest the readout gets, for laying it out. */
+    /** For layout. */
     public String widestFuzeText() {
         return "+" + maxFuzeOffsetTicks() + "t";
     }
 
     // --- Readouts and controls (client) ---
 
-    /** What the readout in front of the middle control shows: the trajectory mode. */
     public String modeText() {
         return plunging ? "PLG" : "DIR";
     }
@@ -249,22 +237,22 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         button.tickChaser();
     }
 
-    /** The trajectory lever, 0 (up: direct fire) to 1 (down: plunging fire). */
+    /** 0 (up: direct) to 1 (down: plunging). */
     public float getLeverThrow(float partialTicks) {
         return lever.getValue(partialTicks);
     }
 
-    /** The fuze knob's turn, -1 (earliest) to 1 (latest). */
+    /** -1 (earliest) to 1 (latest). */
     public float getKnobTurn(float partialTicks) {
         return knob.getValue(partialTicks) / maxFuzeOffsetTicks();
     }
 
-    /** The fire button, 0 (out) to 1 (pressed in). */
+    /** 0 (out) to 1 (pressed in). */
     public float getButtonPress(float partialTicks) {
         return button.getValue(partialTicks);
     }
 
-    /** Pushes the fire button in; it springs back by itself (client). */
+    /** Springs back by itself (client). */
     public void animateButtonPress() {
         int hold = fireControlHoldTicks();
         if (hold > 0)
@@ -273,33 +261,30 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
             button.setValue(1);
     }
 
-    /**
-     * How long the fire control stays pressed after each press, ticks; 0 snaps it in and
-     * lets it spring straight back (the salvo button, pressed once).
-     */
+    /** Ticks; 0 snaps in and straight back (the salvo button). */
     protected int fireControlHoldTicks() {
         return 0;
     }
 
-    /** Whether the readouts show a fire mission: connected to a computer (or shown in a Ponder scene). */
+    /** Connected to a computer, or in a Ponder scene. */
     public boolean showsMission() {
         return ponderMission || getComputer() != null;
     }
 
-    /** Ponder scenes only: sets the trajectory the lever and readout show, as a computer would. */
+    /** Ponder only. */
     public void showPlunging(boolean plunging) {
         ponderMission = true;
         this.plunging = plunging;
     }
 
-    /** Ponder scenes only: sets how many guns the readout shows on target, as a computer would. */
+    /** Ponder only. */
     public void showGunsReady(int ready, int total) {
         ponderMission = true;
         gunsReady = ready;
         gunsTotal = total;
     }
 
-    /** Ponder scenes only: turns the knob, as scrolling would. */
+    /** Ponder only: as scrolling would. */
     public void showFuzeOffset(int ticks) {
         fuzeOffsetTicks = Mth.clamp(ticks, -maxFuzeOffsetTicks(), maxFuzeOffsetTicks());
     }
@@ -338,7 +323,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
             compound.putLong("FuzeOffsetSet", fuzeOffsetSetTick);
             return;
         }
-        // The link and the readouts lapse or refresh on their own: only clients need them.
+        // Only clients need these: the link and readouts lapse on their own.
         compound.putBoolean("Linked", linked);
         if (computerPos != null)
             compound.put("Computer", NbtUtils.writeBlockPos(computerPos));

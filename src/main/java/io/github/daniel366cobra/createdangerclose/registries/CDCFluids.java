@@ -13,10 +13,7 @@ import net.minecraft.world.level.material.MapColor;
 import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.fluids.BaseFlowingFluid;
 
-/**
- * Fluids, and the lubricant tags. Spindle oil: the light oil for fast, lightly loaded
- * mechanisms, pressed from wax (see the compacting recipe).
- */
+/** Fluids and lubricant tags. Spindle oil: a light oil pressed from wax. */
 public final class CDCFluids {
 
     private static final CreateRegistrate REGISTRATE = CreateDangerClose.getRegistrate();

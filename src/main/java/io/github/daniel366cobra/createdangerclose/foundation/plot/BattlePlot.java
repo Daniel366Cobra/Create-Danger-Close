@@ -10,39 +10,29 @@ import java.util.List;
 import java.util.function.ToDoubleFunction;
 
 /**
- * What the Ballistic Computer knows, for plotting on a map table. World
- * space, blocks. Built by the computer each poll and carried to connected map
- * tables by network interfaces.
+ * What the Ballistic Computer knows, for map tables: world space, blocks, built each poll.
  *
- * @param fixes rangefinder solutions: where each one puts the target
- * @param guns  how far each armed mount can reach, and where it points
+ * @param guns how far each armed mount can reach, and where it points
  */
 public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
 
     public static final BattlePlot EMPTY = new BattlePlot(List.of(), List.of());
 
     /**
-     * One rangefinder's solution, carried forward to the poll on its tracked
-     * velocity, and the rangefinder it came from.
+     * Carried forward to the poll on its tracked velocity.
      *
      * @param sigma            1σ range error, blocks
-     * @param originX, originZ where the rangefinder stands, for its line of sight
+     * @param originX, originZ the rangefinder, for its line of sight
      */
     public record RangefinderFix(double x, double y, double z, double sigma, double originX, double originZ) {}
 
     /**
-     * Maximum range of a mount with its current shell and charge, down to the
-     * target's height (or the ground under the mount without a target), and
-     * the way its barrel points.
+     * Reach with the current shell and charge, down to the target's height (or the ground).
      *
-     * @param aimX, aimZ horizontal unit vector of the barrel's bearing; both 0 if unknown
-     *                   (no yaw servo on the mount)
-     * @param minRadius  the edge of the dead zone around the gun, for a level ship: the closest
-     *                   the steep arc reaches (plunging fire) or the lowest barrel reaches
-     *                   (direct fire at a target below the gun); 0 if there is none
-     * @param arcFrom    where the traverse it may turn through starts, as a world bearing
-     *                   (Minecraft yaw, degrees): the arc runs clockwise from it
-     * @param arcLength  how wide that arc is, degrees; 360 if it may turn all round
+     * @param aimX, aimZ horizontal unit vector of the barrel; both 0 without a yaw servo
+     * @param minRadius  dead zone edge for a level ship (steep arc, or lowest barrel at a target below); 0 if none
+     * @param arcFrom    traverse start, world bearing (Minecraft yaw, degrees), running clockwise
+     * @param arcLength  degrees; 360 all round
      */
     public record GunRange(double x, double z, double radius, double aimX, double aimZ, double minRadius,
                            double arcFrom, double arcLength) {
@@ -59,17 +49,11 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
         return fixes.isEmpty() && guns.isEmpty();
     }
 
-    // A gun or fix in two plots is the same one if it moved less than this between them, blocks
-    // (a ship can cover a fair distance between polls).
+    // Same gun or fix across two plots if it moved less than this, blocks (ships move between polls).
     private static final double SAME_ITEM_DISTANCE = 24;
 
-    /**
-     * This plot partway to another, {@code t} from 0 (this) to 1 ({@code to}),
-     * for drawing it moving smoothly between updates. Guns are paired by where
-     * they stand and fixes by the rangefinder they came from; anything without a
-     * partner is shown as in {@code to}.
-     */
-    public BattlePlot blendTowards(BattlePlot to, double t) {
+    /** Partway to {@code to} for smooth drawing; guns pair by position, fixes by rangefinder, the rest as in {@code to}. */
+    public BattlePlot blendToward(BattlePlot to, double t) {
         if (t >= 1 || this.equals(to))
             return to;
         List<GunRange> blendedGuns = new ArrayList<>(to.guns.size());
@@ -83,7 +67,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
             unpairedGuns.remove(from);
             double aimX = gun.aimX, aimZ = gun.aimZ;
             if (from.hasAim() && gun.hasAim()) {
-                // Turn the bearing the short way round.
+                // The short way round.
                 double fromAngle = Math.atan2(from.aimZ, from.aimX);
                 double toAngle = Math.atan2(gun.aimZ, gun.aimX);
                 double turn = Math.IEEEremainder(toAngle - fromAngle, 2 * Math.PI);
@@ -91,7 +75,6 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
                 aimX = Math.cos(angle);
                 aimZ = Math.sin(angle);
             }
-            // The arc turns the short way round too.
             double arcFrom = from.arcFrom + Math.IEEEremainder(gun.arcFrom - from.arcFrom, 360) * t;
             blendedGuns.add(new GunRange(lerp(from.x, gun.x, t), lerp(from.z, gun.z, t),
                     lerp(from.radius, gun.radius, t), aimX, aimZ, lerp(from.minRadius, gun.minRadius, t),

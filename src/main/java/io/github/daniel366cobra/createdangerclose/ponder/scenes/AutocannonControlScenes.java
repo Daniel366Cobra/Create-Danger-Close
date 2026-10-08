@@ -18,50 +18,39 @@ import rbasamoyai.createbigcannons.cannons.autocannon.recoil_spring.AutocannonRe
 import rbasamoyai.createbigcannons.effects.particles.plumes.AutocannonPlumeParticleData;
 import rbasamoyai.createbigcannons.ponder.CBCAnimateBlockEntityInstruction;
 
-/** Ponder scenes for the Autocannon Control Console. */
 public final class AutocannonControlScenes {
 
     private AutocannonControlScenes() {}
 
-    // Laying onto the first target, to the south-east: the rangefinder (looking south as
-    // built) turns this far, the gun (pointing east as built) traverses and elevates this far.
+    // Laying onto the first target, south-east.
     private static final float RANGEFINDER_LAY_DEG = 45, GUN_LAY_TRAVERSE_DEG = -45, GUN_LAY_ELEVATION_DEG = 20;
     private static final int LAY_TICKS = 50;
-    // Then both follow the target together, the same way round: each pass, this far.
+    // Then both follow the target, each pass this far.
     private static final float FIRST_PASS_DEG = 35, FIRST_PASS_ELEVATION_DEG = 10;
     private static final int FIRST_PASS_TICKS = 70;
     private static final float AUTO_PASS_DEG = -70, AUTO_PASS_ELEVATION_DEG = -5;
     private static final int AUTO_PASS_TICKS = 120;
     private static final float CEASE_PASS_DEG = -20;
     private static final int CEASE_PASS_TICKS = 40;
-    // A burst: one round this often (the trigger repeats as fast while held).
+    // The trigger repeats this fast while held.
     private static final int ROUND_TICKS = 4;
-    // A round, as CBC's autocannon scene plays it: the barrel kicks back this far in one tick,
-    // runs out again over the next few, and the breech and spring animate (CBC gives them 5 ticks,
-    // firing far slower; here that is cut to the round, so one round's animation ends before the next).
+    // As CBC's autocannon scene: kick back in one tick, run out over a few; animation cut to one round.
     private static final int FIRE_TICKS = 1, RUN_OUT_TICKS = 3, RECOIL_ANIMATION_TICKS = ROUND_TICKS;
     private static final double RECOIL_BLOCKS = 0.5;
     private static final int TRIGGER_HOLD_TICKS = 40;
-    // Output network speed while training, as a multiple of its 1 RPM keep-alive.
+    // Multiple of the 1 RPM keep-alive.
     private static final float TRAINING_SPEED_FACTOR = 32;
-    // The fuze knob demonstration: this many notches early, a tick each.
     private static final int FUZE_DEMO_NOTCHES = 3;
 
     private static final BlockPos CANNON_PIVOT = new BlockPos(5, 3, 0);
-    // From the pivot (the breech) out to the muzzle.
+    // From the breech.
     private static final double MUZZLE_REACH = 2.5;
 
     /**
-     * Structure {@code autocannon_control.nbt}: a 7×6 floor (the bottom layer), a
-     * cogwheel column at (7, 0..1, 5) bringing power from off the scene to the
-     * battle network along z = 5. On it: the Rangefinder Bearing at (2, 2, 5) carrying
-     * a tube with lenses looking south and the eyepiece on its north side; servo inputs
-     * at x = 0 (traverse, through gearboxes and shafts in the floor's z = 0 row) and
-     * x = 1 (elevation, along z = 1); an interface facing the Ballistic Computer at
-     * (5, 1, 3), with a differentiator and an integrator on top; and an interface facing
-     * the Autocannon Control Console at (3, 1, 2). The autocannon sits on a cannon mount
-     * at (5, 1, 0), its breech two blocks up and its barrel pointing east, with a hopper
-     * on the mount's west side.
+     * Structure {@code autocannon_control.nbt}: 7×6 floor, power column at (7, 0..1, 5), battle network
+     * along z = 5. Rangefinder Bearing (2, 2, 5) looking south; servo inputs x = 0 (traverse) and x = 1
+     * (elevation); computer interface (5, 1, 3) with Differentiator and Integrator; console interface
+     * (3, 1, 2); autocannon mount (5, 1, 0), barrel east, hopper on the west.
      */
     public static void autocannonControl(SceneBuilder builder, SceneBuildingUtil util) {
         CreateSceneBuilder scene = new CreateSceneBuilder(builder);
@@ -84,8 +73,7 @@ public final class AutocannonControlScenes {
         Selection computerStack = util.select().position(computer)
                 .add(util.select().fromTo(5, 2, 3, 5, 2, 4));
         Selection servos = util.select().fromTo(0, 1, 2, 1, 1, 3);
-        // The cannon networks, between the servo outputs and the mount (the traverse
-        // drive's gearboxes and shafts sit in the floor layer).
+        // Servo outputs to the mount (traverse gearing in the floor layer).
         Selection cannonNetworks = util.select().fromTo(0, 1, 0, 0, 1, 2)
                 .add(util.select().fromTo(1, 1, 1, 5, 1, 1))
                 .add(util.select().position(1, 1, 2))
@@ -97,14 +85,11 @@ public final class AutocannonControlScenes {
                 .add(util.select().fromTo(0, 4, 5, 4, 4, 5))
                 .add(util.select().position(eyepiece));
 
-        // The controls on the console's deck. It faces north, so its user looks
-        // south: left to right (east to west) the fuze knob, the auto switch and
-        // the trigger (model pixels, as the console faces).
+        // The console faces north: left to right (east to west) fuze knob, auto switch, trigger (model pixels).
         Vec3 fuzeKnob = onConsole(console, 12.5, 17, 7.5);
         Vec3 autoSwitch = onConsole(console, 8.5, 18, 7.5);
         Vec3 trigger = onConsole(console, 3.5, 19.5, 5.5);
 
-        // The gun comes already assembled.
         scene.world().modifyBlock(mount, CannonAim::assembled, false);
 
         scene.world().showSection(floor, Direction.UP);
@@ -116,12 +101,11 @@ public final class AutocannonControlScenes {
         scene.world().showSection(servos, Direction.DOWN);
         scene.world().showSection(gunDrives, Direction.DOWN);
         scene.world().showSection(mountAndFeed, Direction.DOWN);
-        // The breech and recoil spring, and the barrel on its own so it can recoil into the spring.
+        // The barrel apart, so it can recoil into the spring.
         ElementLink<WorldSectionElement> cannon =
                 scene.world().showIndependentSection(util.select().fromTo(5, 3, 0, 6, 3, 0), Direction.DOWN);
         ElementLink<WorldSectionElement> barrel =
                 scene.world().showIndependentSection(util.select().position(7, 3, 0), Direction.DOWN);
-        // The cannon pivots where it sits on the mount.
         scene.world().configureCenterOfRotation(cannon, util.vector().centerOf(CANNON_PIVOT));
         scene.world().configureCenterOfRotation(barrel, util.vector().centerOf(CANNON_PIVOT));
         Gun gun = new Gun(new CannonAim(scene, cannon, barrel), barrel);
@@ -256,7 +240,7 @@ public final class AutocannonControlScenes {
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 
-    /** A point on the console, in model pixels as it faces (north). */
+    /** Model pixels as it faces (north). */
     private static Vec3 onConsole(BlockPos console, double x, double y, double z) {
         return Vec3.atLowerCornerOf(console).add(x / 16, y / 16, z / 16);
     }
@@ -278,11 +262,7 @@ public final class AutocannonControlScenes {
                 FireMissionConsoleBlockEntity::animateButtonPress);
     }
 
-    /**
-     * The rangefinder and the gun turn together by this much (left, seen from above),
-     * the gun also changing its elevation; firing all the way if {@code firingUtil} is
-     * given. Takes {@code ticks}.
-     */
+    /** Turns rangefinder and gun together (left, seen from above), firing if {@code firingUtil} is given. */
     private static void track(CreateSceneBuilder scene, BlockPos bearing, ElementLink<WorldSectionElement> tube,
                               Selection cannonNetworks, BlockPos mount, Gun gun,
                               float turnDeg, float elevationDeg, int ticks,
@@ -292,11 +272,7 @@ public final class AutocannonControlScenes {
         train(scene, cannonNetworks, mount, gun, turnDeg, elevationDeg, ticks, firingUtil);
     }
 
-    /**
-     * Trains the gun by these changes in traverse (to the left) and elevation, running
-     * the cannon networks fast meanwhile as the servos do, and firing a round every
-     * {@link #ROUND_TICKS} on the way if {@code firingUtil} is given. Takes {@code ticks}.
-     */
+    /** Traverse (left) and elevate, running the cannon networks fast; fires every {@link #ROUND_TICKS} if {@code firingUtil} is given. */
     private static void train(CreateSceneBuilder scene, Selection cannonNetworks, BlockPos mount, Gun gun,
                               float traverseDeg, float elevationDeg, int ticks,
                               SceneBuildingUtil firingUtil) {
@@ -321,14 +297,9 @@ public final class AutocannonControlScenes {
         scene.world().multiplyKineticSpeed(cannonNetworks, 1 / TRAINING_SPEED_FACTOR);
     }
 
-    /** The autocannon: its aim, and its barrel section, which recoils on its own. */
     private record Gun(CannonAim aim, ElementLink<WorldSectionElement> barrel) {}
 
-    /**
-     * One round, as CBC's own autocannon scene plays it: the plume, the barrel kicking back
-     * into the recoil spring and running out again, and the breech and spring animating
-     * from the start. Takes {@link #FIRE_TICKS}; the barrel runs out over the next few.
-     */
+    /** One round as CBC's own scene plays it. Takes {@link #FIRE_TICKS}; the barrel runs out over the next few. */
     private static void fire(CreateSceneBuilder scene, SceneBuildingUtil util, Gun gun) {
         CannonAim aim = gun.aim();
         Vec3 barrel = CannonAim.barrelDirection(aim.yaw(), aim.pitch());
