@@ -32,11 +32,9 @@ repositories {
     maven { url = "https://maven.ryanhcode.dev/releases" }
 
     // Transitive dependencies for Sable & Aeronautics
-    maven { url = "https://maven.theillusivec4.top/" } // Curios (Required by Simulated)
     maven { url = "https://maven.blamejared.com" } // JEI, Veil, Molang compiler, GLSL processor (Required by Sable/Simulated)
 
-    // Create Big Cannons and Ritchie's Projectile Library; also Explorer's and Nature's Compass
-    // (required by Simulated/Aeronautics)
+    // Create Big Cannons and Ritchie's Projectile Library
     exclusiveContent {
         forRepository { maven { name = "Modrinth"; url = "https://api.modrinth.com/maven" } }
         filter { includeGroup "maven.modrinth" }
@@ -115,6 +113,13 @@ neoForge {
 
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    // Simulated's Maven metadata lists compat mods it does not require (its mods.toml doesn't):
+    // left out, so the dev server runs what a real server needs and clients without them can join.
+    configureEach {
+        exclude(group: "top.theillusivec4.curios")
+        exclude(group: "maven.modrinth", module: "explorers-compass")
+        exclude(group: "maven.modrinth", module: "natures-compass")
+    }
 }
 
 // Create's Maven version carries a build number (6.0.10-280): it must be the release players are
