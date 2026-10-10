@@ -909,12 +909,11 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
                     .forGoggles(tooltip);
 
             if (sm.isTimedFuze) {
-                int seconds = sm.fuzeTimer / 20;
-                int ticks = sm.fuzeTimer % 20;
                 CDCLang.builder()
                         .add(Component.translatable(
                                 "createdangerclose.cannon_servo_output.mount_fuze_timed",
-                                seconds, ticks))
+                                Component.literal(String.valueOf(sm.fuzeTimer))
+                                        .append(Component.translatable("createdangerclose.unit.ticks"))))
                         .style(ChatFormatting.LIGHT_PURPLE)
                         .forGoggles(tooltip);
             } else if (sm.fuzeStack.isEmpty()) {

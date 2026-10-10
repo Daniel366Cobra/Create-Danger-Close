@@ -43,16 +43,16 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
     // Keeps "ready/total" to three characters.
     private static final int MAX_GUNS_SHOWN = 9;
 
-    /** The three controls, and the middle readout with its widest text (which sets the size). */
+    /** The three controls, and the middle readout. */
     private record Layout(PartialModel knob, PartialModel lever, PartialModel fireControl, boolean trigger,
-                          PanelText modeReadout, String widestMode) {}
+                          PanelText modeReadout) {}
 
     private static final Layout FIRE_MISSION = new Layout(CDCPartialModels.CONSOLE_FUZE_KNOB,
             CDCPartialModels.CONSOLE_TRAJECTORY_LEVER, CDCPartialModels.CONSOLE_FIRE_BUTTON, false,
-            TRAJECTORY_READOUT, "PLG");
+            TRAJECTORY_READOUT);
     private static final Layout AUTOCANNON = new Layout(CDCPartialModels.AA_CONSOLE_FUZE_KNOB,
             CDCPartialModels.AA_CONSOLE_AUTO_SWITCH, CDCPartialModels.AA_CONSOLE_FIRE_TRIGGER, true,
-            AUTO_MODE_READOUT, "AUTO");
+            AUTO_MODE_READOUT);
 
     private final Font font;
     private final Layout layout;
@@ -109,8 +109,11 @@ public class FireMissionConsoleRenderer extends SafeBlockEntityRenderer<FireMiss
         boolean connected = be.showsMission();
         FUZE_READOUT.draw(font, ms, buffer, front,
                 be.fuzeText(), be.widestFuzeText(), deckLight);
+        // The wider setting sets the size, whatever the language.
+        String up = be.modeText(false), down = be.modeText(true);
+        String widestMode = font.width(down) > font.width(up) ? down : up;
         layout.modeReadout().draw(font, ms, buffer, front,
-                !connected ? "-".repeat(layout.widestMode().length()) : be.modeText(), layout.widestMode(), deckLight);
+                !connected ? "-".repeat(widestMode.length()) : be.modeText(), widestMode, deckLight);
         READY_READOUT.draw(font, ms, buffer, front, !connected ? "-/-"
                 : Math.min(be.getGunsReady(), MAX_GUNS_SHOWN) + "/" + Math.min(be.getGunsTotal(), MAX_GUNS_SHOWN),
                 "0/0", deckLight);

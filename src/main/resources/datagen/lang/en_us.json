@@ -34,7 +34,7 @@
       "map_no_target": "Map table: no target",
       "computer": "Fire control computer",
       "nav_console": "Navigation console",
-      "fire_console": "Fire mission console",
+      "fire_console": "Weapon control console",
       "fixed_gun": "Fixed cannon mount: loaded",
       "fixed_gun_empty": "Fixed cannon mount: empty"
     },
@@ -45,7 +45,11 @@
       "fire_mode.auto": "Fire mode: Auto",
       "fire_mode.manual": "Fire mode: Manual",
       "no_autocannons": "No autocannons on this network",
-      "danger_close": "DANGER CLOSE: release and press again within %ss to confirm"
+      "danger_close": "DANGER CLOSE: release and press again within %ss to confirm",
+      "readout": {
+        "manual": "MAN",
+        "auto": "AUTO"
+      }
     },
 
     "fire_mission_console": {
@@ -60,7 +64,12 @@
       "no_guns": "No guns on the network",
       "salvo": "Salvo: %s fired, %s held",
       "danger_close": "DANGER CLOSE: Press again within %ss to confirm",
-      "fuze_offset": "Fuze correction: %s"
+      "fuze_offset": "Fuze correction: %s",
+      "readout": {
+        "direct": "DIR",
+        "plunging": "PLG",
+        "ticks": "t"
+      }
     },
     "navigation_console": {
       "title": "Navigation Console",
@@ -72,7 +81,7 @@
       "ship_velocity": "Ship Velocity",
       "ship_altitude": "Ship Altitude",
       "no_gimbal": "Pitch and roll: no Gimbal Sensor on the network",
-      "no_heading": "Heading: no Nav Table with a Magnet on the network",
+      "no_heading": "Heading: no Nav Table with a Redstone Magnet on the network",
       "no_velocity": "Velocity: no Velocity Sensor on the network",
       "no_altitude": "Altitude: no Altitude Sensor on the network"
     },
@@ -88,9 +97,9 @@
         "fuze_computer": "fuze timers are not set"
       },
       "target": "Target",
-      "missing_orientation": "Missing: Gimbal or Nav Table with a Magnet",
+      "missing_orientation": "Missing: Gimbal or Nav Table with a Redstone Magnet",
       "missing_velocity": "Missing: Velocity (needs sensors on X, Y and Z)",
-      "missing_altitude": "Missing: Altitude (for map and navigation targets well above or below)",
+      "missing_altitude": "Missing: Altitude (for map and navigation table targets well above or below)",
       "missing_target": "Missing: Target",
       "target_source": {
         "rangefinder": "Source: Rangefinder (%ss old, ±%s m)",
@@ -100,12 +109,11 @@
       },
       "target_speed": "Target Speed",
       "solutions": "Fire Solutions:",
-      "solution_ok": "Solution found (%s)",
+      "solution_ok": "Solution found",
       "solution_failed": "No solution: %s",
       "time_of_flight": "Time of flight: %s",
       "reason": {
-        "ok": "OK",
-        "out_of_range": "Target out of range",
+        "out_of_range": "Out of range: too far",
         "out_of_arc": "Target out of arc",
         "no_convergence": "Calculation did not converge",
         "no_target": "No target designated",
@@ -113,7 +121,7 @@
         "no_orientation": "No ship orientation data",
         "insufficient_charge": "Insufficient propellant",
         "degenerate": "Invalid geometry",
-        "too_close": "Too close for plunging fire",
+        "too_close": "Out of range: too close",
         "no_altitude": "Own altitude unknown: needs an Altitude Sensor",
         "redundant_drives": "Too many drives aim this gun",
         "round_expires": "Out of reach: the round expires before impact"
@@ -149,7 +157,7 @@
         "mount_angle_yaw": "Yaw: %s°",
         "mount_shell": "Shell: %s",
         "mount_shell_empty": "Shell: (empty)",
-        "mount_fuze_timed": "Fuze: Timed (%ss %st)",
+        "mount_fuze_timed": "Fuze: Timed (%s)",
         "mount_fuze_other": "Fuze: %s",
         "mount_fuze_none": "Fuze: None",
         "mount_charge": "Charge: %s"
@@ -211,7 +219,7 @@
           "no_limit": "No limit",
           "arc": "%s° allowed",
           "now": "Now: %s°",
-          "hint": "Drag the ends · Ctrl: move both · Shift: 5° steps · Right-click: clear"
+          "hint": "Drag the knobs · Ctrl: move both · Shift: 5° steps · Right-click: clear"
         }
       },
 
@@ -321,10 +329,8 @@
         "summary": "An objective lens for a _rangefinder_ tube. Place _two_ at the ends of the tube, looking the same way.",
         "condition1": "Baseline:",
         "behaviour1": "The _further apart_ the lenses, the more _accurate_ the range reading.",
-        "condition2": "When Wrenched on the top or bottom:",
-        "behaviour2": "_Turns_ the lens to face the next direction.",
-        "condition3": "When cracked by blast or a hit:",
-        "behaviour3": "Range readings become _far less accurate_. Right-click the lens with a _Glass Pane_ to repair it."
+        "condition2": "When cracked by blast or a hit:",
+        "behaviour2": "Range readings become _far less accurate_. Right-click the lens with a _Glass Pane_ to repair it."
       },
       "map_table.tooltip": {
         "summary": "A plotting table for _maps_. Joins with neighboring tables into a square of up to _3×3_.",

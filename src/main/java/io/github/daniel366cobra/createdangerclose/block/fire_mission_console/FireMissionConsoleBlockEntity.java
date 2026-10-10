@@ -197,7 +197,11 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     /** Signed ticks. */
     public String fuzeText() {
-        return String.format(Locale.ROOT, "%+dt", fuzeOffsetTicks);
+        return String.format(Locale.ROOT, "%+d", fuzeOffsetTicks) + tickSuffix();
+    }
+
+    private static String tickSuffix() {
+        return Component.translatable("createdangerclose.fire_mission_console.readout.ticks").getString();
     }
 
     protected Component fuzeTooltipText() {
@@ -207,13 +211,22 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     /** For layout. */
     public String widestFuzeText() {
-        return "+" + maxFuzeOffsetTicks() + "t";
+        return "+" + maxFuzeOffsetTicks() + tickSuffix();
     }
 
     // --- Readouts and controls (client) ---
 
     public String modeText() {
-        return plunging ? "PLG" : "DIR";
+        return modeText(isLeverDown());
+    }
+
+    /** Either setting, so the renderer can size the readout for the wider. */
+    public String modeText(boolean leverDown) {
+        return Component.translatable(modeReadoutKey(leverDown)).getString();
+    }
+
+    protected String modeReadoutKey(boolean leverDown) {
+        return "createdangerclose.fire_mission_console.readout." + (leverDown ? "plunging" : "direct");
     }
 
     public int getGunsReady() {

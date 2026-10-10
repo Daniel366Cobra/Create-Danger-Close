@@ -48,8 +48,8 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
     }
 
     @Override
-    public String modeText() {
-        return weaponsFree ? "AUTO" : "MAN";
+    protected String modeReadoutKey(boolean leverDown) {
+        return "createdangerclose.autocannon_control_console.readout." + (leverDown ? "auto" : "manual");
     }
 
     @Override

@@ -1660,6 +1660,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         shipPitchDeg += bankBiasPitch;
         shipYawDeg += bankBiasYaw;
 
+        // Past the barrel's top elevation: the flat arc is too far, the steep one too close.
+        boolean plunging = plungingFire && !mount.autocannon();
+        if (ownPitchDrive && shipPitchDeg > mount.maxElevation() && (!plunging || mount.maxElevation() > 45)) {
+            lastPitchResults.put(servoPos, BallisticSolver.Result.invalid(plunging
+                    ? BallisticSolver.Result.Reason.TOO_CLOSE : BallisticSolver.Result.Reason.OUT_OF_RANGE));
+            return null;
+        }
         boolean outOfArc = ownPitchDrive && (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()
                 || !pitchServo.limits().containsElevation(shipPitchDeg));
         // The traverse set on its yaw servo's dial, counted from the way it was assembled.
@@ -2063,9 +2070,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 if (r.valid()) {
                     CDCLang.builder()
                             .add(Component.literal("  "))
-                            .add(Component.translatable(
-                                    "createdangerclose.ballistic_computer.solution_ok",
-                                    Component.translatable(reasonKey)))
+                            .add(Component.translatable("createdangerclose.ballistic_computer.solution_ok"))
                             .style(ChatFormatting.GREEN)
                             .forGoggles(tooltip);
 

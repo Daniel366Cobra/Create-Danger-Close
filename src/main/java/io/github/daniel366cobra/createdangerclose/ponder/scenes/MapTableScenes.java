@@ -152,14 +152,14 @@ public final class MapTableScenes {
                 .pointAt(onChart(controller, (SHIP_U + TARGET_U) / 2, (SHIP_V + TARGET_V) / 2))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Red: each gun's reach and where it points. Inside the inner ring is too close to hit");
+                .text("Dashed lines: each gun's reach and where it points. Inside the inner ring is too close to hit");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .colored(PonderPalette.BLUE)
                 .pointAt(onChart(controller, FIX_U, FIX_V))
                 .placeNearTarget()
-                .text("White: where a rangefinder has ranged, in a blue circle of how far off it may be");
+                .text("White cross: where a rangefinder has ranged, in a dotted circle of how far off it may be");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
         scene.overlay().showText(PonderTiming.LONG_TEXT)
