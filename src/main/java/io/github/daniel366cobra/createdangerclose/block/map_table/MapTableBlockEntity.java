@@ -548,8 +548,15 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return 1;
     }
 
+    /**
+     * Create sets 0 when a queued table finds nothing to join after all, having set the width it
+     * tried (up to 3): a lone block would then claim 3×3 and block every join around it.
+     */
     @Override
-    public void setHeight(int height) {}
+    public void setHeight(int height) {
+        if (height < 1)
+            width = 1;
+    }
 
     @Override
     public int getWidth() {
