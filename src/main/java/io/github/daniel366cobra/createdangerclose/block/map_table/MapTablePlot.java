@@ -9,7 +9,10 @@ import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.item.DyeColor;
+import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
+
+import java.util.List;
 
 /**
  * Plot lines on a map table's sheet: rangefinder uncertainty circles (dotted) and gun ranges (dashed).
@@ -22,6 +25,8 @@ public final class MapTablePlot {
 
     // Colors per player (client config).
     private static final int LINE_ALPHA = 0xE0;
+    // Safe zones' infill: about 35%.
+    private static final int FILL_ALPHA = 0x59;
 
     // Line pixels (stroke width: config).
     private static final float DOT = 1, DOT_GAP = 2;
@@ -89,6 +94,43 @@ public final class MapTablePlot {
         }
     }
 
+    /**
+     * Safe zones, on any table (unlinked, they are notes). Same sheet and pose as {@link #render}.
+     *
+     * @param drawing a zone being dragged out, in sheet fractions (u0, v0, u1, v1), or null
+     */
+    public static void renderSafeZones(PoseStack pose, MultiBufferSource buffers, MapTableBlockEntity controller,
+                                       float sheetSize, float pixel, float lift, int packedLight,
+                                       @Nullable float[] drawing) {
+        List<MapTableBlockEntity.SafeZone> zones = controller.getSafeZones();
+        MapTableBlockEntity.Sheet sheet = controller.getSheet();
+        if (sheet == null || zones.isEmpty() && drawing == null)
+            return;
+        Pen pen = new Pen(buffers.getBuffer(RenderType.textBackground()), pose.last().pose(),
+                sheetSize, lift, pixel * CDCConfig.client().lineWidth.getF(), packedLight);
+        int rgb = CDCConfig.client().safeZoneColor.get().getTextureDiffuseColor() & 0xFFFFFF;
+        double toSheet = sheetSize / sheet.sizeInPixels();
+        for (MapTableBlockEntity.SafeZone zone : zones) {
+            // Edges on block boundaries: the far ones past the last block.
+            safeZone(pen, rgb, sheet.pixelX(zone.minX()) * toSheet, sheet.pixelY(zone.minZ()) * toSheet,
+                    sheet.pixelX(zone.maxX() + 1) * toSheet, sheet.pixelY(zone.maxZ() + 1) * toSheet, pixel);
+        }
+        if (drawing != null)
+            safeZone(pen, rgb, drawing[0] * sheetSize, drawing[1] * sheetSize,
+                    drawing[2] * sheetSize, drawing[3] * sheetSize, pixel);
+    }
+
+    private static void safeZone(Pen pen, int rgb, double x0, double y0, double x1, double y1, float pixel) {
+        pen.color = FILL_ALPHA << 24 | rgb;
+        pen.fill(x0, y0, x1, y1);
+        pen.color = LINE_ALPHA << 24 | rgb;
+        double left = Math.min(x0, x1), right = Math.max(x0, x1), top = Math.min(y0, y1), bottom = Math.max(y0, y1);
+        pen.line(left, top, right, top, pixel * DOT, pixel * DOT_GAP);
+        pen.line(right, top, right, bottom, pixel * DOT, pixel * DOT_GAP);
+        pen.line(right, bottom, left, bottom, pixel * DOT, pixel * DOT_GAP);
+        pen.line(left, bottom, left, top, pixel * DOT, pixel * DOT_GAP);
+    }
+
     /** The dye's map shade (as wool and banners), slightly see-through. */
     private static int lineColor(DyeColor dye) {
         return LINE_ALPHA << 24 | dye.getTextureDiffuseColor() & 0xFFFFFF;
@@ -151,6 +193,14 @@ public final class MapTablePlot {
                     continue;
                 quad(ax - nx, ay - ny, ax + nx, ay + ny, bx + nx, by + ny, bx - nx, by - ny);
             }
+        }
+
+        /** A rectangle, cut to the sheet. */
+        void fill(double x0, double y0, double x1, double y1) {
+            double left = Math.max(0, Math.min(x0, x1)), right = Math.min(sheetSize, Math.max(x0, x1));
+            double top = Math.max(0, Math.min(y0, y1)), bottom = Math.min(sheetSize, Math.max(y0, y1));
+            if (left < right && top < bottom)
+                quad(left, top, right, top, right, bottom, left, bottom);
         }
 
         private boolean onSheet(double x, double y) {

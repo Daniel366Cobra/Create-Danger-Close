@@ -103,7 +103,10 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
         level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
         if (salvo.awaitingConfirmation()) {
             level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
-            player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.danger_close",
+            boolean safeZone = computer.dangerOnTarget(false) == BallisticComputerBlockEntity.Danger.SAFE_ZONE;
+            player.displayClientMessage(Component.translatable(safeZone
+                            ? "createdangerclose.fire_mission_console.safe_zone"
+                            : "createdangerclose.fire_mission_console.danger_close",
                     Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
         } else if (salvo.fired() + salvo.held() == 0)
             status(player, "no_guns");

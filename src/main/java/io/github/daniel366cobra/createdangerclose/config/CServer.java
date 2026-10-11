@@ -171,6 +171,8 @@ public class CServer extends CDCConfigBase {
                 "Whether a connected map table charts the ground around where rangefinders aim.");
         public final ConfigInt rangefinderChartRadius = i(32, 8, 128, "rangefinderChartRadius",
                 "[in blocks]", "How much ground around a rangefinder's fix is charted.");
+        public final ConfigInt maxSafeZones = i(8, 1, 32, "maxSafeZones",
+                "How many safe zones one map table can hold.");
 
         @Override
         public String getName() {

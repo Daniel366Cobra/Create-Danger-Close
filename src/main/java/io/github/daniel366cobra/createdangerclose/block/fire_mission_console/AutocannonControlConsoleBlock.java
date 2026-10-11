@@ -49,7 +49,10 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
         BallisticComputerBlockEntity.SalvoResult guns = computer.autocannonsOnTarget();
         if (pull == AutocannonControlConsoleBlockEntity.Pull.DANGER_CLOSE_WARNING) {
             level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
-            player.displayClientMessage(Component.translatable("createdangerclose.autocannon_control_console.danger_close",
+            boolean safeZone = computer.dangerOnTarget(true) == BallisticComputerBlockEntity.Danger.SAFE_ZONE;
+            player.displayClientMessage(Component.translatable(safeZone
+                            ? "createdangerclose.autocannon_control_console.safe_zone"
+                            : "createdangerclose.autocannon_control_console.danger_close",
                     Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
         } else if (guns.fired() + guns.held() == 0)
             message(player, "no_autocannons");

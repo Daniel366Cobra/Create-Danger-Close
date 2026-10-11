@@ -15,6 +15,8 @@ public class CClient extends CDCConfigBase {
             "The line along each gun's barrel.");
     public final ConfigEnum<DyeColor> rangefinderColor = e(DyeColor.BLUE, "rangefinderColor",
             "Each rangefinder's line of sight, and the circle its target lies within.");
+    public final ConfigEnum<DyeColor> safeZoneColor = e(DyeColor.LIME, "safeZoneColor",
+            "Safe zones: their dotted outline and see-through fill.");
     public final ConfigDouble lineWidth = d(1, 0.5, 3, "lineWidth",
             "[in map pixels]", "How thick the plot lines are.");
 

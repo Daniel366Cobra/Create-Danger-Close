@@ -25,6 +25,9 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.IntArrayTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
@@ -78,9 +81,12 @@ public class MapTableBlockEntity extends SmartBlockEntity
     protected boolean updateConnectivity;
     protected int width = 1;
 
-    // Controller only.
+    // The controller's counts. Set or cleared at targetTick; wherever blocks join or split, the newest wins.
     @Nullable protected Vec3 target;
     protected long targetTick;
+    // Likewise, as a whole.
+    protected List<SafeZone> safeZones = List.of();
+    protected long safeZonesTick;
     protected boolean linked;
     protected long lastLinkTick;
     // Controller only: as last carried over by an interface.
@@ -264,11 +270,98 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     public void clearTarget() {
-        if (target == null)
+        if (target == null || level == null)
             return;
         target = null;
+        // Dated too, so an older target on a block that joins later stays cleared.
+        targetTick = level.getGameTime();
         setChanged();
         sendData();
+    }
+
+    // --- Safe zones (controller only) ---
+
+    /** Blocks, inclusive, at every height: a networked computer treats shots landing near one as danger close. */
+    public record SafeZone(int minX, int minZ, int maxX, int maxZ) {
+        public boolean contains(double x, double z) {
+            return x >= minX && x < maxX + 1 && z >= minZ && z < maxZ + 1;
+        }
+    }
+
+    public List<SafeZone> getSafeZones() {
+        return safeZones;
+    }
+
+    /**
+     * Between two sheet fractions. Under one map pixel across is taken as a slip.
+     *
+     * @return false if the table already holds as many as allowed
+     */
+    public boolean addSafeZone(double u0, double v0, double u1, double v1) {
+        Sheet sheet = getSheet();
+        if (level == null || sheet == null || !sheet.dimension().equals(level.dimension()))
+            return true;
+        if (safeZones.size() >= CDCConfig.server().mapTable.maxSafeZones.get())
+            return false;
+        double pixel = 1 / sheet.sizeInPixels();
+        if (Math.abs(u1 - u0) < pixel || Math.abs(v1 - v0) < pixel)
+            return true;
+        int x0 = Mth.floor(sheet.worldX(Mth.clamp(Math.min(u0, u1), 0, 1)));
+        int x1 = Mth.floor(sheet.worldX(Mth.clamp(Math.max(u0, u1), 0, 1)));
+        int z0 = Mth.floor(sheet.worldZ(Mth.clamp(Math.min(v0, v1), 0, 1)));
+        int z1 = Mth.floor(sheet.worldZ(Mth.clamp(Math.max(v0, v1), 0, 1)));
+        List<SafeZone> zones = new ArrayList<>(safeZones);
+        zones.add(new SafeZone(x0, z0, x1, z1));
+        setSafeZones(zones);
+        return true;
+    }
+
+    /** The newest zone under a sheet fraction, if any. */
+    public void removeSafeZone(double u, double v) {
+        Sheet sheet = getSheet();
+        if (level == null || sheet == null)
+            return;
+        double x = sheet.worldX(u), z = sheet.worldZ(v);
+        for (int i = safeZones.size() - 1; i >= 0; i--) {
+            if (safeZones.get(i).contains(x, z)) {
+                List<SafeZone> zones = new ArrayList<>(safeZones);
+                zones.remove(i);
+                setSafeZones(zones);
+                return;
+            }
+        }
+    }
+
+    private void setSafeZones(List<SafeZone> zones) {
+        safeZones = List.copyOf(zones);
+        safeZonesTick = level.getGameTime();
+        setChanged();
+        sendData();
+    }
+
+    /** What a table keeps across joins and splits, each part dated by its last change. */
+    private record TableMemo(@Nullable Vec3 target, long targetTick, List<SafeZone> safeZones, long safeZonesTick) {}
+
+    private void adopt(TableMemo memo) {
+        boolean changed = false;
+        if (memo.targetTick() > targetTick) {
+            target = memo.target();
+            targetTick = memo.targetTick();
+            changed = true;
+        }
+        if (memo.safeZonesTick() > safeZonesTick) {
+            safeZones = memo.safeZones();
+            safeZonesTick = memo.safeZonesTick();
+            changed = true;
+        }
+        if (changed) {
+            setChanged();
+            sendData();
+        }
+    }
+
+    private TableMemo memo() {
+        return new TableMemo(target, targetTick, safeZones, safeZonesTick);
     }
 
     // --- Battle network link (controller only) ---
@@ -370,6 +463,10 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     public void setPonderTarget(@Nullable Vec3 target) {
         this.target = target;
+    }
+
+    public void setPonderSafeZones(List<SafeZone> zones) {
+        safeZones = List.copyOf(zones);
     }
 
     /** It stays connected. */
@@ -518,6 +615,22 @@ public class MapTableBlockEntity extends SmartBlockEntity
         this.controller = controller;
         setChanged();
         sendData();
+        // Joining: a newer target or safe zones held here pass to the table.
+        if (level != null && !worldPosition.equals(controller)
+                && level.getBlockEntity(controller) instanceof MapTableBlockEntity controllerBE)
+            controllerBE.adopt(memo());
+    }
+
+    /** Create hands each block its controller's on a split, and puts the controller's own back after a join. */
+    @Override
+    public Object getExtraData() {
+        return memo();
+    }
+
+    @Override
+    public void setExtraData(@Nullable Object data) {
+        if (data instanceof TableMemo memo)
+            adopt(memo);
     }
 
     @Override
@@ -617,6 +730,11 @@ public class MapTableBlockEntity extends SmartBlockEntity
                     .style(ChatFormatting.DARK_GRAY)
                     .forGoggles(tooltip);
         }
+        if (!table.safeZones.isEmpty())
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.map_table.safe_zones", table.safeZones.size()))
+                    .style(ChatFormatting.GREEN)
+                    .forGoggles(tooltip);
         return true;
     }
 
@@ -650,6 +768,14 @@ public class MapTableBlockEntity extends SmartBlockEntity
         inventory.deserializeNBT(registries, compound.getCompound("Inventory"));
         target = compound.contains("Target") ? readVec3(compound.getCompound("Target")) : null;
         targetTick = compound.getLong("TargetTick");
+        List<SafeZone> zones = new ArrayList<>();
+        for (Tag tag : compound.getList("SafeZones", Tag.TAG_INT_ARRAY)) {
+            int[] box = ((IntArrayTag) tag).getAsIntArray();
+            if (box.length == 4)
+                zones.add(new SafeZone(box[0], box[1], box[2], box[3]));
+        }
+        safeZones = List.copyOf(zones);
+        safeZonesTick = compound.getLong("SafeZonesTick");
         if (clientPacket) {
             linked = compound.getBoolean("Linked");
             BattlePlot arrived = compound.contains("Plot") ? BattlePlot.read(compound.getCompound("Plot")) : BattlePlot.EMPTY;
@@ -691,8 +817,16 @@ public class MapTableBlockEntity extends SmartBlockEntity
             targetTag.putDouble("Y", target.y);
             targetTag.putDouble("Z", target.z);
             compound.put("Target", targetTag);
-            compound.putLong("TargetTick", targetTick);
         }
+        // Even without a target: when it was cleared.
+        compound.putLong("TargetTick", targetTick);
+        if (!safeZones.isEmpty()) {
+            ListTag zones = new ListTag();
+            for (SafeZone zone : safeZones)
+                zones.add(new IntArrayTag(new int[]{zone.minX(), zone.minZ(), zone.maxX(), zone.maxZ()}));
+            compound.put("SafeZones", zones);
+        }
+        compound.putLong("SafeZonesTick", safeZonesTick);
         // Only clients need these: the link lapses on its own, and the map knows where it lies.
         if (clientPacket) {
             compound.putBoolean("Linked", linked);

@@ -46,6 +46,7 @@
       "fire_mode.manual": "Fire mode: Manual",
       "no_autocannons": "No autocannons on this network",
       "danger_close": "DANGER CLOSE: release and press again within %ss to confirm",
+      "safe_zone": "SAFE ZONE: release and press again within %ss to confirm",
       "readout": {
         "manual": "MAN",
         "auto": "AUTO"
@@ -64,6 +65,7 @@
       "no_guns": "No guns on the network",
       "salvo": "Salvo: %s fired, %s held",
       "danger_close": "DANGER CLOSE: Press again within %ss to confirm",
+      "safe_zone": "SAFE ZONE: Press again within %ss to confirm",
       "fuze_offset": "Fuze correction: %s",
       "readout": {
         "direct": "DIR",
@@ -171,8 +173,16 @@
         "not_connected": "Not connected to a battle network",
         "no_target": "No target marked",
         "target": "Target:",
+        "safe_zones": "Safe zones: %s",
+        "safe_zone_limit": "This table already holds %s safe zones",
+        "mode": {
+          "target": "Target",
+          "safe_zone": "Safe zones",
+          "tooltip": "Right click function"
+        },
         "hint": {
-          "target": "Right-click: mark target, Shift + Right-Click: clear",
+          "target": "Right-click: mark, Shift + Right-Click: clear",
+          "safe_zone": "Right-drag: draw, Shift + Right-Click: remove",
           "view": "Scroll: zoom, Drag: move"
         }
       },
@@ -334,7 +344,7 @@
         "behaviour2": "Range readings become _far less accurate_. Right-click the lens with a _Glass Pane_ to repair it."
       },
       "map_table.tooltip": {
-        "summary": "A plotting table for _maps_. Joins with neighboring tables into a square of up to _3×3_.",
+        "summary": "A plotting table for _maps_. Joins with neighboring tables into a square.",
         "condition1": "When right-clicked with a Filled Map:",
         "behaviour1": "_Lays_ the map on that part of the table. Maps must share the same zoom and fit together _like the land_, north up.",
         "condition2": "When right-clicked with an empty hand:",

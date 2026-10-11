@@ -13,6 +13,7 @@ import net.createmod.ponder.api.scene.SceneBuildingUtil;
 import net.createmod.ponder.api.scene.Selection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -34,8 +35,11 @@ public final class MapTableScenes {
     // Fractions of the chart (north-west = 0, 0): ship at sea, target inland, spotter north-west of it.
     private static final double SHIP_U = 0.70, SHIP_V = 0.55;
     private static final double TARGET_U = 0.33, TARGET_V = 0.45;
-    private static final double FIX_U = 0.337, FIX_V = 0.458, FIX_SIGMA = 12;
+    // The rangefinder ranges the beach south of the target.
+    private static final double FIX_U = 0.40, FIX_V = 0.72, FIX_SIGMA = 12;
     private static final double SPOTTER_U = 0.22, SPOTTER_V = 0.30;
+    // A safe zone in the woods south-west of the target.
+    private static final double ZONE_U0 = 0.18, ZONE_V0 = 0.52, ZONE_U1 = 0.28, ZONE_V1 = 0.64;
     // Blocks.
     private static final double GUN_RANGE = 230, GUN_MIN_RANGE = 30;
     // Readable in the small Ponder view.
@@ -54,7 +58,6 @@ public final class MapTableScenes {
         BlockPos networkInterface = util.grid().at(4, 1, 2);
 
         Selection floor = util.select().fromTo(0, 0, 0, 4, 0, 4);
-        Selection table = util.select().fromTo(1, 1, 1, 3, 1, 3);
         Selection drive = util.select().fromTo(5, 0, 2, 5, 1, 2);
 
         // The table's middle (the ship marker) lies at sea on the chart.
@@ -78,16 +81,30 @@ public final class MapTableScenes {
                         new MapTableBlockEntity.Sheet(westX, northZ, 1, WIDTH, be.getLevel().dimension()),
                         CHART, spotters, BOLDNESS)));
 
+        // Every block starts as a table of its own; they join as each square fills.
+        joinTable(scene, util, controller, 1);
         scene.world().showSection(floor, Direction.UP);
         scene.idle(10);
-        scene.world().showSection(table, Direction.DOWN);
-        scene.idle(15);
+        for (int[] block : new int[][]{{0, 0}, {1, 0}, {0, 1}, {1, 1}}) {
+            scene.world().showSection(util.select().position(controller.offset(block[0], 0, block[1])), Direction.DOWN);
+            scene.idle(5);
+        }
+        scene.idle(5);
+        joinTable(scene, util, controller, 2);
+        scene.idle(10);
+        for (int[] block : new int[][]{{2, 0}, {2, 1}, {0, 2}, {1, 2}, {2, 2}}) {
+            scene.world().showSection(util.select().position(controller.offset(block[0], 0, block[1])), Direction.DOWN);
+            scene.idle(5);
+        }
+        scene.idle(5);
+        joinTable(scene, util, controller, WIDTH);
+        scene.idle(10);
 
         scene.overlay().showText(PonderTiming.TEXT)
                 .pointAt(util.vector().blockSurface(util.grid().at(1, 1, 2), Direction.WEST))
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Map Tables placed side by side join into one table, up to 3×3");
+                .text("Map Tables placed side by side join into one table");
         scene.idle(PonderTiming.AFTER_TEXT);
 
         // Lay the maps, one per block, row by row.
@@ -183,6 +200,47 @@ public final class MapTableScenes {
                 .placeNearTarget()
                 .text("...and around each target being ranged. Ground out of loaded range stays as last seen");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        // Safe zones.
+        MapTableBlockEntity.SafeZone zone = new MapTableBlockEntity.SafeZone(
+                (int) Math.floor(westX + ZONE_U0 * SHEET_BLOCKS), (int) Math.floor(northZ + ZONE_V0 * SHEET_BLOCKS),
+                (int) Math.floor(westX + ZONE_U1 * SHEET_BLOCKS), (int) Math.floor(northZ + ZONE_V1 * SHEET_BLOCKS));
+        Vec3 zoneMiddle = onChart(controller, (ZONE_U0 + ZONE_U1) / 2, (ZONE_V0 + ZONE_V1) / 2);
+        scene.overlay().showControls(zoneMiddle, Pointing.DOWN, 40).rightClick();
+        scene.idle(10);
+        scene.world().modifyBlockEntity(controller, MapTableBlockEntity.class, be -> be.setPonderSafeZones(List.of(zone)));
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.GREEN)
+                .pointAt(zoneMiddle)
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("In the GUI's Safe zones mode, right-drag across the maps to mark ground to keep clear of fire");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.GREEN)
+                .pointAt(zoneMiddle)
+                .placeNearTarget()
+                .text("While connected, a shot that would land near one waits for a second press to confirm, as danger close does");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+    }
+
+    /** The width × width square from the controller joins into one table; the rest stand alone. */
+    private static void joinTable(CreateSceneBuilder scene, SceneBuildingUtil util, BlockPos controller, int width) {
+        for (int dz = 0; dz < WIDTH; dz++) {
+            for (int dx = 0; dx < WIDTH; dx++) {
+                boolean joined = dx < width && dz < width;
+                boolean isController = dx == 0 && dz == 0;
+                scene.world().modifyBlockEntityNBT(util.select().position(controller.offset(dx, 0, dz)),
+                        MapTableBlockEntity.class, nbt -> {
+                            if (joined && !isController)
+                                nbt.put("Controller", NbtUtils.writeBlockPos(controller));
+                            else
+                                nbt.remove("Controller");
+                            nbt.putInt("Size", isController ? width : 1);
+                        }, true);
+            }
+        }
     }
 
     /** At chart fractions (north-west = 0, 0). */

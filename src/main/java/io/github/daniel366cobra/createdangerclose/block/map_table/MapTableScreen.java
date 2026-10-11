@@ -3,9 +3,12 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.network.MapTableSafeZonePayload;
 import io.github.daniel366cobra.createdangerclose.network.MapTableTargetPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.renderer.LightTexture;
@@ -18,6 +21,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -46,6 +50,10 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     // Fractions of the sheet.
     private float viewU = 0, viewV = 0;
     private boolean panning;
+    // Right-click marks the target, or (in this mode) draws safe zones.
+    private boolean safeZoneMode;
+    // The zone being dragged out: sheet fractions u0, v0, u1, v1.
+    @Nullable private float[] drawing;
 
     public MapTableScreen(MapTableMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -53,6 +61,25 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         imageHeight = IMAGE_HEIGHT;
         inventoryLabelX = PLAYER_INV_X + 1;
         inventoryLabelY = PLAYER_INV_Y - 11;
+    }
+
+    @Override
+    protected void init() {
+        super.init();
+        // Below the slots and readout, beside the sheet's foot.
+        addRenderableWidget(Button.builder(modeLabel(), button -> {
+                    safeZoneMode = !safeZoneMode;
+                    drawing = null;
+                    button.setMessage(modeLabel());
+                })
+                .bounds(leftPos + SLOT_GRID_X, topPos + PREVIEW_Y + PREVIEW_SIZE - 20, IMAGE_WIDTH - SLOT_GRID_X - 6, 20)
+                .tooltip(Tooltip.create(Component.translatable("createdangerclose.map_table.mode.tooltip")))
+                .build());
+    }
+
+    private Component modeLabel() {
+        return Component.translatable(safeZoneMode
+                ? "createdangerclose.map_table.mode.safe_zone" : "createdangerclose.map_table.mode.target");
     }
 
     @Override
@@ -130,6 +157,8 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             // One line pixel per GUI pixel at any zoom, between maps (z ≈ 1) and markers.
             pose.pushPose();
             pose.translate(originX, originY, 0);
+            MapTablePlot.renderSafeZones(pose, graphics.bufferSource(), controller, zoomedSize, 1, 1.25f,
+                    LightTexture.FULL_BRIGHT, drawing);
             MapTablePlot.render(pose, graphics.bufferSource(), controller, zoomedSize, 1, 1.5f,
                     LightTexture.FULL_BRIGHT);
             graphics.flush();
@@ -201,13 +230,29 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         return true;
     }
 
-    /** Right-click marks the target, Shift + right-click clears it, left-click drags the view. */
+    /**
+     * Right-click marks the target, Shift + right-click clears it, left-click drags the view. In safe
+     * zone mode, right-drag draws a zone and Shift + right-click removes the one under the mouse.
+     */
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         MapTableBlockEntity controller = menu.getController();
         if (controller != null && isOverSheet(mouseX, mouseY) && menu.getCarried().isEmpty()) {
             if (button == 0) {
                 panning = true;
+                return true;
+            }
+            if (button == 1 && safeZoneMode) {
+                if (controller.getSheet() == null)
+                    return true;
+                float u = (float) sheetU(mouseX), v = (float) sheetV(mouseY);
+                if (hasShiftDown()) {
+                    PacketDistributor.sendToServer(new MapTableSafeZonePayload(controller.getBlockPos(), true, u, v, u, v));
+                    Minecraft.getInstance().getSoundManager().play(
+                            SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1f));
+                } else {
+                    drawing = new float[]{u, v, u, v};
+                }
                 return true;
             }
             if (button == 1) {
@@ -232,6 +277,11 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             clampView();
             return true;
         }
+        if (drawing != null && button == 1) {
+            drawing[2] = (float) Mth.clamp(sheetU(mouseX), 0, 1);
+            drawing[3] = (float) Mth.clamp(sheetV(mouseY), 0, 1);
+            return true;
+        }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
@@ -239,6 +289,17 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (panning && button == 0) {
             panning = false;
+            return true;
+        }
+        if (drawing != null && button == 1) {
+            MapTableBlockEntity controller = menu.getController();
+            if (controller != null) {
+                PacketDistributor.sendToServer(new MapTableSafeZonePayload(controller.getBlockPos(), false,
+                        drawing[0], drawing[1], drawing[2], drawing[3]));
+                Minecraft.getInstance().getSoundManager().play(
+                        SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1f));
+            }
+            drawing = null;
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);
@@ -261,7 +322,8 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
                 SLOT_GRID_X, readoutY + 10, readoutWidth, TARGET_COLOR);
 
         int hintWidth = IMAGE_WIDTH - 2 * PREVIEW_X;
-        drawFitted(graphics, Component.translatable("createdangerclose.map_table.hint.target"),
+        drawFitted(graphics, Component.translatable(safeZoneMode
+                        ? "createdangerclose.map_table.hint.safe_zone" : "createdangerclose.map_table.hint.target"),
                 PREVIEW_X, HINTS_Y, hintWidth, HINT_COLOR);
         drawFitted(graphics, Component.translatable("createdangerclose.map_table.hint.view"),
                 PREVIEW_X, HINTS_Y + 10, hintWidth, HINT_COLOR);
