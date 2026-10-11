@@ -18,10 +18,13 @@ public final class CDCFluids {
 
     private static final CreateRegistrate REGISTRATE = CreateDangerClose.getRegistrate();
 
-    /** Lubricants proper: a block's worth of lubrication in 250 mB. Ours and TFMG's lubrication oil. */
-    public static final TagKey<Fluid> LUBRICANTS = TagKey.create(Registries.FLUID,
-            CreateDangerClose.asResource("lubricants"));
-    /** Make-do lubricants: a block's worth in 500 mB. Seed and plant oils. */
+    /** Lubricants by strength, for other mods to add their oils to; the server config sets how much fills a block. */
+    public static final TagKey<Fluid> STRONG_LUBRICANTS = TagKey.create(Registries.FLUID,
+            CreateDangerClose.asResource("strong_lubricants"));
+    /** The baseline: ours and TFMG's lubrication oil. */
+    public static final TagKey<Fluid> MEDIUM_LUBRICANTS = TagKey.create(Registries.FLUID,
+            CreateDangerClose.asResource("medium_lubricants"));
+    /** Make-do: seed and plant oils. */
     public static final TagKey<Fluid> WEAK_LUBRICANTS = TagKey.create(Registries.FLUID,
             CreateDangerClose.asResource("weak_lubricants"));
 
@@ -34,7 +37,7 @@ public final class CDCFluids {
                     .tickRate(15)
                     .slopeFindDistance(3)
                     .explosionResistance(100f))
-            .tag(LUBRICANTS)
+            .tag(MEDIUM_LUBRICANTS)
             .source(BaseFlowingFluid.Source::new)
             .block()
             .properties(p -> p.mapColor(MapColor.TERRACOTTA_YELLOW))
@@ -47,7 +50,9 @@ public final class CDCFluids {
     static {
         // Other mods' oils, each optional: a missing mod or tag is simply skipped.
         REGISTRATE.addDataGenerator(ProviderType.FLUID_TAGS, tags -> {
-            tags.addTag(LUBRICANTS).addOptionalTag(ResourceLocation.fromNamespaceAndPath("c", "lubrication_oil"));
+            tags.addTag(MEDIUM_LUBRICANTS).addOptionalTag(ResourceLocation.fromNamespaceAndPath("c", "lubrication_oil"));
+            // Filled by other mods.
+            tags.addTag(STRONG_LUBRICANTS);
             tags.addTag(WEAK_LUBRICANTS)
                     .addOptionalTag(ResourceLocation.fromNamespaceAndPath("c", "plantoil"))
                     .addOptionalTag(ResourceLocation.fromNamespaceAndPath("forge", "plantoil"));

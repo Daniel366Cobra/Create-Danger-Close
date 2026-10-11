@@ -1,6 +1,7 @@
 package io.github.daniel366cobra.createdangerclose.ponder.scenes;
 
 import com.simibubi.create.foundation.ponder.CreateSceneBuilder;
+import net.createmod.catnip.math.Pointing;
 import net.createmod.ponder.api.PonderPalette;
 import net.createmod.ponder.api.element.ElementLink;
 import net.createmod.ponder.api.element.WorldSectionElement;
@@ -147,6 +148,37 @@ public final class CannonServoScenes {
         scene.effects().emitParticles(muzzle,
                 scene.effects().particleEmitterWithinBlockSpace(new BigCannonPlumeParticleData(4f), barrel.scale(0.5)),
                 1, 1);
-        scene.idle(80);
+        // The rest of the fire text's time, plus the usual gap.
+        scene.idle(PonderTiming.AFTER_TEXT - 40);
+
+        // Naming: last, so the earlier texts keep their numbers.
+        scene.overlay().showControls(util.vector().topOf(pitchInput), Pointing.DOWN, 30).rightClick();
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(util.vector().topOf(pitchInput))
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("Right-click a servo's input with an empty hand to name the guns it lays");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.GREEN)
+                .pointAt(util.vector().topOf(computer))
+                .placeNearTarget()
+                .text("Consoles report by these names, and map tables label the guns. Name a turret's bearing servo to name all its guns");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        // Arc limits, likewise appended.
+        scene.overlay().showControls(util.vector().topOf(yawOutput), Pointing.DOWN, 30).rightClick();
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(util.vector().topOf(yawOutput))
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("Right-click a servo's output to set its arc limits. The gun never turns past them");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.RED)
+                .pointAt(util.vector().topOf(computer))
+                .placeNearTarget()
+                .text("It holds fire on targets outside them, and map tables draw its reach as a sector");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 }

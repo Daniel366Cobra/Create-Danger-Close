@@ -73,10 +73,11 @@ public class CServer extends CDCConfigBase {
         public final ConfigDouble daysDryAtFullSpeed = d(8, 0.5, 365, "daysDryAtFullSpeed",
                 "[in days]", "How long a full mechanism takes to dry out at full speed (256 RPM).");
         public final ConfigInt lubricantPerBlock = i(250, 1, 10000, "lubricantPerBlock",
-                "[in millibuckets]", "How much lubricating oil (spindle oil, lubrication oil) fills one block's lubrication",
+                "[in millibuckets]", "How much medium lubricant (spindle oil, lubrication oil) fills one block's lubrication",
                 "from its reservoir.");
-        public final ConfigInt plantOilPerBlock = i(500, 1, 10000, "plantOilPerBlock",
-                "[in millibuckets]", "How much plant or seed oil fills one block's lubrication from its reservoir.");
+        public final ConfigDouble lubricantTierStep = d(0.5, 0, 0.9, "lubricantTierStep",
+                "How much less weak lubricants (plant and seed oils) and how much more strong ones lubricate",
+                "per millibucket than medium: at 0.5, half as much and half again as much.");
         public final ConfigDouble daysDryAtRest = d(16, 0.5, 365, "daysDryAtRest",
                 "[in days]", "How long it takes with its network at rest; in between, in proportion.");
         public final ConfigDouble seizeBelow = d(0.5, 0, 1, "seizeBelow",
@@ -159,10 +160,24 @@ public class CServer extends CDCConfigBase {
                 "How many times worse a cracked lens makes the ranging error (each lens).");
         public final ConfigDouble dustyLensFactor = d(2, 1, 20, "dustyLensFactor",
                 "How many times worse a lens caked in dust makes the ranging error (each lens).");
+        public final ConfigEnum<TrackingTolerance> trackingTolerance = e(TrackingTolerance.NORMAL, "trackingTolerance",
+                "How unsteady the operator's aim may be before the rangefinder's images drift apart.",
+                "STRICT: as steady as a hand can be; NORMAL; LENIENT: forgiving of shaky tracking.");
 
         @Override
         public String getName() {
             return "rangefinder";
+        }
+    }
+
+    public enum TrackingTolerance {
+        STRICT(1), NORMAL(1.5), LENIENT(2.5);
+
+        // Times the unsteadiness allowed.
+        public final double factor;
+
+        TrackingTolerance(double factor) {
+            this.factor = factor;
         }
     }
 

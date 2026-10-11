@@ -273,13 +273,17 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     // --- The reservoir ---
 
     private static boolean isLubricant(FluidStack fluid) {
-        return fluid.is(CDCFluids.LUBRICANTS) || fluid.is(CDCFluids.WEAK_LUBRICANTS);
+        return fluid.is(CDCFluids.STRONG_LUBRICANTS) || fluid.is(CDCFluids.MEDIUM_LUBRICANTS)
+                || fluid.is(CDCFluids.WEAK_LUBRICANTS);
     }
 
-    /** mB. */
+    /** mB; medium is the config's figure, weak and strong lubricate that step less and more per mB. In several tags, the strongest. */
     private int fluidPerBlock() {
         CServer.Lubrication config = CDCConfig.server().maintenance.lubrication;
-        return reservoir.getFluid().is(CDCFluids.LUBRICANTS) ? config.lubricantPerBlock.get() : config.plantOilPerBlock.get();
+        FluidStack fluid = reservoir.getFluid();
+        double power = fluid.is(CDCFluids.STRONG_LUBRICANTS) ? 1 + config.lubricantTierStep.get()
+                : fluid.is(CDCFluids.MEDIUM_LUBRICANTS) ? 1 : 1 - config.lubricantTierStep.get();
+        return Math.max(1, (int) Math.round(config.lubricantPerBlock.get() / power));
     }
 
     /** Members at least a percent below full take what they need; that frees a seized one. */

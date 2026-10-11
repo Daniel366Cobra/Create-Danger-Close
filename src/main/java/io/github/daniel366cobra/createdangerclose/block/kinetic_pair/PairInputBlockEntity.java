@@ -22,6 +22,11 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
 
     /** Per RPM, server. */
     public void setDrawImpact(float impact) {
+        // After a load, wait until Create has re-added this block: it subtracts the saved draw from the
+        // network's unloaded stress only for blocks not yet members. Joining early would skip that and
+        // leave the saved draw as phantom stress, saved again and growing with every reload.
+        if (!isNetworkMember())
+            return;
         // After a reload the network may hold an older figure that an unchanged draw would never correct.
         Float recorded = hasNetwork() ? getOrCreateNetwork().members.get(this) : null;
         if (Math.abs(impact - drawImpact) <= Math.max(0.01f, drawImpact * 0.02f) && (impact == 0) == (drawImpact == 0)
@@ -32,6 +37,11 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
         lastStressApplied = impact;
         if (hasNetwork())
             getOrCreateNetwork().updateStressFor(this, impact);
+    }
+
+    /** Not on a network, or already counted in it. */
+    protected boolean isNetworkMember() {
+        return !hasNetwork() || getOrCreateNetwork().members.containsKey(this);
     }
 
     @Override

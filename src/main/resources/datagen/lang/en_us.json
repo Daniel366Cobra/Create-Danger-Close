@@ -321,7 +321,9 @@
         "condition2": "When the battle network is underpowered:",
         "behaviour2": "The gun _slows_ down; starved, the output network is _overstressed_ until power returns.",
         "condition3": "When the output half is right-clicked:",
-        "behaviour3": "Opens the _arc limits_ dial. The gun never turns past them, and _holds fire_ on targets outside."
+        "behaviour3": "Opens the _arc limits_ dial. The gun never turns past them, and _holds fire_ on targets outside.",
+        "condition4": "When the input half is right-clicked with an empty hand:",
+        "behaviour4": "_Names_ the guns it lays, for console reports and map table labels. A gun's _own_ servos' name wins over a turret's."
       },
       "kinetic_network_coupler.tooltip": {
         "summary": "Runs a _separate kinetic network_ off the input one's rotation, without joining them.",

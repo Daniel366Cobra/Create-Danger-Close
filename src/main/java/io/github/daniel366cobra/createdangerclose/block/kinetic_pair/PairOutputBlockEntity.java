@@ -59,6 +59,9 @@ public abstract class PairOutputBlockEntity extends GeneratingKineticBlockEntity
 
     /** Per RPM, server. */
     protected void offerCapacity(float capacity) {
+        // Likewise for capacity (see PairInputBlockEntity#setDrawImpact): not before Create re-adds it.
+        if (hasNetwork() && !getOrCreateNetwork().members.containsKey(this))
+            return;
         // The network may have been rebuilt with an older figure.
         Float recorded = hasNetwork() ? getOrCreateNetwork().sources.get(this) : null;
         if (Math.abs(capacity - outputCapacity) <= Math.max(0.01f, outputCapacity * 0.02f)
