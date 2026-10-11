@@ -6,6 +6,7 @@ import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import net.minecraft.ChatFormatting;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.mixin.MapItemSavedDataAccessor;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -39,6 +40,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.maps.MapDecoration;
+import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import net.minecraft.world.phys.Vec3;
@@ -424,9 +426,27 @@ public class MapTableBlockEntity extends SmartBlockEntity
         MapItemSavedData.MapPatch pixels = previousHash != null && previousHash == pixelsHash
                 ? null : new MapItemSavedData.MapPatch(0, 0, 128, 128, data.colors.clone());
         List<MapDecoration> markers = new ArrayList<>();
-        data.getDecorations().forEach(markers::add);
+        ((MapItemSavedDataAccessor) data).createdangerclose$getDecorations().forEach((key, marker) -> {
+            if (!isPlayerMarker(marker) || carriesMap(key, mapId, data))
+                markers.add(marker);
+        });
         player.connection.send(new ClientboundMapItemDataPacket(mapId, data.scale, data.locked, markers, pixels));
         sent.put(mapId, pixelsHash);
+    }
+
+    private static boolean isPlayerMarker(MapDecoration marker) {
+        return marker.type().is(MapDecorationTypes.PLAYER) || marker.type().is(MapDecorationTypes.PLAYER_OFF_MAP)
+                || marker.type().is(MapDecorationTypes.PLAYER_OFF_LIMITS);
+    }
+
+    /**
+     * Vanilla only clears a player's arrow while someone carries the map, so the last to put it
+     * down stays frozen where they stood.
+     */
+    private boolean carriesMap(String playerName, MapId mapId, MapItemSavedData data) {
+        ServerPlayer carrier = level.getServer().getPlayerList().getPlayerByName(playerName);
+        return carrier != null && carrier.level().dimension() == data.dimension
+                && carrier.getInventory().contains(stack -> mapId.equals(stack.get(DataComponents.MAP_ID)));
     }
 
     // --- Ticking ---

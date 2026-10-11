@@ -10,9 +10,13 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
+import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
 import rbasamoyai.createbigcannons.cannon_control.contraption.AbstractMountedCannonContraption;
 import rbasamoyai.createbigcannons.cannon_control.contraption.MountedBigCannonContraption;
 import rbasamoyai.createbigcannons.cannon_control.contraption.MountedAutocannonContraption;
@@ -409,6 +413,17 @@ public final class CannonReading {
         sm.fuzeTimer = sm.isTimedFuze || sm.isDelayedImpactFuze
                 ? fuze.getOrDefault(CBCDataComponents.FUZE_TIMER, sm.isTimedFuze ? 20 : -1)
                 : 0;
+    }
+
+    /** Unassembled: whether the block the mount would assemble from is an autocannon's, so its console lists it. */
+    static boolean isAutocannonAt(CannonMountBlockEntity mount) {
+        Level level = mount.getLevel();
+        BlockState state = mount.getBlockState();
+        if (level == null || !state.hasProperty(BlockStateProperties.VERTICAL_DIRECTION))
+            return false;
+        // As CBC's CannonMountBlockEntity.assemble.
+        BlockPos cannonPos = mount.getBlockPos().relative(state.getValue(BlockStateProperties.VERTICAL_DIRECTION), -2);
+        return level.getBlockState(cannonPos).getBlock() instanceof AutocannonBlock;
     }
 
     /** Unit vector from the rotation center along the barrel, in the cannon's own frame. */

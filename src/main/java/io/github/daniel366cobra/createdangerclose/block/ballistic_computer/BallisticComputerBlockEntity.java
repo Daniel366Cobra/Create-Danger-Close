@@ -1578,6 +1578,13 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         boolean ownPitchDrive = pitchServo != null;
         SubLevel mountSubLevel = subLevelOf(mount);
 
+        // No barrel: nothing to read. Without a target it still rests as before.
+        if (mount.barrel() == null) {
+            lastPitchResults.put(servoPos,
+                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NOT_ASSEMBLED));
+            return hasTarget ? null : restSolution(mount);
+        }
+
         if (!hasTarget) {
             lastPitchResults.put(servoPos,
                     BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_TARGET));

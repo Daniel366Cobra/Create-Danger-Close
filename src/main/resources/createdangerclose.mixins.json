@@ -5,6 +5,7 @@
   "mixins": [
     "AbstractContraptionEntityMixin",
     "AutocannonBreechMixin",
+    "MapItemSavedDataAccessor",
     "SwivelBearingAccessor"
   ],
   "client": [

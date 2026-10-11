@@ -585,6 +585,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         PitchOrientedContraptionEntity entity = sm.mount.getContraption();
         if (entity == null) {
             sm.currentAngle = 0;
+            sm.autocannon = CannonReading.isAutocannonAt(sm.mount);
             return;
         }
         CannonReading.readCannon(sm, entity, level.registryAccess());

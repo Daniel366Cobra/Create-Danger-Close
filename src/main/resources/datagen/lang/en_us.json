@@ -118,6 +118,7 @@
         "no_convergence": "Calculation did not converge",
         "no_target": "No target designated",
         "no_shell": "No shell loaded",
+        "not_assembled": "Not assembled",
         "no_orientation": "No ship orientation data",
         "insufficient_charge": "Insufficient propellant",
         "degenerate": "Invalid geometry",

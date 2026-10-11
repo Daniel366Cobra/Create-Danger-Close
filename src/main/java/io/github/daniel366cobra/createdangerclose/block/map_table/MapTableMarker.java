@@ -31,8 +31,8 @@ import java.util.Optional;
 
 /**
  * Markers on a map table's sheet, in vanilla's decoration sprites: the target (red X) and, on a
- * battle network, the table's own arrow, turning with the ship. Off the sheet it becomes a dot on
- * the nearest edge, large within 256 map pixels, as vanilla does for players.
+ * battle network, the table's own arrow, turning with the ship, or a banner ashore. Off the sheet the
+ * arrow becomes a dot on the nearest edge, large within 256 map pixels, as vanilla does for players.
  */
 public final class MapTableMarker {
 
@@ -47,7 +47,7 @@ public final class MapTableMarker {
 
     private MapTableMarker() {}
 
-    /** Ship heading arrow, or a banner ashore; off-sheet dots. Null without a network, loaded maps, or in another dimension. */
+    /** Ship heading arrow (off the sheet, a dot on its edge), or a banner ashore (on the edge if off). Null without a network, loaded maps, or in another dimension. */
     @Nullable
     public static Marker computeOwn(MapTableBlockEntity controller) {
         Level level = controller.getLevel();
@@ -68,19 +68,20 @@ public final class MapTableMarker {
 
         float px = (float) sheet.pixelX(position.x);
         float py = (float) sheet.pixelY(position.z);
+        float u = Mth.clamp(px, 0, sheetPixels) / sheetPixels;
+        float v = Mth.clamp(py, 0, sheetPixels) / sheetPixels;
+        // Ashore there is no heading: a pin, on the edge when off the sheet. The Ponder chart keeps the arrow, as its scene is a ship.
+        if (ship == null && controller.getPonderChart() == null)
+            return new Marker(MapDecorationTypes.BLUE_BANNER, u, v, 0);
         if (px >= 0 && py >= 0 && px <= sheetPixels && py <= sheetPixels) {
-            // Ashore there is no heading: a pin. The Ponder chart keeps the arrow, as its scene is a ship.
-            if (ship == null && controller.getPonderChart() == null)
-                return new Marker(MapDecorationTypes.BLUE_BANNER, px / sheetPixels, py / sheetPixels, 0);
             float yaw = (float) Math.toDegrees(Math.atan2(-north.x, north.z));
-            return new Marker(MapDecorationTypes.PLAYER, px / sheetPixels, py / sheetPixels, yaw);
+            return new Marker(MapDecorationTypes.PLAYER, u, v, yaw);
         }
 
         float beyond = Math.max(Math.max(-px, px - sheetPixels), Math.max(-py, py - sheetPixels));
         Holder<MapDecorationType> type = beyond < NEAR_OFF_SHEET_PIXELS
                 ? MapDecorationTypes.PLAYER_OFF_MAP : MapDecorationTypes.PLAYER_OFF_LIMITS;
-        return new Marker(type, Mth.clamp(px, 0, sheetPixels) / sheetPixels,
-                Mth.clamp(py, 0, sheetPixels) / sheetPixels, 0);
+        return new Marker(type, u, v, 0);
     }
 
     /** Null if none, or off the sheet. Shown without a network too, as a memo. */

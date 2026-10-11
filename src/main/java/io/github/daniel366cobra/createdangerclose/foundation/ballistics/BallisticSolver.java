@@ -43,6 +43,8 @@ public final class BallisticSolver {
             NO_CONVERGENCE,
             NO_TARGET,
             NO_SHELL,
+            // A disassembled mount, as between shots while a big cannon is reloaded.
+            NOT_ASSEMBLED,
             NO_ORIENTATION,
             INSUFFICIENT_CHARGE,
             DEGENERATE,
