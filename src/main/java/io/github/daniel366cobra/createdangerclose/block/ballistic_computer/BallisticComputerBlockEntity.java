@@ -44,6 +44,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -57,10 +58,12 @@ import org.joml.Vector3dc;
 import rbasamoyai.createbigcannons.config.CBCConfigs;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -128,10 +131,18 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // Per gun riding bearings laid for another gun: its range to the target, blocks.
     private final Map<BlockPos, Double> passengerRange = new HashMap<>();
 
-    /** What a salvo order did: guns fired, and guns held back (no solution, or not yet on target). */
-    public record SalvoResult(int fired, int held, boolean awaitingConfirmation) {
+    /**
+     * What a salvo order did: guns fired, and guns held back (no solution, or not yet on target).
+     *
+     * @param heldNames the named guns among those held, as "Turret C ×2, Bow-2" (empty if none)
+     */
+    public record SalvoResult(int fired, int held, boolean awaitingConfirmation, String heldNames) {
         public SalvoResult(int fired, int held) {
-            this(fired, held, false);
+            this(fired, held, false, "");
+        }
+
+        public SalvoResult(int fired, int held, boolean awaitingConfirmation) {
+            this(fired, held, awaitingConfirmation, "");
         }
     }
 
@@ -193,6 +204,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new HashMap<>();
     // Each console lists only its own guns.
     private final Set<BlockPos> autocannonReports = new HashSet<>();
+    // The name each report's gun shows (set on a servo laying it); synced for the console tooltips.
+    private final Map<BlockPos, String> reportNames = new HashMap<>();
+    // The same by mount, for the salvo message (server).
+    private final Map<BlockPos, String> mountNames = new HashMap<>();
 
     // Shared by a mount's pitch and yaw servos.
     private final Map<BlockPos, FireSolution> aimCache = new HashMap<>();
@@ -346,15 +361,38 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
         dangerArmedTick = -1;
         int fired = 0, held = 0;
+        Map<String, Integer> heldNames = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (BlockPos mountPos : barrels.keySet()) {
             if (isAutocannon(mountPos))
                 continue;
-            if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos))
+            if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos)) {
                 fired++;
-            else
+            } else {
                 held++;
+                String name = mountNames.get(mountPos);
+                if (name != null)
+                    heldNames.merge(name, 1, Integer::sum);
+            }
         }
-        return new SalvoResult(fired, held);
+        return new SalvoResult(fired, held, false, listNames(heldNames));
+    }
+
+    // Held guns named in the salvo message before the rest are only counted.
+    private static final int MAX_SALVO_NAMES = 4;
+
+    /** "Turret C ×2, Bow-2, +3": counted per name, the overflow as a number. */
+    private static String listNames(Map<String, Integer> counts) {
+        List<String> parts = new ArrayList<>();
+        int more = 0;
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (parts.size() < MAX_SALVO_NAMES)
+                parts.add(entry.getValue() > 1 ? entry.getKey() + " ×" + entry.getValue() : entry.getKey());
+            else
+                more += entry.getValue();
+        }
+        if (more > 0)
+            parts.add("+" + more);
+        return String.join(", ", parts);
     }
 
     /** The guns that would fire right now (as fired) and those that would hold (server). */
@@ -945,6 +983,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         lastPitchResults.clear();
         autocannonReports.clear();
+        reportNames.clear();
+        mountNames.clear();
         aimCache.clear();
         directsShipGuns = false;
         jointByPlate.clear();
@@ -953,8 +993,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         List<Gun> guns = new ArrayList<>();
         Map<BlockPos, ComputerServo> yawServoOf = new HashMap<>();
         Map<BlockPos, ServoStatus> yawStatusOf = new HashMap<>();
+        List<ComputerServo> namedServos = new ArrayList<>();
         for (KineticBlockEntity member : network.members.keySet()) {
             if (!(member instanceof ComputerServo servo)) continue;
+            if (!servo.getServoName().isEmpty())
+                namedServos.add(servo);
 
             ServoStatus status = servo.getServoStatus();
             if (status == null || !status.powered()) {
@@ -1031,6 +1074,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         for (Gun gun : guns)
             barrels.put(gun.pos(), gun.mount());
 
+        nameGuns(guns, chains, yawServoOf, yawStatusOf, namedServos);
+
         // Danger close: which guns would land near our own side (their pivots join the list).
         List<SubLevel> hulls = new ArrayList<>();
         SubLevel ownHull = level != null ? Sable.HELPER.getContaining(level, worldPosition) : null;
@@ -1060,7 +1105,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         for (Gun gun : guns) {
             double[] elevation = elevationLimits(gun, chains.get(gun.pos()));
             BattlePlot.GunRange range = gunRange(gun.mount(), elevation[1], elevation[0],
-                    traverseArc(gun, chains.get(gun.pos()), yawStatusOf.get(gun.pos())));
+                    traverseArc(gun, chains.get(gun.pos()), yawStatusOf.get(gun.pos())),
+                    mountNames.getOrDefault(gun.pos(), ""));
             if (range != null)
                 ranges.add(range);
         }
@@ -1337,6 +1383,51 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /** The bearings carrying this gun, from the one under it down to the root. */
+    /**
+     * Each gun shows the name set closest to it: its pitch servo's, its yaw servo's, then the swivels'
+     * carrying it, innermost first. A named servo none of its guns show learns what they show instead.
+     */
+    private void nameGuns(List<Gun> guns, Map<BlockPos, List<Joint>> chains, Map<BlockPos, ComputerServo> yawServoOf,
+                          Map<BlockPos, ServoStatus> yawStatusOf, List<ComputerServo> namedServos) {
+        Set<ComputerServo> shown = new HashSet<>();
+        Map<ComputerServo, String> shownInstead = new HashMap<>();
+        for (Gun gun : guns) {
+            List<ComputerServo> candidates = new ArrayList<>();
+            candidates.add(gun.servo());
+            ComputerServo yaw = yawServoOf.get(gun.pos());
+            if (yaw != null)
+                candidates.add(yaw);
+            for (Joint joint : chains.get(gun.pos()))
+                candidates.add(joint.servo());
+            String name = null;
+            for (ComputerServo candidate : candidates) {
+                String own = candidate.getServoName();
+                if (own.isEmpty())
+                    continue;
+                if (name == null) {
+                    name = own;
+                    shown.add(candidate);
+                } else {
+                    shownInstead.putIfAbsent(candidate, name);
+                }
+            }
+            if (name != null) {
+                reportNames.put(gun.reportPos(), name);
+                mountNames.put(gun.pos(), name);
+            }
+        }
+        // A yaw servo with no pitch servo reports for itself.
+        for (Map.Entry<BlockPos, ComputerServo> entry : yawServoOf.entrySet()) {
+            String own = entry.getValue().getServoName();
+            if (!chains.containsKey(entry.getKey()) && !own.isEmpty()) {
+                reportNames.put(yawStatusOf.get(entry.getKey()).servoPos(), own);
+                shown.add(entry.getValue());
+            }
+        }
+        for (ComputerServo servo : namedServos)
+            servo.receiveShownName(shown.contains(servo) ? null : shownInstead.get(servo));
+    }
+
     private List<Joint> chainOf(ServoStatus.MountSnapshot mount) {
         List<Joint> chain = new ArrayList<>();
         SubLevel subLevel = subLevelOf(mount);
@@ -1427,7 +1518,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
      */
     @Nullable
     private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount, double maxElevation, double maxDepression,
-                                         double[] arc) {
+                                         double[] arc, String name) {
         if (level == null || !mount.hasShell())
             return null;
         double charge = mount.totalChargePower() + mount.addedChargePower();
@@ -1474,7 +1565,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             minRadius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
                     maxDepression, relativeY);
         }
-        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius, arc[0], arc[1]);
+        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius, arc[0], arc[1], name);
     }
 
     /**
@@ -1885,6 +1976,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (clientPacket) {
             this.lastPitchResults.clear();
             this.autocannonReports.clear();
+            this.reportNames.clear();
             ListTag results = compound.getList("PitchResults", Tag.TAG_COMPOUND);
             for (int i = 0; i < results.size(); i++) {
                 CompoundTag t = results.getCompound(i);
@@ -1896,6 +1988,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                         t.getInt("Fuze"), 0, t.getInt("Fuze"))
                         : BallisticSolver.Result.invalid(reason);
                 this.lastPitchResults.put(pos, r);
+                if (t.contains("Name"))
+                    this.reportNames.put(pos, t.getString("Name"));
                 if (t.getBoolean("Autocannon"))
                     this.autocannonReports.add(pos);
             }
@@ -1964,6 +2058,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             t.putDouble("Pitch", r.pitchDeg());
             t.putInt("Fuze", r.fuzeTicks());
             t.putBoolean("Autocannon", autocannonReports.contains(e.getKey()));
+            String name = reportNames.get(e.getKey());
+            if (name != null)
+                t.putString("Name", name);
             results.add(t);
         }
         compound.put("PitchResults", results);
@@ -2095,43 +2192,100 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     .forGoggles(tooltip);
         }
 
-        if (!lastPitchResults.isEmpty()) {
+        // One line per outcome with its count, then which guns: shared names counted, the unnamed last.
+        Map<BallisticSolver.Result.Reason, List<BlockPos>> outcomes = new EnumMap<>(BallisticSolver.Result.Reason.class);
+        for (Map.Entry<BlockPos, BallisticSolver.Result> entry : lastPitchResults.entrySet()) {
+            // Only the guns this console orders.
+            if (autocannonReports.contains(entry.getKey()) != autocannons)
+                continue;
+            BallisticSolver.Result r = entry.getValue();
+            outcomes.computeIfAbsent(r.valid() ? BallisticSolver.Result.Reason.OK : r.reason(), reason -> new ArrayList<>())
+                    .add(entry.getKey());
+        }
+        if (outcomes.isEmpty())
+            return;
+
+        CDCLang.builder()
+                .add(Component.translatable("createdangerclose.ballistic_computer.solutions"))
+                .style(ChatFormatting.GRAY)
+                .forGoggles(tooltip);
+        for (Map.Entry<BallisticSolver.Result.Reason, List<BlockPos>> outcome : outcomes.entrySet()) {
+            boolean found = outcome.getKey() == BallisticSolver.Result.Reason.OK;
+            List<BlockPos> reports = outcome.getValue();
+            Component label = Component.translatable(found ? "createdangerclose.ballistic_computer.solution_ok"
+                    : "createdangerclose.ballistic_computer.reason." + outcome.getKey().name().toLowerCase());
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.ballistic_computer.solutions"))
-                    .style(ChatFormatting.GRAY)
+                    .add(Component.literal("  "))
+                    .add(Component.translatable("createdangerclose.ballistic_computer.outcome_count", label, reports.size()))
+                    .style(found ? ChatFormatting.GREEN : ChatFormatting.RED)
                     .forGoggles(tooltip);
-
-            for (Map.Entry<BlockPos, BallisticSolver.Result> entry : lastPitchResults.entrySet()) {
-                // Only the guns this console orders.
-                if (autocannonReports.contains(entry.getKey()) != autocannons)
-                    continue;
-                BallisticSolver.Result r = entry.getValue();
-                String reasonKey = "createdangerclose.ballistic_computer.reason."
-                        + r.reason().name().toLowerCase();
-
-                if (r.valid()) {
-                    CDCLang.builder()
-                            .add(Component.literal("  "))
-                            .add(Component.translatable("createdangerclose.ballistic_computer.solution_ok"))
-                            .style(ChatFormatting.GREEN)
-                            .forGoggles(tooltip);
-
-                    CDCLang.builder()
-                            .add(Component.literal("    "))
-                            .add(Component.translatable("createdangerclose.ballistic_computer.time_of_flight",
-                                    CDCLang.numberWithUnit(r.timeOfFlightTicks(), "createdangerclose.unit.ticks")))
-                            .style(ChatFormatting.DARK_GREEN)
-                            .forGoggles(tooltip);
-                } else {
-                    CDCLang.builder()
-                            .add(Component.literal("  "))
-                            .add(Component.translatable(
-                                    "createdangerclose.ballistic_computer.solution_failed",
-                                    Component.translatable(reasonKey)))
-                            .style(ChatFormatting.RED)
-                            .forGoggles(tooltip);
+            for (String line : gunNameLines(reports))
+                CDCLang.builder()
+                        .add(Component.literal("    " + line))
+                        .style(ChatFormatting.GRAY)
+                        .forGoggles(tooltip);
+            if (found) {
+                long fastest = Long.MAX_VALUE, slowest = Long.MIN_VALUE;
+                for (BlockPos report : reports) {
+                    long ticks = Math.round(lastPitchResults.get(report).timeOfFlightTicks());
+                    fastest = Math.min(fastest, ticks);
+                    slowest = Math.max(slowest, ticks);
                 }
+                MutableComponent time = Component.literal(fastest == slowest ? fastest + "" : fastest + "–" + slowest)
+                        .append(Component.translatable("createdangerclose.unit.ticks"));
+                CDCLang.builder()
+                        .add(Component.literal("    "))
+                        .add(Component.translatable("createdangerclose.ballistic_computer.time_of_flight", time))
+                        .style(ChatFormatting.DARK_GREEN)
+                        .forGoggles(tooltip);
             }
         }
+    }
+
+    // Names listed per outcome before the rest are only counted; a line wraps past about this many characters.
+    private static final int MAX_LISTED_NAMES = 6;
+    private static final int NAME_LINE_CHARS = 36;
+
+    /** "Turret A ×2, Turret B, 3 unnamed", wrapped; none if every gun is unnamed (the count says it all). */
+    private List<String> gunNameLines(List<BlockPos> reports) {
+        Map<String, Integer> counts = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        int unnamed = 0;
+        for (BlockPos report : reports) {
+            String name = reportNames.get(report);
+            if (name == null)
+                unnamed++;
+            else
+                counts.merge(name, 1, Integer::sum);
+        }
+        if (counts.isEmpty())
+            return List.of();
+
+        List<String> parts = new ArrayList<>();
+        int more = 0;
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (parts.size() < MAX_LISTED_NAMES)
+                parts.add(entry.getValue() > 1 ? entry.getKey() + " ×" + entry.getValue() : entry.getKey());
+            else
+                more += entry.getValue();
+        }
+        if (more > 0)
+            parts.add(Component.translatable("createdangerclose.ballistic_computer.more_guns", more).getString());
+        if (unnamed > 0)
+            parts.add(Component.translatable("createdangerclose.ballistic_computer.unnamed_guns", unnamed).getString());
+
+        List<String> lines = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (int i = 0; i < parts.size(); i++) {
+            String part = parts.get(i) + (i < parts.size() - 1 ? "," : "");
+            if (!line.isEmpty() && line.length() + 1 + part.length() > NAME_LINE_CHARS) {
+                lines.add(line.toString());
+                line.setLength(0);
+            }
+            if (!line.isEmpty())
+                line.append(' ');
+            line.append(part);
+        }
+        lines.add(line.toString());
+        return lines;
     }
 }

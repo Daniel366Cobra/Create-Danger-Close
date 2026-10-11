@@ -24,6 +24,8 @@ public final class CDCPackets {
                         MapTableSafeZonePayload::handle)
                 .playToServer(FireMissionKnobPayload.TYPE, FireMissionKnobPayload.STREAM_CODEC,
                         FireMissionKnobPayload::handle)
+                .playToServer(ServoNamePayload.TYPE, ServoNamePayload.STREAM_CODEC,
+                        ServoNamePayload::handle)
                 .playToServer(ServoLimitsPayload.TYPE, ServoLimitsPayload.STREAM_CODEC,
                         ServoLimitsPayload::handle);
     }

@@ -33,9 +33,10 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
      * @param minRadius  dead zone edge for a level ship (steep arc, or lowest barrel at a target below); 0 if none
      * @param arcFrom    traverse start, world bearing (Minecraft yaw, degrees), running clockwise
      * @param arcLength  degrees; 360 all round
+     * @param name       its servo's name ("Turret A"), empty if unnamed
      */
     public record GunRange(double x, double z, double radius, double aimX, double aimZ, double minRadius,
-                           double arcFrom, double arcLength) {
+                           double arcFrom, double arcLength, String name) {
         public boolean hasAim() {
             return aimX != 0 || aimZ != 0;
         }
@@ -78,7 +79,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
             double arcFrom = from.arcFrom + Math.IEEEremainder(gun.arcFrom - from.arcFrom, 360) * t;
             blendedGuns.add(new GunRange(lerp(from.x, gun.x, t), lerp(from.z, gun.z, t),
                     lerp(from.radius, gun.radius, t), aimX, aimZ, lerp(from.minRadius, gun.minRadius, t),
-                    arcFrom, lerp(from.arcLength, gun.arcLength, t)));
+                    arcFrom, lerp(from.arcLength, gun.arcLength, t), gun.name));
         }
         List<RangefinderFix> blendedFixes = new ArrayList<>(to.fixes.size());
         List<RangefinderFix> unpairedFixes = new ArrayList<>(fixes);
@@ -140,6 +141,8 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
             t.putDouble("MinRadius", gun.minRadius());
             t.putDouble("ArcFrom", gun.arcFrom());
             t.putDouble("ArcLength", gun.arcLength());
+            if (!gun.name().isEmpty())
+                t.putString("Name", gun.name());
             gunList.add(t);
         }
         tag.put("Guns", gunList);
@@ -158,7 +161,8 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
             CompoundTag t = (CompoundTag) entry;
             guns.add(new GunRange(t.getDouble("X"), t.getDouble("Z"), t.getDouble("Radius"),
                     t.getDouble("AimX"), t.getDouble("AimZ"), t.getDouble("MinRadius"),
-                    t.getDouble("ArcFrom"), t.contains("ArcLength") ? t.getDouble("ArcLength") : 360));
+                    t.getDouble("ArcFrom"), t.contains("ArcLength") ? t.getDouble("ArcLength") : 360,
+                    t.getString("Name")));
         }
         return fixes.isEmpty() && guns.isEmpty() ? EMPTY : new BattlePlot(fixes, guns);
     }

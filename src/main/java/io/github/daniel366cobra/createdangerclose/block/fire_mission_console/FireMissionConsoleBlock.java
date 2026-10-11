@@ -110,6 +110,9 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
                     Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
         } else if (salvo.fired() + salvo.held() == 0)
             status(player, "no_guns");
+        else if (!salvo.heldNames().isEmpty())
+            player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.salvo_named",
+                    salvo.fired(), salvo.held(), salvo.heldNames()), true);
         else
             player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.salvo",
                     salvo.fired(), salvo.held()), true);

@@ -86,6 +86,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
     // Likewise, as a whole.
     protected List<SafeZone> safeZones = List.of();
     protected long safeZonesTick;
+    // Controller only: whether its screen labels named guns, for whoever mans it.
+    protected boolean gunLabels = true;
     protected boolean linked;
     protected long lastLinkTick;
     // Controller only: as last carried over by an interface.
@@ -329,6 +331,21 @@ public class MapTableBlockEntity extends SmartBlockEntity
                 return;
             }
         }
+    }
+
+    public boolean showsGunLabels() {
+        return gunLabels;
+    }
+
+    public void toggleGunLabels() {
+        gunLabels = !gunLabels;
+        setChanged();
+        sendData();
+    }
+
+    public void clearSafeZones() {
+        if (!safeZones.isEmpty())
+            setSafeZones(List.of());
     }
 
     private void setSafeZones(List<SafeZone> zones) {
@@ -780,6 +797,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         }
         safeZones = List.copyOf(zones);
         safeZonesTick = compound.getLong("SafeZonesTick");
+        gunLabels = !compound.getBoolean("HideLabels");
         if (clientPacket) {
             linked = compound.getBoolean("Linked");
             BattlePlot arrived = compound.contains("Plot") ? BattlePlot.read(compound.getCompound("Plot")) : BattlePlot.EMPTY;
@@ -831,6 +849,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
             compound.put("SafeZones", zones);
         }
         compound.putLong("SafeZonesTick", safeZonesTick);
+        if (!gunLabels)
+            compound.putBoolean("HideLabels", true);
         // Only clients need these: the link lapses on its own, and the map knows where it lies.
         if (clientPacket) {
             compound.putBoolean("Linked", linked);

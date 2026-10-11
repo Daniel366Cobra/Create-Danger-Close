@@ -806,6 +806,18 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         CDCLang.builder()
                 .add(Component.translatable("createdangerclose.cannon_servo_output.title"))
                 .forGoggles(tooltip);
+        CannonServoInputBlockEntity input = getAdjacentInput();
+        if (input != null && !input.getServoName().isEmpty()) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.cannon_servo.name"))
+                    .add(Component.literal(" " + input.getServoName()).withStyle(ChatFormatting.GOLD))
+                    .forGoggles(tooltip);
+            if (!input.getShownAs().isEmpty())
+                CDCLang.builder()
+                        .add(Component.translatable("createdangerclose.cannon_servo.shown_as", input.getShownAs()))
+                        .style(ChatFormatting.GRAY)
+                        .forGoggles(tooltip);
+        }
         health.addToGoggleTooltip(tooltip);
         if (shownLimited) {
             CDCLang.builder()

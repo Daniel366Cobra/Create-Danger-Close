@@ -3,6 +3,8 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
+import net.createmod.catnip.animation.AnimationTickHolder;
 import io.github.daniel366cobra.createdangerclose.network.MapTableSafeZonePayload;
 import io.github.daniel366cobra.createdangerclose.network.MapTableTargetPayload;
 import net.minecraft.client.Minecraft;
@@ -15,6 +17,7 @@ import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
@@ -23,7 +26,11 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static io.github.daniel366cobra.createdangerclose.block.map_table.MapTableMenu.*;
 
@@ -42,12 +49,19 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             CreateDangerClose.asResource("textures/gui/map_table/map_background_4.png"),
             CreateDangerClose.asResource("textures/gui/map_table/map_background_5.png")};
     private static final int BACKGROUND_TEXTURE_SIZE = PREVIEW_SIZE;
-    private static final int MODE_BUTTON_WIDTH = 64;
+    // Clear of a 5×5 slot grid by 2 pixels.
+    private static final int BUTTON_WIDTH = 70, BUTTON_PITCH = 22;
     // Vanilla's label gray, a softer hint gray, the target's red.
     private static final int LABEL_COLOR = 0xFF404040, HINT_COLOR = 0xFF707070, TARGET_COLOR = 0xFFB02E26;
 
     // 1 = the whole sheet, doubling per scroll step.
     private static final float MAX_ZOOM = 8;
+
+    // Gun labels, GUI pixels: kept off each gun's point, first tried this far past that, then nudged out.
+    private static final int GUN_CLEARANCE = 2, LABEL_GAP = 1, LABEL_NUDGE = 5, LABEL_NUDGES = 3;
+    // Blocks: guns of one name within this of each other share a label.
+    private static final double TURRET_SPREAD = 16;
+    private static final int GUN_LABEL_BACKDROP = 0xA0202020, GUN_LABEL_COLOR = 0xFFFFFFFF;
 
     private float zoom = 1;
     // Fractions of the sheet.
@@ -57,6 +71,9 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     private boolean safeZoneMode;
     // The zone being dragged out: sheet fractions u0, v0, u1, v1.
     @Nullable private float[] drawing;
+    private Button labelsButton;
+    // Gun labels: last frame's spot for each, by name and turn among same-named ones.
+    private Map<String, Integer> lastLabelSpots = Map.of();
 
     public MapTableScreen(MapTableMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
@@ -69,15 +86,51 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     @Override
     protected void init() {
         super.init();
-        // Top right, beside the slot grid (5 wide at most).
+        // Top right, stacked beside the slot grid (5 wide at most), above the target readout.
+        int buttonX = leftPos + IMAGE_WIDTH - 8 - BUTTON_WIDTH;
         addRenderableWidget(Button.builder(modeLabel(), button -> {
                     safeZoneMode = !safeZoneMode;
                     drawing = null;
                     button.setMessage(modeLabel());
                 })
-                .bounds(leftPos + IMAGE_WIDTH - 8 - MODE_BUTTON_WIDTH, topPos + PREVIEW_Y, MODE_BUTTON_WIDTH, 20)
+                .bounds(buttonX, topPos + PREVIEW_Y, BUTTON_WIDTH, 20)
                 .tooltip(Tooltip.create(Component.translatable("createdangerclose.map_table.mode.tooltip")))
                 .build());
+        // The table's own setting: the label follows it, whoever toggles it.
+        labelsButton = addRenderableWidget(Button.builder(labelsLabel(),
+                        button -> pressMenuButton(LABELS_BUTTON, SoundEvents.UI_BUTTON_CLICK.value()))
+                .bounds(buttonX, topPos + PREVIEW_Y + BUTTON_PITCH, BUTTON_WIDTH, 20)
+                .tooltip(Tooltip.create(Component.translatable("createdangerclose.map_table.labels.tooltip")))
+                .build());
+        addRenderableWidget(Button.builder(Component.translatable("createdangerclose.map_table.clear.button"),
+                        button -> pressMenuButton(CLEAR_BUTTON, SoundEvents.BOOK_PAGE_TURN))
+                .bounds(buttonX, topPos + PREVIEW_Y + 2 * BUTTON_PITCH, BUTTON_WIDTH, 20)
+                .tooltip(Tooltip.create(Component.translatable("createdangerclose.map_table.clear.tooltip")))
+                .build());
+    }
+
+    /** Done on the server, through vanilla's menu button packet. */
+    private void pressMenuButton(int id, SoundEvent sound) {
+        if (minecraft == null || minecraft.gameMode == null)
+            return;
+        minecraft.gameMode.handleInventoryButtonClick(menu.containerId, id);
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(sound, 1f));
+    }
+
+    @Override
+    protected void containerTick() {
+        super.containerTick();
+        labelsButton.setMessage(labelsLabel());
+    }
+
+    private boolean showsGunLabels() {
+        MapTableBlockEntity controller = menu.getController();
+        return controller == null || controller.showsGunLabels();
+    }
+
+    private Component labelsLabel() {
+        return Component.translatable(showsGunLabels()
+                ? "createdangerclose.map_table.labels.on" : "createdangerclose.map_table.labels.off");
     }
 
     private Component modeLabel() {
@@ -182,6 +235,13 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             pose.popPose();
         }
 
+        if (controller != null && controller.showsGunLabels()) {
+            pose.pushPose();
+            pose.translate(0, 0, 3 + markers.size());
+            renderGunLabels(graphics, controller, sheetX, sheetY, size, originX, originY, zoomedSize);
+            pose.popPose();
+        }
+
         graphics.disableScissor();
 
         if (zoom > 1) {
@@ -189,6 +249,116 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             pose.translate(0, 0, 10);
             graphics.drawString(font, "×" + (int) zoom, sheetX + 2, sheetY + size - 9, 0xFFFFFFFF, true);
             pose.popPose();
+        }
+    }
+
+    /**
+     * A label per named gun or turret, at one size at any zoom. Placed in name order, each beside its
+     * guns on the first side clear of other guns and earlier labels, else further out; left off if no
+     * spot nearby is clear. A label keeps last frame's spot while it stays clear, so panning across a
+     * pixel boundary does not flip it.
+     */
+    private void renderGunLabels(GuiGraphics graphics, MapTableBlockEntity controller, int sheetX, int sheetY,
+                                 int size, float originX, float originY, float zoomedSize) {
+        BattlePlot plot = controller.getShownPlot(AnimationTickHolder.getPartialTicks());
+        MapTableBlockEntity.Sheet sheet = controller.getSheet();
+        if (plot.guns().isEmpty() || sheet == null || controller.getLevel() == null
+                || !sheet.dimension().equals(controller.getLevel().dimension()))
+            return;
+
+        // Guns of one name close together share a label (a turret), beside all of them.
+        List<GunLabel> labels = new ArrayList<>();
+        List<Obstacle> taken = new ArrayList<>();
+        for (BattlePlot.GunRange gun : plot.guns()) {
+            int x = Math.round(originX + (float) (sheet.pixelX(gun.x()) / sheet.sizeInPixels()) * zoomedSize);
+            int y = Math.round(originY + (float) (sheet.pixelY(gun.z()) / sheet.sizeInPixels()) * zoomedSize);
+            GunLabel label = null;
+            if (!gun.name().isEmpty()) {
+                for (GunLabel other : labels) {
+                    if (other.name.equals(gun.name())
+                            && Math.hypot(other.firstX - gun.x(), other.firstZ - gun.z()) < TURRET_SPREAD) {
+                        label = other;
+                        break;
+                    }
+                }
+                if (label == null)
+                    labels.add(label = new GunLabel(gun.name(), gun.x(), gun.z(), x, y));
+                label.include(x, y);
+            }
+            taken.add(new Obstacle(new int[]{x - GUN_CLEARANCE, y - GUN_CLEARANCE,
+                    x + GUN_CLEARANCE + 1, y + GUN_CLEARANCE + 1}, label));
+        }
+        labels.sort(Comparator.comparing((GunLabel label) -> label.name, String.CASE_INSENSITIVE_ORDER)
+                .thenComparingDouble(label -> label.firstX).thenComparingDouble(label -> label.firstZ));
+        if (zoom > 1)
+            taken.add(new Obstacle(new int[]{sheetX, sheetY + size - 10,
+                    sheetX + 2 + font.width("×" + (int) zoom), sheetY + size}, null));
+
+        Map<String, Integer> placed = new HashMap<>();
+        Map<String, Integer> sameName = new HashMap<>();
+        for (GunLabel label : labels) {
+            String key = label.name + "#" + sameName.merge(label.name, 1, Integer::sum);
+            if (label.maxX < sheetX || label.maxY < sheetY || label.minX > sheetX + size || label.minY > sheetY + size)
+                continue;
+            int width = font.width(label.name) + 2, height = font.lineHeight + 1;
+            // Its guns' extent, with their clearance; spots are numbered ring by ring, four sides each.
+            int left = label.minX - GUN_CLEARANCE, right = label.maxX + GUN_CLEARANCE + 1;
+            int top = label.minY - GUN_CLEARANCE, bottom = label.maxY + GUN_CLEARANCE + 1;
+            int midX = (left + right) / 2, midY = (top + bottom) / 2;
+            int spots = 4 * (LABEL_NUDGES + 1);
+            int previous = lastLabelSpots.getOrDefault(key, -1);
+            int[] spot = null;
+            for (int i = previous >= 0 ? -1 : 0; spot == null && i < spots; i++) {
+                int n = i < 0 ? previous : i;
+                int gap = LABEL_GAP + LABEL_NUDGE * (n / 4);
+                int[] corner = switch (n % 4) {
+                    case 0 -> new int[]{right + gap, midY - height / 2};
+                    case 1 -> new int[]{left - gap - width, midY - height / 2};
+                    case 2 -> new int[]{midX - width / 2, top - gap - height};
+                    default -> new int[]{midX - width / 2, bottom + gap};
+                };
+                int[] box = {corner[0], corner[1], corner[0] + width, corner[1] + height};
+                if (box[0] >= sheetX && box[1] >= sheetY && box[2] <= sheetX + size && box[3] <= sheetY + size
+                        && taken.stream().noneMatch(other -> other.owner != label && overlaps(box, other.box))) {
+                    spot = box;
+                    placed.put(key, n);
+                }
+            }
+            if (spot == null)
+                continue;
+            taken.add(new Obstacle(spot, null));
+            graphics.fill(spot[0], spot[1], spot[2], spot[3], GUN_LABEL_BACKDROP);
+            graphics.drawString(font, label.name, spot[0] + 1, spot[1] + 1, GUN_LABEL_COLOR, false);
+        }
+        lastLabelSpots = placed;
+    }
+
+    private static boolean overlaps(int[] a, int[] b) {
+        return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    }
+
+    /** A gun (its label's guns do not block it) or a placed label. */
+    private record Obstacle(int[] box, @Nullable GunLabel owner) {}
+
+    /** Its guns' extent on screen. */
+    private static final class GunLabel {
+        final String name;
+        final double firstX, firstZ;
+        int minX, minY, maxX, maxY;
+
+        GunLabel(String name, double firstX, double firstZ, int x, int y) {
+            this.name = name;
+            this.firstX = firstX;
+            this.firstZ = firstZ;
+            minX = maxX = x;
+            minY = maxY = y;
+        }
+
+        void include(int x, int y) {
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
         }
     }
 
@@ -314,7 +484,10 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         super.renderLabels(graphics, mouseX, mouseY);
 
         int readoutY = SLOT_GRID_Y + menu.getTableWidth() * SLOT_SIZE + 5;
-        int readoutWidth = IMAGE_WIDTH - SLOT_GRID_X - 8;
+        // Beside the buttons under a small slot grid, short of them.
+        int readoutWidth = readoutY < PREVIEW_Y + 2 * BUTTON_PITCH + 20
+                ? IMAGE_WIDTH - 8 - BUTTON_WIDTH - 4 - SLOT_GRID_X
+                : IMAGE_WIDTH - SLOT_GRID_X - 8;
         MapTableBlockEntity controller = menu.getController();
         Vec3 target = controller != null ? controller.getTarget() : null;
         drawFitted(graphics, Component.translatable("createdangerclose.map_table.target"),
@@ -357,4 +530,4 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         graphics.fill(x + 1, y + SLOT_SIZE - 1, x + SLOT_SIZE, y + SLOT_SIZE, PANEL_LIGHT);
         graphics.fill(x + SLOT_SIZE - 1, y + 1, x + SLOT_SIZE, y + SLOT_SIZE, PANEL_LIGHT);
     }
-}
+}

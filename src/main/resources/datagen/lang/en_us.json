@@ -64,6 +64,7 @@
       },
       "no_guns": "No guns on the network",
       "salvo": "Salvo: %s fired, %s held",
+      "salvo_named": "Salvo: %s fired, %s held (%s)",
       "danger_close": "DANGER CLOSE: Press again within %ss to confirm",
       "safe_zone": "SAFE ZONE: Press again within %ss to confirm",
       "fuze_offset": "Fuze correction: %s",
@@ -112,7 +113,9 @@
       "target_speed": "Target Speed",
       "solutions": "Fire Solutions:",
       "solution_ok": "Solution found",
-      "solution_failed": "No solution: %s",
+      "outcome_count": "%s (%s)",
+      "more_guns": "+%s more",
+      "unnamed_guns": "%s unnamed",
       "time_of_flight": "Time of flight: %s",
       "reason": {
         "out_of_range": "Out of range: too far",
@@ -131,7 +134,9 @@
       }
     },
       "cannon_servo": {
-        "not_enough_space": "Not enough space to place the Servo's output half"
+        "not_enough_space": "Not enough space to place the Servo's output half",
+        "name": "Name:",
+        "shown_as": "Shown as: %s"
       },
       "kinetic_network_coupler": {
         "title": "Kinetic Network Coupler",
@@ -179,6 +184,15 @@
           "target": "Target",
           "safe_zone": "Safe zones",
           "tooltip": "Right click function"
+        },
+        "clear": {
+          "button": "Clear table",
+          "tooltip": "Removes the target and all safe zones"
+        },
+        "labels": {
+          "on": "Labels: On",
+          "off": "Labels: Off",
+          "tooltip": "Names of the guns on the sheet"
         },
         "hint": {
           "target": "Right-click: mark, Shift + Right-Click: clear",
@@ -231,6 +245,10 @@
           "arc": "%s° allowed",
           "now": "Now: %s°",
           "hint": "Drag the knobs · Ctrl: move both · Shift: 5° steps · Right-click: clear"
+        },
+        "servo_name": {
+          "title": "Name the guns this Servo lays",
+          "hint": "e.g. Turret A"
         }
       },
 
