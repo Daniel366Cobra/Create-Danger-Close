@@ -19,12 +19,15 @@ import org.jetbrains.annotations.Nullable;
 public class MapTableMenu extends AbstractContainerMenu {
 
     // Shared with MapTableScreen.
-    public static final int IMAGE_WIDTH = 212, IMAGE_HEIGHT = 271;
-    public static final int PREVIEW_X = 8, PREVIEW_Y = 18, PREVIEW_SIZE = 132;
+    // Sheet on the left, divisible by every table width up to 5; map slots, readout and inventory on the right.
+    // 368 × 230 fits GUI scale 3 at 720p and scale 4 at 1080p.
+    public static final int PREVIEW_X = 8, PREVIEW_Y = 18, PREVIEW_SIZE = 180;
     public static final int SLOT_GRID_X = PREVIEW_X + PREVIEW_SIZE + 10, SLOT_GRID_Y = PREVIEW_Y;
     public static final int HINTS_Y = PREVIEW_Y + PREVIEW_SIZE + 5;
-    public static final int PLAYER_INV_X = (IMAGE_WIDTH - 162) / 2, PLAYER_INV_Y = 189;
     public static final int SLOT_SIZE = 18;
+    // Below a 5×5 slot grid and its target readout.
+    public static final int PLAYER_INV_X = SLOT_GRID_X, PLAYER_INV_Y = 145;
+    public static final int IMAGE_WIDTH = PLAYER_INV_X + 162 + 8, IMAGE_HEIGHT = 230;
 
     @Nullable private final MapTableBlockEntity controller;
     private final int tableWidth;

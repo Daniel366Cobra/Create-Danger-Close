@@ -61,14 +61,13 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * One block of a map table: up to 3×3, joined via {@link ConnectivityHandler}, controller north-west.
+ * One block of a map table: up to 5×5 (server config), joined via {@link ConnectivityHandler}, controller north-west.
  * Each block holds its own map, so joining never moves items. Maps fit like the land: same zoom and
  * dimension, offset by one map width per block, north up.
  */
 public class MapTableBlockEntity extends SmartBlockEntity
         implements IMultiBlockEntityContainer, MenuProvider, IHaveGoggleInformation {
 
-    public static final int MAX_WIDTH = 3;
     private static final int MAP_SYNC_INTERVAL_TICKS = 10;
     private static final double MAP_SYNC_RANGE = 64;
 
@@ -568,6 +567,11 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
         if (level == null || level.isClientSide || !isController())
             return;
+        // Larger than the server now allows: split, and the blocks join again within the limit.
+        if (width > getMaxWidth()) {
+            ConnectivityHandler.splitMulti(this);
+            return;
+        }
         if (level.getGameTime() % MAP_SYNC_INTERVAL_TICKS == 0)
             syncMapsToPlayers();
         if (linked && level instanceof ServerLevel serverLevel)
@@ -673,7 +677,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     @Override
     public int getMaxWidth() {
-        return MAX_WIDTH;
+        return CDCConfig.server().mapTable.maxTableWidth.get();
     }
 
     @Override
@@ -683,7 +687,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     /**
      * Create sets 0 when a queued table finds nothing to join after all, having set the width it
-     * tried (up to 3): a lone block would then claim 3×3 and block every join around it.
+     * tried (up to the most allowed): a lone block would then claim that size and block every join around it.
      */
     @Override
     public void setHeight(int height) {

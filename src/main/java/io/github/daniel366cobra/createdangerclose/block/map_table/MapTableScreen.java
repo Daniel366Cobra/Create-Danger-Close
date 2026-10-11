@@ -27,7 +27,7 @@ import java.util.List;
 
 import static io.github.daniel366cobra.createdangerclose.block.map_table.MapTableMenu.*;
 
-/** Stitched maps on the left, a slot per table block on the right (north up), inventory below. */
+/** Stitched maps on the left; on the right a slot per table block (north up), the target, and the inventory. */
 public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
 
     private static final int PANEL = 0xFFC6C6C6, PANEL_LIGHT = 0xFFFFFFFF, PANEL_DARK = 0xFF555555;
@@ -36,10 +36,13 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
 
     // Per table size: baize at one texel per GUI pixel, chalked with the cell lines.
     private static final ResourceLocation[] SHEET_BACKGROUNDS = {
-            CreateDangerClose.asResource("textures/gui/map_table/map_background_small.png"),
-            CreateDangerClose.asResource("textures/gui/map_table/map_background_medium.png"),
-            CreateDangerClose.asResource("textures/gui/map_table/map_background_large.png")};
-    private static final int BACKGROUND_TEXTURE_SIZE = 132;
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_1.png"),
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_2.png"),
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_3.png"),
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_4.png"),
+            CreateDangerClose.asResource("textures/gui/map_table/map_background_5.png")};
+    private static final int BACKGROUND_TEXTURE_SIZE = PREVIEW_SIZE;
+    private static final int MODE_BUTTON_WIDTH = 64;
     // Vanilla's label gray, a softer hint gray, the target's red.
     private static final int LABEL_COLOR = 0xFF404040, HINT_COLOR = 0xFF707070, TARGET_COLOR = 0xFFB02E26;
 
@@ -66,13 +69,13 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     @Override
     protected void init() {
         super.init();
-        // Below the slots and readout, beside the sheet's foot.
+        // Top right, beside the slot grid (5 wide at most).
         addRenderableWidget(Button.builder(modeLabel(), button -> {
                     safeZoneMode = !safeZoneMode;
                     drawing = null;
                     button.setMessage(modeLabel());
                 })
-                .bounds(leftPos + SLOT_GRID_X, topPos + PREVIEW_Y + PREVIEW_SIZE - 20, IMAGE_WIDTH - SLOT_GRID_X - 6, 20)
+                .bounds(leftPos + IMAGE_WIDTH - 8 - MODE_BUTTON_WIDTH, topPos + PREVIEW_Y, MODE_BUTTON_WIDTH, 20)
                 .tooltip(Tooltip.create(Component.translatable("createdangerclose.map_table.mode.tooltip")))
                 .build());
     }
@@ -311,7 +314,7 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         super.renderLabels(graphics, mouseX, mouseY);
 
         int readoutY = SLOT_GRID_Y + menu.getTableWidth() * SLOT_SIZE + 5;
-        int readoutWidth = IMAGE_WIDTH - SLOT_GRID_X - 6;
+        int readoutWidth = IMAGE_WIDTH - SLOT_GRID_X - 8;
         MapTableBlockEntity controller = menu.getController();
         Vec3 target = controller != null ? controller.getTarget() : null;
         drawFitted(graphics, Component.translatable("createdangerclose.map_table.target"),
@@ -321,7 +324,8 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
                         : "—"),
                 SLOT_GRID_X, readoutY + 10, readoutWidth, TARGET_COLOR);
 
-        int hintWidth = IMAGE_WIDTH - 2 * PREVIEW_X;
+        // Under the sheet, clear of the inventory.
+        int hintWidth = PREVIEW_SIZE;
         drawFitted(graphics, Component.translatable(safeZoneMode
                         ? "createdangerclose.map_table.hint.safe_zone" : "createdangerclose.map_table.hint.target"),
                 PREVIEW_X, HINTS_Y, hintWidth, HINT_COLOR);
