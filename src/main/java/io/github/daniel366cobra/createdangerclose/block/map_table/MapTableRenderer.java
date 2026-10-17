@@ -66,7 +66,8 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
         pose.translate(BORDER, 1 + LIFT, BORDER);
         pose.mulPose(Axis.XP.rotationDegrees(90));
         // Safe zones under the plot lines.
-        MapTablePlot.renderSafeZones(pose, buffers, table, width * cell, PLOT_PIXEL * bold, -MARKER_LIFT / 4, light, null);
+        MapTablePlot.renderSafeZones(pose, buffers, table, width * cell, PLOT_PIXEL * bold,
+                -MARKER_LIFT / 4, -MARKER_LIFT * 3 / 8, light, null);
         MapTablePlot.render(pose, buffers, table, width * cell, PLOT_PIXEL * bold, -MARKER_LIFT / 2, light);
         pose.popPose();
 

@@ -2,12 +2,12 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import io.github.daniel366cobra.createdangerclose.client.CDCRenderTypes;
 import io.github.daniel366cobra.createdangerclose.config.CClient;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.item.DyeColor;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -53,7 +53,7 @@ public final class MapTablePlot {
             return;
 
         double scale = sheetSize / (sheet.sizeInPixels() * sheet.blocksPerPixel());
-        Pen pen = new Pen(buffers.getBuffer(RenderType.textBackground()), pose.last().pose(),
+        Pen pen = new Pen(buffers.getBuffer(CDCRenderTypes.overlay()), pose.last().pose(),
                 sheetSize, lift, pixel * CDCConfig.client().lineWidth.getF(), packedLight);
 
         CClient colors = CDCConfig.client();
@@ -97,32 +97,35 @@ public final class MapTablePlot {
     /**
      * Safe zones, on any table (unlinked, they are notes). Same sheet and pose as {@link #render}.
      *
-     * @param drawing a zone being dragged out, in sheet fractions (u0, v0, u1, v1), or null
+     * @param borderLift above {@code lift}, so the border does not z-fight the infill
+     * @param drawing    a zone being dragged out, in sheet fractions (u0, v0, u1, v1), or null
      */
     public static void renderSafeZones(PoseStack pose, MultiBufferSource buffers, MapTableBlockEntity controller,
-                                       float sheetSize, float pixel, float lift, int packedLight,
+                                       float sheetSize, float pixel, float lift, float borderLift, int packedLight,
                                        @Nullable float[] drawing) {
         List<MapTableBlockEntity.SafeZone> zones = controller.getSafeZones();
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         if (sheet == null || zones.isEmpty() && drawing == null)
             return;
-        Pen pen = new Pen(buffers.getBuffer(RenderType.textBackground()), pose.last().pose(),
-                sheetSize, lift, pixel * CDCConfig.client().lineWidth.getF(), packedLight);
+        VertexConsumer consumer = buffers.getBuffer(CDCRenderTypes.overlay());
+        float width = pixel * CDCConfig.client().lineWidth.getF();
+        Pen fill = new Pen(consumer, pose.last().pose(), sheetSize, lift, width, packedLight);
+        Pen border = new Pen(consumer, pose.last().pose(), sheetSize, borderLift, width, packedLight);
         int rgb = CDCConfig.client().safeZoneColor.get().getTextureDiffuseColor() & 0xFFFFFF;
         double toSheet = sheetSize / sheet.sizeInPixels();
         for (MapTableBlockEntity.SafeZone zone : zones) {
             // Edges on block boundaries: the far ones past the last block.
-            safeZone(pen, rgb, sheet.pixelX(zone.minX()) * toSheet, sheet.pixelY(zone.minZ()) * toSheet,
+            safeZone(fill, border, rgb, sheet.pixelX(zone.minX()) * toSheet, sheet.pixelY(zone.minZ()) * toSheet,
                     sheet.pixelX(zone.maxX() + 1) * toSheet, sheet.pixelY(zone.maxZ() + 1) * toSheet, pixel);
         }
         if (drawing != null)
-            safeZone(pen, rgb, drawing[0] * sheetSize, drawing[1] * sheetSize,
+            safeZone(fill, border, rgb, drawing[0] * sheetSize, drawing[1] * sheetSize,
                     drawing[2] * sheetSize, drawing[3] * sheetSize, pixel);
     }
 
-    private static void safeZone(Pen pen, int rgb, double x0, double y0, double x1, double y1, float pixel) {
-        pen.color = FILL_ALPHA << 24 | rgb;
-        pen.fill(x0, y0, x1, y1);
+    private static void safeZone(Pen fill, Pen pen, int rgb, double x0, double y0, double x1, double y1, float pixel) {
+        fill.color = FILL_ALPHA << 24 | rgb;
+        fill.fill(x0, y0, x1, y1);
         pen.color = LINE_ALPHA << 24 | rgb;
         double left = Math.min(x0, x1), right = Math.max(x0, x1), top = Math.min(y0, y1), bottom = Math.max(y0, y1);
         pen.line(left, top, right, top, pixel * DOT, pixel * DOT_GAP);

@@ -2,9 +2,9 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import io.github.daniel366cobra.createdangerclose.client.CDCRenderTypes;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -16,7 +16,14 @@ import org.joml.Matrix4f;
 /** Client map drawing for the table top and its screen. */
 public final class MapTableMaps {
 
+    // Render thread only: the map quad is drawn opaque while set (MapInstanceMixin).
+    private static boolean drawingOnTable;
+
     private MapTableMaps() {}
+
+    public static boolean isDrawingOnTable() {
+        return drawingOnTable;
+    }
 
     /**
      * Into (0, 0)–(128, 128), north at low y, as on an item frame; faces −Z.
@@ -32,7 +39,12 @@ public final class MapTableMaps {
         if (data == null)
             return false;
         // As on an item frame: player markers hidden (spotters show green, on linked tables), frames and banners shown.
-        mc.gameRenderer.getMapRenderer().render(pose, buffers, mapId, data, true, packedLight);
+        drawingOnTable = true;
+        try {
+            mc.gameRenderer.getMapRenderer().render(pose, buffers, mapId, data, true, packedLight);
+        } finally {
+            drawingOnTable = false;
+        }
         return true;
     }
 
@@ -42,7 +54,7 @@ public final class MapTableMaps {
         float u0 = (float) dx / width, u1 = (float) (dx + 1) / width;
         float v0 = (float) dz / width, v1 = (float) (dz + 1) / width;
         Matrix4f matrix = pose.last().pose();
-        VertexConsumer consumer = buffers.getBuffer(RenderType.text(texture));
+        VertexConsumer consumer = buffers.getBuffer(CDCRenderTypes.opaqueText(texture));
         consumer.addVertex(matrix, 0, 128, -0.01f).setColor(-1).setUv(u0, v1).setLight(packedLight);
         consumer.addVertex(matrix, 128, 128, -0.01f).setColor(-1).setUv(u1, v1).setLight(packedLight);
         consumer.addVertex(matrix, 128, 0, -0.01f).setColor(-1).setUv(u1, v0).setLight(packedLight);

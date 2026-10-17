@@ -11,7 +11,8 @@
   "client": [
     "client.CameraMixin",
     "client.ContraptionPlayerPassengerRotationMixin",
-    "client.EntityTurnMixin"
+    "client.EntityTurnMixin",
+    "client.MapInstanceMixin"
   ],
   "injectors": {
     "defaultRequire": 1

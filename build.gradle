@@ -127,6 +127,10 @@ configurations {
 if (!create_neoforge_version.startsWith("${create_min_version}-"))
     throw new GradleException("create_neoforge_version ${create_neoforge_version} is not a build of create_min_version ${create_min_version}")
 
+configurations {
+    devClientMods { transitive = false }
+}
+
 dependencies {
     // --- CREATE ---
     // CBC uses "slim" to avoid bundling conflicts, so add Ponder and Flywheel manually.
@@ -153,7 +157,29 @@ dependencies {
     // CBC
     implementation ("maven.modrinth:create-big-cannons:${create_big_cannons_min_version}") { transitive = false }
     implementation ("maven.modrinth:rpl:${ritchies_projectile_library_version}") { transitive = false }
+
+    // Dev client only: renderer mods players often run, to reproduce their rendering bugs.
+    devClientMods("maven.modrinth:sodium:${sodium_version}")
+    devClientMods("maven.modrinth:iris:${iris_version}")
 }
+
+// Sodium 0.8's jar is a loader library with the mod nested inside, which only loads from a mods
+// folder, not the classpath. So the dev client gets these copied into run/mods.
+var syncDevClientMods = tasks.register("syncDevClientMods", Sync) {
+    from configurations.devClientMods
+    into layout.projectDirectory.dir("run/mods")
+    // Leave anything else put there by hand.
+    preserve {
+        include "**"
+        exclude "sodium-*.jar", "iris-*.jar"
+    }
+}
+// The server and datagen share run/, but these are client mods.
+var removeDevClientMods = tasks.register("removeDevClientMods", Delete) {
+    delete fileTree(layout.projectDirectory.dir("run/mods")) { include "sodium-*.jar", "iris-*.jar" }
+}
+tasks.matching { it.name == "runClient" }.configureEach { dependsOn syncDevClientMods }
+tasks.matching { it.name in ["runServer", "runData"] }.configureEach { dependsOn removeDevClientMods }
 
 // This block expands all declared replace properties in the specified resource targets.
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

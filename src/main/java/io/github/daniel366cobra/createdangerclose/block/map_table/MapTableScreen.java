@@ -213,7 +213,7 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             // One line pixel per GUI pixel at any zoom, between maps (z ≈ 1) and markers.
             pose.pushPose();
             pose.translate(originX, originY, 0);
-            MapTablePlot.renderSafeZones(pose, graphics.bufferSource(), controller, zoomedSize, 1, 1.25f,
+            MapTablePlot.renderSafeZones(pose, graphics.bufferSource(), controller, zoomedSize, 1, 1.25f, 1.375f,
                     LightTexture.FULL_BRIGHT, drawing);
             MapTablePlot.render(pose, graphics.bufferSource(), controller, zoomedSize, 1, 1.5f,
                     LightTexture.FULL_BRIGHT);
@@ -530,4 +530,4 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         graphics.fill(x + 1, y + SLOT_SIZE - 1, x + SLOT_SIZE, y + SLOT_SIZE, PANEL_LIGHT);
         graphics.fill(x + SLOT_SIZE - 1, y + 1, x + SLOT_SIZE, y + SLOT_SIZE, PANEL_LIGHT);
     }
-}
+}
