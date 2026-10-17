@@ -1,0 +1,28 @@
+{
+  "parent": "createdangerclose:rangefinder_lock",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:rangefinders_merged"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.rangefinders_merged.description"
+    },
+    "frame": "goal",
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:correlator"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.rangefinders_merged.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

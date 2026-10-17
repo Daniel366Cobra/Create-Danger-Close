@@ -33,6 +33,7 @@ import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderB
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
 import net.minecraft.world.phys.Vec3;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -832,6 +833,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : pos.equals(directingRangefinder) ? FireControlStatus.DIRECTING
                     : merged.contains(pos) ? FireControlStatus.MERGED
                     : FireControlStatus.STANDBY);
+            if (!merged.isEmpty() && (merged.contains(pos) || pos.equals(directingRangefinder)))
+                CDCTriggers.RANGEFINDERS_MERGED.get().trigger(rangefinder.getOperator());
             rangefinder.setStabilization(gimbalCount > 0, navHeadingCount > 0);
         }
 

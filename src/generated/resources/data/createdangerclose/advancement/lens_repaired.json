@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:rangefinder_lock",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:lens_repaired"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.lens_repaired.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:glass_pane"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.lens_repaired.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

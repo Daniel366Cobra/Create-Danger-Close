@@ -10,6 +10,7 @@ import com.tterrag.registrate.providers.ProviderType;
 import com.tterrag.registrate.util.nullness.NonNullSupplier;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
+import io.github.daniel366cobra.createdangerclose.foundation.advancement.CDCAdvancements;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import io.github.daniel366cobra.createdangerclose.registries.CDCContraptionTypes;
@@ -17,6 +18,7 @@ import io.github.daniel366cobra.createdangerclose.registries.CDCCreativeTabs;
 import io.github.daniel366cobra.createdangerclose.registries.CDCFluids;
 import io.github.daniel366cobra.createdangerclose.registries.CDCMenuTypes;
 import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.createmod.catnip.lang.FontHelper;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -46,6 +48,7 @@ public class CreateDangerClose {
         CDCConfig.register(container);
         // Registrate: blocks, items, block entities, menus, and their generated data.
         getRegistrate().addDataGenerator(ProviderType.LANG, CDCLang::registrateLang);
+        getRegistrate().addDataGenerator(ProviderType.ADVANCEMENT, CDCAdvancements::generate);
         getRegistrate().registerEventListeners(eventBus);
         // Loading these classes registers their entries with Registrate.
         CDCBlocks.register();
@@ -62,6 +65,7 @@ public class CreateDangerClose {
         // Things Registrate does not handle.
         CDCCreativeTabs.register(eventBus);
         CDCStats.register(eventBus);
+        CDCTriggers.register(eventBus);
         // Stats only show once looked up after registration; load-complete runs in parallel, so on the main thread.
         eventBus.addListener(FMLLoadCompleteEvent.class, event -> event.enqueueWork(CDCStats::bootstrap));
     }

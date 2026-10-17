@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:rangefinder_assembled"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.rangefinder_assembled.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:rangefinder_eyepiece"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.rangefinder_assembled.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:rangefinder_lock",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:lens_cleaned"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.lens_cleaned.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:water_bucket"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.lens_cleaned.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

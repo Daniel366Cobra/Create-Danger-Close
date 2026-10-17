@@ -51,7 +51,7 @@ public class RangefinderBearingBlock extends BearingBlock implements IBE<Rangefi
         if (level.isClientSide)
             return ItemInteractionResult.SUCCESS;
 
-        withBlockEntityDo(level, pos, RangefinderBearingBlockEntity::toggleAssembly);
+        withBlockEntityDo(level, pos, bearing -> bearing.toggleAssembly(player));
         return ItemInteractionResult.SUCCESS;
     }
 

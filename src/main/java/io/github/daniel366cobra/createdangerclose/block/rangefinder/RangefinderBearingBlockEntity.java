@@ -19,6 +19,7 @@ import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import io.github.daniel366cobra.createdangerclose.foundation.damage.BattleDamageable;
 import io.github.daniel366cobra.createdangerclose.foundation.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.createmod.catnip.math.AngleHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -90,6 +91,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     private final RangefinderSteadiness steadiness = new RangefinderSteadiness();
     private final RangeTracker tracker = new RangeTracker();
+    // To credit the lens advancements on entering (server).
+    @Nullable private Player lastOperator;
     private boolean rangingActive;
     private boolean pendingSample;
     private int ticksToNextSample;
@@ -101,6 +104,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private float bearingRate;    // degrees per second, positive = clockwise
     // The solution (server only) outlives the operator: fire control keeps shooting on it, extrapolated, until stale.
     public static final long SOLUTION_LIFETIME_TICKS = 200;
+    // A lock this far off earns an advancement, blocks.
+    private static final double FARSIGHTED_RANGE = 300;
     @Nullable private Vec3 targetPosition;
     @Nullable private Vec3 targetVelocity;
     @Nullable private Vec3 solutionOrigin;
@@ -132,15 +137,15 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     // --- Assembly ---
 
-    public void toggleAssembly() {
+    public void toggleAssembly(@Nullable Player player) {
         if (running) {
             disassemble();
         } else {
-            assemble();
+            assemble(player);
         }
     }
 
-    public void assemble() {
+    public void assemble(@Nullable Player player) {
         if (level == null || !(getBlockState().getBlock() instanceof RangefinderBearingBlock))
             return;
 
@@ -177,6 +182,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         angle = prevAngle = 0;
         angularVelocity = 0;
         sendData();
+        CDCTriggers.RANGEFINDER_ASSEMBLED.get().trigger(player);
     }
 
     public void disassemble() {
@@ -268,6 +274,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         Player operator = getOperator();
         if (operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc)
             operatorTarget = angleForOperator(rc, operator);
+        if (!level.isClientSide && operator != lastOperator) {
+            lastOperator = operator;
+            creditCondition(operator);
+        }
 
         if (movedContraption == null || !movedContraption.isStalled()) {
             stepTraining();
@@ -314,6 +324,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
             // Sent on in whole percent: the drift between is too slow to matter.
             changed |= (int) (before * 100) != (int) (lensDust[i] * 100);
         }
+        // Covers dust settling while someone is at the eyepiece.
+        creditCondition(getOperator());
         if (changed) {
             setChanged();
             sendData();
@@ -337,6 +349,20 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     public float getLensDust(int index) {
         return index >= 0 && index < lensDust.length ? lensDust[index] : 0;
+    }
+
+    /** Lens advancements for the operator: cracked, dusty, caked. */
+    private void creditCondition(@Nullable Player operator) {
+        if (operator == null || movedContraption == null
+                || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
+            return;
+        if (tube.getCrackedLensCount() > 0)
+            CDCTriggers.LENS_CRACKED.get().trigger(operator);
+        float dustiest = Math.max(lensDust[0], lensDust[1]);
+        if (dustiest >= LensDust.DUSTY)
+            CDCTriggers.LENS_DUSTY.get().trigger(operator);
+        if (dustiest >= 1)
+            CDCTriggers.LENS_CAKED.get().trigger(operator);
     }
 
     /** Local position to lens list index, or -1. */
@@ -410,6 +436,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 info.state().setValue(RangefinderLensBlock.CRACKED, true), info.nbt()));
         level.playSound(null, BlockPos.containing(movedContraption.toGlobalVector(lens.getCenter(), 1f)),
                 SoundEvents.GLASS_BREAK, SoundSource.BLOCKS, 1f, 0.8f);
+        creditCondition(getOperator());
     }
 
     public boolean isOnTarget() {
@@ -453,7 +480,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         if (pendingSample || (rangingActive && --ticksToNextSample <= 0)) {
             pendingSample = false;
             ticksToNextSample = sampleInterval();
-            takeSample(sight);
+            takeSample(operator, sight);
         }
     }
 
@@ -463,7 +490,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return rpm < 1 ? Integer.MAX_VALUE : Math.max(1, Math.round(640f / rpm));
     }
 
-    private void takeSample(RangefinderOptics.Sight sight) {
+    private void takeSample(Player operator, RangefinderOptics.Sight sight) {
         if (!steadiness.canRange()
                 || movedContraption == null
                 || !(movedContraption.getContraption() instanceof RangefinderContraption tube)
@@ -493,10 +520,16 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         solutionOrigin = sight.origin();
         solutionTick = level.getGameTime();
         solutionSigma = sigma;
-        solutionOnShip = Sable.HELPER.getContaining(level, hit.getLocation()) != null;
+        SubLevel targetShip = Sable.HELPER.getContaining(level, hit.getLocation());
+        solutionOnShip = targetShip != null;
         Vec3 toTarget = targetPosition.subtract(sight.origin());
         hasRange = true;
         range = (float) toTarget.length();
+        CDCTriggers.RANGEFINDER_LOCK.get().trigger(operator);
+        if (trueRange > FARSIGHTED_RANGE)
+            CDCTriggers.RANGEFINDER_LOCK_FAR.get().trigger(operator);
+        if (targetShip != null && targetShip != Sable.HELPER.getContaining(level, worldPosition))
+            CDCTriggers.RANGEFINDER_LOCK_SHIP.get().trigger(operator);
 
         // A new track has no velocity yet: don't lead with the previous target's.
         if (tracker.getSamples() < MIN_VELOCITY_SAMPLES)

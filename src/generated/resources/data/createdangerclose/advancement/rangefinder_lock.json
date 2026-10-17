@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:rangefinder_assembled",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:rangefinder_lock"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.rangefinder_lock.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:rangefinder_lens"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.rangefinder_lock.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

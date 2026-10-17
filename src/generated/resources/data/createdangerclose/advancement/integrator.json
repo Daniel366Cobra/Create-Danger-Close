@@ -1,0 +1,33 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "conditions": {
+        "items": [
+          {
+            "items": "createdangerclose:integrator"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.integrator.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:integrator"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.integrator.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

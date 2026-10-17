@@ -1,0 +1,28 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:full_bank"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.full_bank.description"
+    },
+    "frame": "goal",
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:ballistic_computer"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.full_bank.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

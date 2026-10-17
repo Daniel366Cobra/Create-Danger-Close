@@ -1,0 +1,35 @@
+{
+  "criteria": {
+    "has_item": {
+      "conditions": {
+        "items": [
+          {
+            "items": "createdangerclose:ballistic_computer"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "background": "createdangerclose:textures/block/computer/computer.png",
+    "description": {
+      "translate": "advancement.createdangerclose.root.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:ballistic_computer"
+    },
+    "show_toast": false,
+    "title": {
+      "translate": "advancement.createdangerclose.root.title"
+    }
+  },
+  "requirements": [
+    [
+      "has_item"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

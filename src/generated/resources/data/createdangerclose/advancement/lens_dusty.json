@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:rangefinder_lock",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:lens_dusty"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.lens_dusty.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:sand"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.lens_dusty.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

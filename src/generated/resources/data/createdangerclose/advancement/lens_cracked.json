@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:rangefinder_lock",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:lens_cracked"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.lens_cracked.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:tnt"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.lens_cracked.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

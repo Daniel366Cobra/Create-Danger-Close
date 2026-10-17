@@ -3,6 +3,7 @@ package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 import com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -30,6 +31,7 @@ public class RangefinderLensInteraction extends MovingInteractionBehaviour {
                 player.level().playSound(null, BlockPos.containing(contraptionEntity.toGlobalVector(localPos.getCenter(), 1f)),
                         SoundEvents.GENERIC_SPLASH, SoundSource.BLOCKS, 0.4f, 1.3f);
                 CDCStats.LENSES_CLEANED.awardTo(player);
+                CDCTriggers.LENS_CLEANED.get().trigger(player);
             }
             return true;
         }

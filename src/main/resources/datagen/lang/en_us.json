@@ -383,5 +383,72 @@
       "lenses_cleaned": "Lenses Cleaned",
       "equipment_realigned": "Equipment Realigned",
       "equipment_repaired": "Equipment Repaired"
+    },
+
+    "advancement.createdangerclose": {
+      "root": {
+        "title": "Create: Danger Close",
+        "description": "A tale of cannons and cogwheels"
+      },
+      "differentiator": {
+        "title": "Keep Up!",
+        "description": "Obtain a Differentiator to lead moving targets"
+      },
+      "integrator": {
+        "title": "Mechanical Memory",
+        "description": "Obtain an Integrator for easier rangekeeping"
+      },
+      "fuze_computer": {
+        "title": "Final Countdown",
+        "description": "Obtain a Fuze Computer to precisely detonate shells"
+      },
+      "correlator": {
+        "title": "Calculated Consensus",
+        "description": "Obtain a Correlator to sync several Rangefinders"
+      },
+      "full_bank": {
+        "title": "Fire Control Full-house",
+        "description": "Complete a bank of fire control machinery"
+      },
+      "rangefinder_assembled": {
+        "title": "Spyglass 2.0",
+        "description": "Assemble a valid Rangefinder"
+      },
+      "rangefinder_lock": {
+        "title": "Enjoy the Scenery",
+        "description": "Obtain a lock with a Rangefinder"
+      },
+      "rangefinder_lock_far": {
+        "title": "Farsighted",
+        "description": "Range something over 300 blocks away"
+      },
+      "rangefinder_lock_ship": {
+        "title": "Ship Ahoy",
+        "description": "Lock onto a Simulated Ship with a Rangefinder"
+      },
+      "rangefinders_merged": {
+        "title": "Center of Attention",
+        "description": "Range one target with two or more Rangefinders"
+      },
+      "lens_cracked": {
+        "title": "Dioptric Distress",
+        "description": "Get a Rangefinder damaged in battle"
+      },
+      "lens_repaired": {
+        "title": "Refractive Repairman",
+        "description": "Fix a broken lens in a Rangefinder"
+      },
+      "lens_dusty": {
+        "title": "Mote in the Eye",
+        "description": "Get a Rangefinder lens dusty"
+      },
+      "lens_caked": {
+        "title": "Dusty Disappointment",
+        "description": "Get a Rangefinder lens fully caked in dust"
+      },
+      "lens_cleaned": {
+        "title": "Spotless 20/20",
+        "description": "Clean a Rangefinder lens with a Water bucket"
+      }
     }
   }

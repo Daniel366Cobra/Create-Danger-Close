@@ -1,0 +1,28 @@
+{
+  "parent": "createdangerclose:rangefinder_lock",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:rangefinder_lock_far"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.rangefinder_lock_far.description"
+    },
+    "frame": "challenge",
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "minecraft:ender_eye"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.rangefinder_lock_far.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

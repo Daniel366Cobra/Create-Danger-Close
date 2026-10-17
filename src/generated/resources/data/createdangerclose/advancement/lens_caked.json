@@ -1,0 +1,28 @@
+{
+  "parent": "createdangerclose:rangefinder_lock",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:lens_caked"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.lens_caked.description"
+    },
+    "frame": "goal",
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "minecraft:suspicious_sand"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.lens_caked.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

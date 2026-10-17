@@ -1,0 +1,33 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "conditions": {
+        "items": [
+          {
+            "items": "createdangerclose:differentiator"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.differentiator.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:differentiator"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.differentiator.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

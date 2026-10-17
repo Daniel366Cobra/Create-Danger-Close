@@ -2,6 +2,7 @@ package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 
 import com.mojang.serialization.MapCodec;
 import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -51,6 +52,7 @@ public class RangefinderLensBlock extends RangefinderOpticBlock {
             held.shrink(1);
         player.level().playSound(null, soundPos, SoundEvents.AMETHYST_BLOCK_PLACE, SoundSource.BLOCKS, 1f, 1.2f);
         CDCStats.EQUIPMENT_REPAIRED.awardTo(player);
+        CDCTriggers.LENS_REPAIRED.get().trigger(player);
     }
 
     /** Not part of an assembled tube. */

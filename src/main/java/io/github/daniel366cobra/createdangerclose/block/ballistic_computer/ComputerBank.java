@@ -67,6 +67,16 @@ public final class ComputerBank {
         return new Scan(modules, cores, members);
     }
 
+    /** Whether the block just placed at {@code pos} belongs to a bank with every kind of module working. */
+    public static boolean completedBy(Level level, BlockPos pos) {
+        for (BlockPos core : scan(level, pos).cores()) {
+            Scan bank = scan(level, core);
+            if (bank.cores().size() == 1 && bank.modules().size() == ComputerModule.values().length)
+                return true;
+        }
+        return false;
+    }
+
     /** Every cabinet, and the interface driving the computer. */
     public static List<BlockPos> lubricationGroup(Level level, BlockPos pos) {
         Scan scan = scan(level, pos);
