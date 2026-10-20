@@ -62,8 +62,11 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
     private EquipmentHealth health;
     private SensorReading reading = new SensorReading.None();
-    // Whoever stands this close as it starts passing something on is credited with the link.
+    // Whoever stands this close once it has passed something on for a second is credited with the link;
+    // the wait skips the speed blip a block can show as it is placed on a ship.
     private static final double LINK_WITNESS_RANGE = 8;
+    private static final int LINK_CREDIT_TICKS = 20;
+    private int linkedTicks = 0;
     private boolean isPowered = false;
 
     public NetworkInterfaceBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
@@ -114,6 +117,13 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         if ((level.getGameTime() % pollInterval == 0)) {
             pollSensor();
         }
+
+        if (reading.kind() != SensorReading.Kind.NONE && linkedTicks < LINK_CREDIT_TICKS
+                && ++linkedTicks == LINK_CREDIT_TICKS)
+            for (Player player : level.players())
+                if (player.distanceToSqr(Sable.HELPER.projectOutOfSubLevel(level, Vec3.atCenterOf(worldPosition)))
+                        <= LINK_WITNESS_RANGE * LINK_WITNESS_RANGE)
+                    CDCTriggers.INTERFACE_LINKED.get().trigger(player);
     }
 
     void pollSensor() {
@@ -335,11 +345,8 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     private void setSensorReading(SensorReading newReading) {
         if (newReading.equals(reading))
             return;
-        if (reading.kind() == SensorReading.Kind.NONE && newReading.kind() != SensorReading.Kind.NONE)
-            for (Player player : level.players())
-                if (player.distanceToSqr(Sable.HELPER.projectOutOfSubLevel(level, Vec3.atCenterOf(worldPosition)))
-                        <= LINK_WITNESS_RANGE * LINK_WITNESS_RANGE)
-                    CDCTriggers.INTERFACE_LINKED.get().trigger(player);
+        if (newReading.kind() == SensorReading.Kind.NONE)
+            linkedTicks = 0;
         reading = newReading;
         notifyUpdate();
     }
@@ -355,6 +362,9 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         isPowered = compound.getBoolean("IsPowered");
         if (compound.contains("Reading")) {
             reading = SensorReading.read(compound.getCompound("Reading"), registries);
+            // Already linked when saved: no fresh credit on load.
+            if (!clientPacket && reading.kind() != SensorReading.Kind.NONE)
+                linkedTicks = LINK_CREDIT_TICKS;
         } else {
             reading = new SensorReading.None();
         }

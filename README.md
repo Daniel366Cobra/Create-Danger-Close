@@ -3,8 +3,6 @@
 
 **Create Danger Close** is an addon for Create, Create Simulated (Aeronautics) and Create Big Cannons, centered around pre-radar era gunnery.
 
-<img src="./images/rangefinder_ship.png" width="512" height="256" alt="Rangefinder on a Ship">
-
 ## Contents
 
 Create Danger Close (CDC) implements the following gameplay mechanics:
@@ -20,6 +18,20 @@ Create Danger Close (CDC) implements the following gameplay mechanics:
 * Kinetic Network Coupler: runs a separate kinetic network off another one's rotation, so a factory or a second battle network can share one engine. It gears down when power is short, then overstresses its own side only.
 * Damage and maintenance: explosions and shell hits jostle components out of alignment (realign with a wrench) or break them (repair with cogwheels, precision mechanisms or glass panes). Lenses gather dust over time, washed off by rain or a water bucket. Mechanisms use up their lubrication as they run and may seize; top them up with honeycomb, or pipe in spindle oil.
 * Ponder scenes explain every block in game.
+
+## Screenshots
+
+<img src="./images/tenax_turret_rangefinder.png" width="800" alt="The Tenax, a corvette equipped with a servo-laid turret and a rangefinder">
+
+*The corvette Tenax laying her gun to the rangefinder on the flying bridge.*
+
+<img src="./images/tenax_rangefinder_gui.png" width="600" alt="The rangefinder sight, reading bearing, range and rates">
+
+*Through the rangefinder: bearing, range, range rate and bearing rate.*
+
+<img src="./images/tenax_gunnery_station.png" width="600" alt="The gunnery station below deck, with a Fire Mission Console and a Ballistic Computer bank">
+
+*The gunnery station below deck: a Fire Mission Console beside a Ballistic Computer and its modules.*
 
 ## Usage
 
