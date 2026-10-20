@@ -212,6 +212,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new HashMap<>();
     // Each console lists only its own guns.
     private final Set<BlockPos> autocannonReports = new HashSet<>();
+    // Report (servo) to the mount it lays, for guns only.
+    private final Map<BlockPos, BlockPos> mountOfReport = new HashMap<>();
     // The name each report's gun shows (set on a servo laying it); synced for the console tooltips.
     private final Map<BlockPos, String> reportNames = new HashMap<>();
     // The same by mount, for the salvo message (server).
@@ -1027,6 +1029,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         lastPitchResults.clear();
         autocannonReports.clear();
+        mountOfReport.clear();
         reportNames.clear();
         mountNames.clear();
         aimCache.clear();
@@ -1076,6 +1079,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             List<Joint> chain = chainOf(gun.mount());
             if (gun.mount().autocannon())
                 autocannonReports.add(gun.reportPos());
+            mountOfReport.put(gun.reportPos(), gun.pos());
             chains.put(gun.pos(), chain);
             if (onShip(gun.mount()))
                 directsShipGuns = true;
@@ -1943,6 +1947,45 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public boolean hasTarget() { return hasTarget; }
 
     public boolean isPowered() { return isPowered; }
+
+    public boolean hasBankConflict() { return bankConflict; }
+
+    /** World position; null without a target, unpowered or in conflict. */
+    @Nullable
+    public Vec3 getTargetPos() {
+        return isPowered && !bankConflict && hasTarget ? new Vec3(targetX, targetY, targetZ) : null;
+    }
+
+    public TargetSource getTargetSource() {
+        return getTargetPos() != null ? targetSource : TargetSource.NONE;
+    }
+
+    /** Blocks per tick, world space; null unless tracking. */
+    @Nullable
+    public Vec3 getTargetVelocity() {
+        return isTrackingTarget() ? new Vec3(targetVelX, targetVelY, targetVelZ) : null;
+    }
+
+    /**
+     * One reporting servo as the last poll left it (server).
+     *
+     * @param mount  null for a yaw servo whose mount has no pitch servo
+     * @param danger why a shot would need confirming, if it would
+     */
+    public record GunReport(BlockPos servo, @Nullable BlockPos mount, @Nullable String name, boolean autocannon,
+                            BallisticSolver.Result solution, boolean onTarget, @Nullable Danger danger) {}
+
+    public List<GunReport> getGunReports() {
+        List<GunReport> reports = new ArrayList<>();
+        for (Map.Entry<BlockPos, BallisticSolver.Result> entry : lastPitchResults.entrySet()) {
+            BlockPos mount = mountOfReport.get(entry.getKey());
+            reports.add(new GunReport(entry.getKey(), mount, reportNames.get(entry.getKey()),
+                    autocannonReports.contains(entry.getKey()), entry.getValue(),
+                    mount != null && isPowered && !bankConflict && isOnTarget(mount),
+                    mount != null ? dangerCloseGuns.get(mount) : null));
+        }
+        return reports;
+    }
 
     /** The network interface driving this computer, if one is (server). */
     @Nullable

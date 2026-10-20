@@ -1,5 +1,7 @@
 package io.github.daniel366cobra.createdangerclose;
 
+import io.github.daniel366cobra.createdangerclose.compat.computercraft.ComputerCraftCompat;
+import net.neoforged.fml.ModList;
 import com.mojang.logging.LogUtils;
 import com.simibubi.create.api.registry.CreateRegistries;
 import com.simibubi.create.foundation.data.CreateRegistrate;
@@ -66,6 +68,8 @@ public class CreateDangerClose {
         CDCCreativeTabs.register(eventBus);
         CDCStats.register(eventBus);
         CDCTriggers.register(eventBus);
+        if (ModList.get().isLoaded("computercraft"))
+            ComputerCraftCompat.init(eventBus);
         // Stats only show once looked up after registration; load-complete runs in parallel, so on the main thread.
         eventBus.addListener(FMLLoadCompleteEvent.class, event -> event.enqueueWork(CDCStats::bootstrap));
     }

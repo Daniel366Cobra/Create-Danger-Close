@@ -1,0 +1,39 @@
+name: Wiki
+
+# The wiki is its own repository: this copies wiki/ into it, so the pages are edited here.
+on:
+  push:
+    branches: [master]
+    paths: ['wiki/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Push wiki/ to the GitHub wiki
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The wiki repository exists once the wiki is enabled and has a first page.
+          if ! git clone "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki-repo; then
+            echo "::notice::No wiki yet: enable it and create any first page, then rerun."
+            exit 0
+          fi
+          rsync -a --delete --exclude .git wiki/ wiki-repo/
+          cd wiki-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date."
+          else
+            git commit -m "Sync from ${GITHUB_SHA::7}"
+            git push
+          fi

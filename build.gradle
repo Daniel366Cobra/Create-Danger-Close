@@ -34,6 +34,12 @@ repositories {
     // Transitive dependencies for Sable & Aeronautics
     maven { url = "https://maven.blamejared.com" } // JEI, Veil, Molang compiler, GLSL processor (Required by Sable/Simulated)
 
+    // CC: Tweaked (optional: the Ballistic Computer peripheral)
+    exclusiveContent {
+        forRepository { maven { name = "SquidDev"; url = "https://maven.squiddev.cc" } }
+        filter { includeGroup "cc.tweaked" }
+    }
+
     // Create Big Cannons and Ritchie's Projectile Library
     exclusiveContent {
         forRepository { maven { name = "Modrinth"; url = "https://api.modrinth.com/maven" } }
@@ -154,6 +160,11 @@ dependencies {
         exclude(group: "cc.tweaked", module: "cc-tweaked-1.21.1-forge")
     }
 
+    // CC: Tweaked, optional: built against its API; the dev runs carry the mod to test the peripheral.
+    compileOnly("cc.tweaked:cc-tweaked-${minecraft_version}-common-api:${cc_tweaked_version}")
+    compileOnly("cc.tweaked:cc-tweaked-${minecraft_version}-forge-api:${cc_tweaked_version}")
+    localRuntime("cc.tweaked:cc-tweaked-${minecraft_version}-forge:${cc_tweaked_version}")
+
     // CBC
     implementation ("maven.modrinth:create-big-cannons:${create_big_cannons_min_version}") { transitive = false }
     implementation ("maven.modrinth:rpl:${ritchies_projectile_library_version}") { transitive = false }
@@ -196,6 +207,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             create_big_cannons_min_version: create_big_cannons_min_version,
             simulated_min_version  : simulated_min_version,
             sable_min_version      : sable_min_version,
+            cc_tweaked_version     : cc_tweaked_version,
     ]
     inputs.properties replaceProperties
     expand replaceProperties

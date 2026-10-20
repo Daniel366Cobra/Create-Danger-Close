@@ -57,6 +57,14 @@ side="BOTH"
 reason="Part of Create Aeronautics: install Create Aeronautics."
 referralUrl="https://www.curseforge.com/minecraft/mc-mods/create-aeronautics"
 
+# Optional: the Ballistic Computer is a read-only peripheral.
+[[dependencies."${mod_id}"]]
+modId="computercraft"
+type="optional"
+versionRange="[${cc_tweaked_version},)"
+ordering="NONE"
+side="BOTH"
+
 # The ship (sub-level) engine under Create Aeronautics.
 [[dependencies."${mod_id}"]]
 modId="sable"
