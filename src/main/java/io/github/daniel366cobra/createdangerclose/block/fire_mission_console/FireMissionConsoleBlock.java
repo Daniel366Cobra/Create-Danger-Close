@@ -99,7 +99,7 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
     protected void pressFireButton(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
                                    BallisticComputerBlockEntity computer) {
         level.blockEvent(pos, this, FireMissionConsoleBlockEntity.BUTTON_PRESS_EVENT, 0);
-        BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo();
+        BallisticComputerBlockEntity.SalvoResult salvo = computer.fireSalvo(player);
         level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
         if (salvo.awaitingConfirmation()) {
             level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);

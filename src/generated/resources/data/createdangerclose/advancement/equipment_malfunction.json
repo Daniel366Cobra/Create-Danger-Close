@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:equipment_malfunction"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.equipment_malfunction.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "create:goggles"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.equipment_malfunction.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

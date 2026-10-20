@@ -27,4 +27,9 @@ public interface BattleDamageable {
 
     /** A shell or a burst's ball passed through. */
     void onHit(DamagePart part);
+
+    /** Parts out of order or out of true, for players to notice up close. */
+    default List<DamagePart> faultyParts() {
+        return List.of();
+    }
 }

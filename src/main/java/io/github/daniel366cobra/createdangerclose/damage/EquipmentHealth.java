@@ -13,7 +13,9 @@ import io.github.daniel366cobra.createdangerclose.foundation.damage.BattleDamage
 import io.github.daniel366cobra.createdangerclose.foundation.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.foundation.damage.Fault;
 import io.github.daniel366cobra.createdangerclose.registries.CDCFluids;
+import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -81,6 +83,8 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     };
     // Synced with the next maintenance tick rather than every drop.
     private boolean reservoirChanged;
+    // Freed by oil piped in: whoever stands this close sees it.
+    private static final double UNSEIZE_WITNESS_RANGE = 2.5;
     // Degrees, while jostled.
     private float biasYaw, biasPitch;
 
@@ -300,7 +304,8 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
             if (drawn <= 0)
                 return;
             member.lubrication = Math.min(1, member.lubrication + (float) drawn / perBlock);
-            member.faults.remove(Fault.SEIZED);
+            if (member.faults.remove(Fault.SEIZED) && member.isServo())
+                member.creditUnseizedNearby();
             member.changed();
             if (reservoir.isEmpty())
                 return;
@@ -355,10 +360,11 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
             return false;
         List<EquipmentHealth> group = lubricationGroup();
         float total = 0;
-        boolean seized = false;
+        boolean seized = false, seizedServo = false;
         for (EquipmentHealth member : group) {
             total += member.lubrication;
             seized |= member.faults.contains(Fault.SEIZED);
+            seizedServo |= member.faults.contains(Fault.SEIZED) && member.isServo();
         }
         float deficit = group.size() - total;
         int wanted = Math.max(Mth.ceil(deficit - 0.01f), seized ? 1 : 0);
@@ -376,7 +382,24 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         // Freeing a seized mechanism puts it back in order: a repair. Topping up is upkeep.
         if (seized)
             CDCStats.EQUIPMENT_REPAIRED.awardTo(player);
+        if (seizedServo) {
+            CDCTriggers.EQUIPMENT_MALFUNCTION.get().trigger(player);
+            CDCTriggers.SERVO_UNSEIZED.get().trigger(player);
+        }
         return true;
+    }
+
+    private boolean isServo() {
+        return blockEntity instanceof CannonServoOutputBlockEntity;
+    }
+
+    private void creditUnseizedNearby() {
+        Vec3 center = Sable.HELPER.projectOutOfSubLevel(getWorld(), Vec3.atCenterOf(getPos()));
+        for (Player player : getWorld().players())
+            if (player.position().distanceTo(center) <= UNSEIZE_WITNESS_RANGE) {
+                CDCTriggers.EQUIPMENT_MALFUNCTION.get().trigger(player);
+                CDCTriggers.SERVO_UNSEIZED.get().trigger(player);
+            }
     }
 
     private static void emit(Level level, AABB part, ParticleOptions particle, double speed) {
@@ -422,6 +445,12 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
         Vec3 center = ship != null ? ship.logicalPose().transformPosition(part.getCenter()) : part.getCenter();
         return List.of(new DamagePart(getPos(), DamagePart.PartKind.MECHANISM, part, center,
                 world -> ship != null ? ship.logicalPose().transformPositionInverse(world) : world));
+    }
+
+    /** Its one part, while anything is wrong (seized included). */
+    @Override
+    public List<DamagePart> faultyParts() {
+        return faults.isEmpty() ? List.of() : damageParts();
     }
 
     @Override

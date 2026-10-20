@@ -1,5 +1,5 @@
 {
-  "parent": "createdangerclose:rangefinder_lock",
+  "parent": "createdangerclose:lens_dusty",
   "criteria": {
     "trigger": {
       "trigger": "createdangerclose:lens_caked"

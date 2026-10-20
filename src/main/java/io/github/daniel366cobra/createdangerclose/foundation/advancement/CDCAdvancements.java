@@ -1,14 +1,18 @@
 package io.github.daniel366cobra.createdangerclose.foundation.advancement;
 
+import com.simibubi.create.AllBlocks;
+import com.simibubi.create.AllItems;
 import com.tterrag.registrate.providers.RegistrateAdvancementProvider;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
+import io.github.daniel366cobra.createdangerclose.registries.CDCFluids;
 import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.advancements.Advancement;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementType;
 import net.minecraft.advancements.Criterion;
 import net.minecraft.advancements.critereon.InventoryChangeTrigger;
+import net.minecraft.advancements.critereon.PlayerTrigger;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Items;
@@ -23,15 +27,20 @@ public class CDCAdvancements {
         AdvancementHolder root = Advancement.Builder.advancement()
                 .display(CDCBlocks.BALLISTIC_COMPUTER, title("root"), description("root"), BACKGROUND,
                         AdvancementType.TASK, false, false, false)
-                .addCriterion("has_item", InventoryChangeTrigger.TriggerInstance.hasItems(CDCBlocks.BALLISTIC_COMPUTER))
+                // Granted at once, so the tab shows where to go.
+                .addCriterion("tick", PlayerTrigger.TriggerInstance.tick())
                 .save(provider, id("root"));
 
-        // Computer modules
-        obtain(provider, root, "differentiator", CDCBlocks.DIFFERENTIATOR);
-        obtain(provider, root, "integrator", CDCBlocks.INTEGRATOR);
-        obtain(provider, root, "fuze_computer", CDCBlocks.FUZE_COMPUTER);
-        obtain(provider, root, "correlator", CDCBlocks.CORRELATOR);
-        add(provider, root, "full_bank", CDCBlocks.BALLISTIC_COMPUTER, AdvancementType.GOAL, true,
+        AdvancementHolder computer = obtain(provider, root, "ballistic_computer", CDCBlocks.BALLISTIC_COMPUTER);
+        add(provider, computer, "interface_linked", CDCBlocks.NETWORK_INTERFACE, AdvancementType.TASK, false,
+                CDCTriggers.INTERFACE_LINKED.get().criterion());
+
+        // Computer modules: a chain only to keep them in one row; each is earned on its own.
+        AdvancementHolder differentiator = obtain(provider, computer, "differentiator", CDCBlocks.DIFFERENTIATOR);
+        AdvancementHolder integrator = obtain(provider, differentiator, "integrator", CDCBlocks.INTEGRATOR);
+        AdvancementHolder fuzeComputer = obtain(provider, integrator, "fuze_computer", CDCBlocks.FUZE_COMPUTER);
+        AdvancementHolder correlator = obtain(provider, fuzeComputer, "correlator", CDCBlocks.CORRELATOR);
+        add(provider, correlator, "full_bank", CDCBlocks.BALLISTIC_COMPUTER, AdvancementType.GOAL, true,
                 CDCTriggers.FULL_BANK.get().criterion());
 
         // Rangefinders
@@ -45,20 +54,63 @@ public class CDCAdvancements {
                 CDCTriggers.RANGEFINDER_LOCK_SHIP.get().criterion());
         add(provider, lock, "rangefinders_merged", CDCBlocks.CORRELATOR, AdvancementType.GOAL, true,
                 CDCTriggers.RANGEFINDERS_MERGED.get().criterion());
-        add(provider, lock, "lens_cracked", Items.TNT, AdvancementType.TASK, false,
-                CDCTriggers.LENS_CRACKED.get().criterion());
-        add(provider, lock, "lens_repaired", Items.GLASS_PANE, AdvancementType.TASK, false,
-                CDCTriggers.LENS_REPAIRED.get().criterion());
-        add(provider, lock, "lens_dusty", Items.SAND, AdvancementType.TASK, false,
+
+        // Lens dust
+        AdvancementHolder dusty = add(provider, lock, "lens_dusty", Items.SAND, AdvancementType.TASK, false,
                 CDCTriggers.LENS_DUSTY.get().criterion());
-        add(provider, lock, "lens_caked", Items.SUSPICIOUS_SAND, AdvancementType.GOAL, true,
+        add(provider, dusty, "lens_caked", Items.SUSPICIOUS_SAND, AdvancementType.GOAL, true,
                 CDCTriggers.LENS_CAKED.get().criterion());
-        add(provider, lock, "lens_cleaned", Items.WATER_BUCKET, AdvancementType.TASK, false,
+        add(provider, dusty, "lens_cleaned", Items.WATER_BUCKET, AdvancementType.TASK, false,
                 CDCTriggers.LENS_CLEANED.get().criterion());
+
+        // Malfunctions and repairs
+        AdvancementHolder malfunction = add(provider, root, "equipment_malfunction", AllItems.GOGGLES,
+                AdvancementType.TASK, false, CDCTriggers.EQUIPMENT_MALFUNCTION.get().criterion());
+        AdvancementHolder cracked = add(provider, malfunction, "lens_cracked", Items.TNT, AdvancementType.TASK, false,
+                CDCTriggers.LENS_CRACKED.get().criterion());
+        add(provider, cracked, "lens_repaired", Items.GLASS_PANE, AdvancementType.TASK, false,
+                CDCTriggers.LENS_REPAIRED.get().criterion());
+        add(provider, malfunction, "module_realigned", AllItems.WRENCH, AdvancementType.TASK, false,
+                CDCTriggers.MODULE_REALIGNED.get().criterion());
+        add(provider, malfunction, "cog_replaced", AllBlocks.COGWHEEL, AdvancementType.TASK, false,
+                CDCTriggers.COG_REPLACED.get().criterion());
+        add(provider, malfunction, "mechanism_replaced", AllItems.PRECISION_MECHANISM, AdvancementType.TASK, false,
+                CDCTriggers.MECHANISM_REPLACED.get().criterion());
+        add(provider, malfunction, "servo_unseized", CDCFluids.SPINDLE_OIL.getBucket().orElseThrow(),
+                AdvancementType.TASK, false, CDCTriggers.SERVO_UNSEIZED.get().criterion());
+
+        // Map table
+        AdvancementHolder mapTable = add(provider, root, "map_table", CDCBlocks.MAP_TABLE, AdvancementType.TASK, false,
+                InventoryChangeTrigger.TriggerInstance.hasItems(CDCBlocks.MAP_TABLE));
+        AdvancementHolder full = add(provider, mapTable, "map_table_full", Items.FILLED_MAP, AdvancementType.TASK, false,
+                CDCTriggers.MAP_TABLE_FULL.get().criterion());
+        add(provider, full, "map_table_full_zoomed", Items.CARTOGRAPHY_TABLE, AdvancementType.CHALLENGE, true,
+                CDCTriggers.MAP_TABLE_FULL_ZOOMED.get().criterion());
+        add(provider, mapTable, "safe_zone_drawn", Items.LIME_BANNER, AdvancementType.TASK, false,
+                CDCTriggers.SAFE_ZONE_DRAWN.get().criterion());
+        add(provider, mapTable, "fix_charted", Items.SPYGLASS, AdvancementType.TASK, false,
+                CDCTriggers.FIX_CHARTED.get().criterion());
+        add(provider, mapTable, "spotter_charted", Items.LEATHER_BOOTS, AdvancementType.TASK, false,
+                CDCTriggers.SPOTTER_CHARTED.get().criterion());
+
+        // Firing
+        AdvancementHolder salvo = add(provider, root, "salvo_fired", CDCBlocks.FIRE_MISSION_CONSOLE,
+                AdvancementType.TASK, false, CDCTriggers.SALVO_FIRED.get().criterion());
+        add(provider, salvo, "danger_close", Items.FIRE_CHARGE, AdvancementType.GOAL, true,
+                CDCTriggers.DANGER_CLOSE.get().criterion());
+        add(provider, salvo, "own_side_shelled", Items.TNT, AdvancementType.TASK, true,
+                CDCTriggers.OWN_SIDE_SHELLED.get().criterion());
+        add(provider, salvo, "safe_zone_shelled", Items.WHITE_BANNER, AdvancementType.TASK, true,
+                CDCTriggers.SAFE_ZONE_SHELLED.get().criterion());
+        add(provider, salvo, "village_shelled", Items.BELL, AdvancementType.TASK, true,
+                CDCTriggers.VILLAGE_SHELLED.get().criterion());
+        add(provider, salvo, "weapons_free", CDCBlocks.AUTOCANNON_CONTROL_CONSOLE, AdvancementType.TASK, false,
+                CDCTriggers.WEAPONS_FREE.get().criterion());
     }
 
-    private static void obtain(RegistrateAdvancementProvider provider, AdvancementHolder parent, String name, ItemLike item) {
-        add(provider, parent, name, item, AdvancementType.TASK, false, InventoryChangeTrigger.TriggerInstance.hasItems(item));
+    private static AdvancementHolder obtain(RegistrateAdvancementProvider provider, AdvancementHolder parent, String name,
+                                            ItemLike item) {
+        return add(provider, parent, name, item, AdvancementType.TASK, false, InventoryChangeTrigger.TriggerInstance.hasItems(item));
     }
 
     private static AdvancementHolder add(RegistrateAdvancementProvider provider, AdvancementHolder parent,

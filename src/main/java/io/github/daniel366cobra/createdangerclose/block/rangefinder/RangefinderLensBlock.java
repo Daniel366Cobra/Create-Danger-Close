@@ -52,6 +52,7 @@ public class RangefinderLensBlock extends RangefinderOpticBlock {
             held.shrink(1);
         player.level().playSound(null, soundPos, SoundEvents.AMETHYST_BLOCK_PLACE, SoundSource.BLOCKS, 1f, 1.2f);
         CDCStats.EQUIPMENT_REPAIRED.awardTo(player);
+        CDCTriggers.EQUIPMENT_MALFUNCTION.get().trigger(player);
         CDCTriggers.LENS_REPAIRED.get().trigger(player);
     }
 

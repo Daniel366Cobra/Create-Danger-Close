@@ -34,6 +34,9 @@ import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderO
 import net.minecraft.world.phys.Vec3;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
 import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
+import io.github.daniel366cobra.createdangerclose.foundation.advancement.DelayedTriggers;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.StructureTags;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -154,7 +157,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     // Danger close: guns that would land near our own side, where our side stands, and when a warned salvo was armed.
     private final Map<BlockPos, Danger> dangerCloseGuns = new HashMap<>();
+    // Our own positions, and the players carrying a plotted map.
     private final List<Vec3> friendlies = new ArrayList<>();
+    private final List<Vec3> spotters = new ArrayList<>();
+    // Each gun's time of flight to the target (last poll), to credit what a salvo hits as it lands.
+    private final Map<BlockPos, Integer> flightTicks = new HashMap<>();
     // From map tables linked to the network.
     private final List<MapTableBlockEntity.SafeZone> safeZones = new ArrayList<>();
     private long dangerArmedTick = -1;
@@ -346,7 +353,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
      * Fires every gun with a solution whose barrel has settled on it (or, riding bearings laid for
      * another gun, within the salvo spread). The rest hold fire. Uses the last poll.
      */
-    public SalvoResult fireSalvo() {
+    public SalvoResult fireSalvo(@Nullable Player orderedBy) {
         if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
             return new SalvoResult(0, 0);
         // Danger close: the first press only warns; a second within the window fires.
@@ -361,13 +368,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return new SalvoResult(0, bigCannonCount(), true);
         }
         dangerArmedTick = -1;
-        int fired = 0, held = 0;
+        List<BlockPos> fired = new ArrayList<>();
+        int held = 0;
         Map<String, Integer> heldNames = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (BlockPos mountPos : barrels.keySet()) {
             if (isAutocannon(mountPos))
                 continue;
             if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos)) {
-                fired++;
+                fired.add(mountPos);
             } else {
                 held++;
                 String name = mountNames.get(mountPos);
@@ -375,7 +383,34 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     heldNames.merge(name, 1, Integer::sum);
             }
         }
-        return new SalvoResult(fired, held, false, listNames(heldNames));
+        creditFire(orderedBy, fired);
+        return new SalvoResult(fired.size(), held, false, listNames(heldNames));
+    }
+
+    /** Music of Battle at once; what the shells land on, one time of flight later (the longest of those fired). */
+    private void creditFire(@Nullable Player player, List<BlockPos> fired) {
+        if (!(player instanceof ServerPlayer serverPlayer) || fired.isEmpty() || !(level instanceof ServerLevel serverLevel))
+            return;
+        CDCTriggers.SALVO_FIRED.get().trigger(serverPlayer);
+        int landing = 0;
+        Set<Danger> dangers = EnumSet.noneOf(Danger.class);
+        for (BlockPos mountPos : fired) {
+            landing = Math.max(landing, flightTicks.getOrDefault(mountPos, 0));
+            Danger danger = dangerCloseGuns.get(mountPos);
+            if (danger != null)
+                dangers.add(danger);
+        }
+        for (Danger danger : dangers)
+            DelayedTriggers.schedule(serverPlayer, switch (danger) {
+                case SAFE_ZONE -> CDCTriggers.SAFE_ZONE_SHELLED;
+                case OWN_SIDE -> CDCTriggers.OWN_SIDE_SHELLED;
+                case FRIENDLY -> CDCTriggers.DANGER_CLOSE;
+            }, landing);
+        // Loaded ground only: looking up structures would load the chunk.
+        BlockPos target = BlockPos.containing(targetX, targetY, targetZ);
+        if (hasTarget && serverLevel.isLoaded(target)
+                && serverLevel.structureManager().getStructureWithPieceAt(target, StructureTags.VILLAGE).isValid())
+            DelayedTriggers.schedule(serverPlayer, CDCTriggers.VILLAGE_SHELLED, landing);
     }
 
     // Held guns named in the salvo message before the rest are only counted.
@@ -418,13 +453,17 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new SalvoResult(ready, total - ready);
     }
 
-    /** Fires every autocannon on target, called every tick while firing. Danger-close ones only once confirmed. */
-    public int fireAutocannons(boolean dangerCloseConfirmed) {
+    /**
+     * Fires every autocannon on target, called every tick while firing. Danger-close ones only once confirmed.
+     *
+     * @param creditTo the gunner, credited with what the guns firing now hit; null to credit no one
+     */
+    public int fireAutocannons(boolean dangerCloseConfirmed, @Nullable Player creditTo) {
         if (!(level instanceof ServerLevel serverLevel))
             return 0;
         autocannonOrderTick = level.getGameTime();
         boolean checkDanger = CDCConfig.server().dangerClose.allowDangerClose.get() && !dangerCloseConfirmed;
-        int firing = 0;
+        List<BlockPos> firing = new ArrayList<>();
         for (BlockPos mountPos : barrels.keySet()) {
             if (!isAutocannon(mountPos))
                 continue;
@@ -432,9 +471,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     && !(checkDanger && dangerCloseGuns.containsKey(mountPos));
             setAutocannonFiring(serverLevel, mountPos, fire);
             if (fire)
-                firing++;
+                firing.add(mountPos);
         }
-        return firing;
+        creditFire(creditTo, firing);
+        return firing.size();
     }
 
     /** Puts an autocannon at full rate of fire, or ceases its fire (only changes are sent). */
@@ -741,8 +781,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         Map<BlockPos, SensorReading.Rangefinder> rangefinderReadings = new HashMap<>();
         List<RangefinderBearingBlockEntity> rangefinders = new ArrayList<>();
-        // Our own side, for danger close: the computer, and the spotters (the guns join later).
+        // Our own side, for danger close: the computer and crew stations (the guns join later), and the spotters.
         friendlies.clear();
+        spotters.clear();
         safeZones.clear();
         Set<MapId> plottedMaps = new HashSet<>();
         friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(worldPosition)));
@@ -753,7 +794,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 rangefinders.add(rangefinder);
                 friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(rangefinder.getBlockPos())));
             }
-            // Where interfaces are, crew stand. A map table's maps also mark friendlies carrying them.
+            // Where interfaces are, crew stand. A map table's maps also mark spotters carrying them.
             if (member instanceof NetworkInterfaceBlockEntity station) {
                 friendlies.add(RangefinderOptics.toWorld(level, Vec3.atCenterOf(station.getBlockPos())));
                 MapTableBlockEntity table = station.getFacedMapTable();
@@ -838,11 +879,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             rangefinder.setStabilization(gimbalCount > 0, navHeadingCount > 0);
         }
 
-        // Players carrying one of the plotted maps: plotted friendlies.
+        // Players carrying one of the plotted maps: plotted spotters.
         if (!plottedMaps.isEmpty())
             for (Player player : level.players())
                 if (carriesAnyOf(player, plottedMaps))
-                    friendlies.add(player.position());
+                    spotters.add(player.position());
     }
 
     private static boolean carriesAnyOf(Player player, Set<MapId> maps) {
@@ -1097,7 +1138,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             friendlies.add(new Vec3(pivot.x, pivot.y, pivot.z));
         }
         dangerCloseGuns.clear();
+        flightTicks.clear();
         for (Gun gun : guns) {
+            BallisticSolver.Result result = lastPitchResults.get(gun.reportPos());
+            if (result != null && result.valid())
+                flightTicks.put(gun.pos(), (int) Math.round(result.timeOfFlightTicks()));
             FireSolution aim = aimCache.get(gun.pos());
             Danger danger = aim != null && aim.valid() ? dangerOf(gun.mount(), hulls) : null;
             if (danger != null)
@@ -1297,12 +1342,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return new double[]{0, 360};
     }
 
-    /** Why a gun's shot needs confirming; the later kind outranks. */
-    public enum Danger { SAFE_ZONE, FRIENDLY }
+    /** Why a gun's shot needs confirming: a safe zone, our own positions or hulls, a spotter. The later kind outranks. */
+    public enum Danger { SAFE_ZONE, OWN_SIDE, FRIENDLY }
 
     /**
-     * Whether the shell would land within its burst radius of a friendly or our own hull, or else of
-     * a safe zone. Shrapnel throws its balls on in a forward cone, so for it the danger is that cone.
+     * Whether the shell would land within its burst radius of a spotter, our own positions or hulls, or
+     * else of a safe zone. Shrapnel throws its balls on in a forward cone, so for it the danger is that cone.
      */
     @Nullable
     private Danger dangerOf(ServoStatus.MountSnapshot mount, List<SubLevel> hulls) {
@@ -1335,15 +1380,18 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             endangered = point -> point.distanceTo(target) <= radius;
         }
 
+        for (Vec3 spotter : spotters)
+            if (endangered.test(spotter))
+                return Danger.FRIENDLY;
         for (Vec3 friendly : friendlies)
             if (endangered.test(friendly))
-                return Danger.FRIENDLY;
+                return Danger.OWN_SIDE;
         for (SubLevel hull : hulls) {
             var bounds = hull.boundingBox();
             Vec3 nearest = new Vec3(Mth.clamp(target.x, bounds.minX(), bounds.maxX()),
                     Mth.clamp(target.y, bounds.minY(), bounds.maxY()), Mth.clamp(target.z, bounds.minZ(), bounds.maxZ()));
             if (endangered.test(nearest))
-                return Danger.FRIENDLY;
+                return Danger.OWN_SIDE;
         }
         // A zone reaches all heights: its nearest point is level with the burst.
         for (MapTableBlockEntity.SafeZone zone : safeZones) {

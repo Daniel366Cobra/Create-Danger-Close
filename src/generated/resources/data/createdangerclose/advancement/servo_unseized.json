@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:equipment_malfunction",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:servo_unseized"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.servo_unseized.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:spindle_oil_bucket"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.servo_unseized.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

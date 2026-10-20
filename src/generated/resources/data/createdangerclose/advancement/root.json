@@ -1,14 +1,7 @@
 {
   "criteria": {
-    "has_item": {
-      "conditions": {
-        "items": [
-          {
-            "items": "createdangerclose:ballistic_computer"
-          }
-        ]
-      },
-      "trigger": "minecraft:inventory_changed"
+    "tick": {
+      "trigger": "minecraft:tick"
     }
   },
   "display": {
@@ -28,7 +21,7 @@
   },
   "requirements": [
     [
-      "has_item"
+      "tick"
     ]
   ],
   "sends_telemetry_event": true

@@ -4,6 +4,7 @@ import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableMenu;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -46,11 +47,15 @@ public record MapTableSafeZonePayload(BlockPos table, boolean remove, float u0, 
             MapTableBlockEntity controller = menu.getController();
             if (controller == null || !controller.getBlockPos().equals(payload.table()))
                 return;
+            int zonesBefore = controller.getSafeZones().size();
             if (payload.remove())
                 controller.removeSafeZone(payload.u0(), payload.v0());
             else if (!controller.addSafeZone(payload.u0(), payload.v0(), payload.u1(), payload.v1()))
                 context.player().displayClientMessage(Component.translatable("createdangerclose.map_table.safe_zone_limit",
                         CDCConfig.server().mapTable.maxSafeZones.get()).withStyle(ChatFormatting.RED), true);
+            // A slip of the mouse adds none.
+            if (controller.getSafeZones().size() > zonesBefore)
+                CDCTriggers.SAFE_ZONE_DRAWN.get().trigger(context.player());
         });
     }
 }

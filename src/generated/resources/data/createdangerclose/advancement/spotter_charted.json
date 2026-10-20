@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:map_table",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:spotter_charted"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.spotter_charted.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:leather_boots"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.spotter_charted.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

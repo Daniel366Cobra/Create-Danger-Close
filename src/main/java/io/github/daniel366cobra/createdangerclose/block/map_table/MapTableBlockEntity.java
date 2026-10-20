@@ -7,6 +7,7 @@ import net.minecraft.ChatFormatting;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.mixin.MapItemSavedDataAccessor;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -46,6 +47,8 @@ import net.minecraft.world.level.saveddata.maps.MapDecoration;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.Nullable;
@@ -70,6 +73,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     private static final int MAP_SYNC_INTERVAL_TICKS = 10;
     private static final double MAP_SYNC_RANGE = 64;
+
+    // Watching it: within this many blocks of its edge, eyes on its top. Or its screen open.
+    private static final double WATCH_RANGE = 2;
 
     // Connected while an interface keeps polling (at most every 20 ticks).
     private static final int LINK_TIMEOUT_TICKS = 40;
@@ -99,6 +105,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
     private static final int PLOT_GLIDE_TICKS = 10;
     // Controller, server only: per player, hashes of map pixels sent.
     private Map<UUID, Map<MapId, Integer>> sentPixels = new HashMap<>();
+    // Controller, server only: spotter changes per map as of the last sync.
+    private Map<MapId, Integer> seenSpotterChanges = new HashMap<>();
     // Client only: sent by the server.
     @Nullable protected MapPlacement clientMapPlacement;
     // Ponder only: stands in for the maps and the link.
@@ -387,8 +395,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
         if (level == null)
             return;
         lastLinkTick = level.getGameTime();
-        if (level instanceof ServerLevel serverLevel && CDCConfig.server().mapTable.allowChartingAroundFixes.get())
-            chartRangedTargets(serverLevel, plot);
+        if (level instanceof ServerLevel serverLevel && CDCConfig.server().mapTable.allowChartingAroundFixes.get()
+                && chartRangedTargets(serverLevel, plot))
+            watchers(serverLevel).forEach(CDCTriggers.FIX_CHARTED.get()::trigger);
         if (!linked || !plot.equals(this.plot)) {
             linked = true;
             this.plot = plot;
@@ -409,12 +418,80 @@ public class MapTableBlockEntity extends SmartBlockEntity
                 MapCharting.chart(serverLevel, data, here.x, here.z, MapCharting.holderRadius(serverLevel, data), step));
     }
 
-    /** Charts around each ranged target once per poll, out to the configured radius. */
-    private void chartRangedTargets(ServerLevel serverLevel, BattlePlot plot) {
+    /** Charts around each ranged target once per poll, out to the configured radius. Whether any pixel changed. */
+    private boolean chartRangedTargets(ServerLevel serverLevel, BattlePlot plot) {
         int radius = CDCConfig.server().mapTable.rangefinderChartRadius.get();
+        boolean[] changed = {false};
         for (BattlePlot.RangefinderFix fix : plot.fixes())
-            forEachChartedMap(serverLevel, data -> MapCharting.chart(serverLevel, data, fix.x(), fix.z(),
+            forEachChartedMap(serverLevel, data -> changed[0] |= MapCharting.chart(serverLevel, data, fix.x(), fix.z(),
                     Math.max(1, Mth.ceil((double) radius / (1 << data.scale))), -1));
+        return changed[0];
+    }
+
+    // --- Advancements (controller, server) ---
+
+    /** Players with its screen open, or close by and looking at its top. */
+    private List<ServerPlayer> watchers(ServerLevel serverLevel) {
+        List<ServerPlayer> watchers = new ArrayList<>();
+        for (ServerPlayer player : serverLevel.players())
+            if (player.containerMenu instanceof MapTableMenu menu && menu.getController() == this || looksAtTop(player))
+                watchers.add(player);
+        return watchers;
+    }
+
+    private boolean looksAtTop(ServerPlayer player) {
+        // Measured in the table's own frame: it may ride a ship.
+        SubLevel ship = Sable.HELPER.getContaining(level, worldPosition);
+        Vec3 feet = ship != null ? ship.logicalPose().transformPositionInverse(player.position()) : player.position();
+        double outX = Math.max(0, Math.max(worldPosition.getX() - feet.x, feet.x - worldPosition.getX() - width));
+        double outZ = Math.max(0, Math.max(worldPosition.getZ() - feet.z, feet.z - worldPosition.getZ() - width));
+        if (outX * outX + outZ * outZ > WATCH_RANGE * WATCH_RANGE)
+            return false;
+        return player.pick(player.blockInteractionRange(), 1, false) instanceof BlockHitResult hit
+                && hit.getType() == HitResult.Type.BLOCK && hit.getDirection() == Direction.UP
+                && ConnectivityHandler.partAt(getType(), level, hit.getBlockPos()) instanceof MapTableBlockEntity part
+                && worldPosition.equals(part.getController());
+    }
+
+    /** Credits whoever filled it: at the largest size allowed, a map on every block (all zoomed out, for more). */
+    public void creditFilled(ServerPlayer player) {
+        if (level == null || width < getMaxWidth())
+            return;
+        boolean zoomedOut = true;
+        for (int dx = 0; dx < width; dx++) {
+            for (int dz = 0; dz < width; dz++) {
+                MapTableBlockEntity part = partAt(dx, dz);
+                MapItemSavedData data = part == null || part.getMap().isEmpty() ? null : MapItem.getSavedData(part.getMap(), level);
+                if (data == null)
+                    return;
+                zoomedOut &= data.scale == MapItemSavedData.MAX_SCALE;
+            }
+        }
+        CDCTriggers.MAP_TABLE_FULL.get().trigger(player);
+        if (zoomedOut)
+            CDCTriggers.MAP_TABLE_FULL_ZOOMED.get().trigger(player);
+    }
+
+    /** Whoever watches as a spotter's held copy of one of its maps charts; not the spotter. */
+    private void creditSpotterCharting(ServerLevel serverLevel) {
+        Map<MapId, Integer> seen = new HashMap<>();
+        Set<UUID> spotters = new HashSet<>();
+        for (MapId mapId : getMapIds()) {
+            MapItemSavedData data = MapItem.getSavedData(mapId, serverLevel);
+            if (data == null)
+                continue;
+            SpottedMap spotted = (SpottedMap) data;
+            int changes = spotted.createdangerclose$getSpotterChanges();
+            Integer before = seenSpotterChanges.get(mapId);
+            if (before != null && changes != before && spotted.createdangerclose$getLastSpotter() != null)
+                spotters.add(spotted.createdangerclose$getLastSpotter());
+            seen.put(mapId, changes);
+        }
+        seenSpotterChanges = seen;
+        if (!spotters.isEmpty())
+            for (ServerPlayer watcher : watchers(serverLevel))
+                if (!spotters.contains(watcher.getUUID()))
+                    CDCTriggers.SPOTTER_CHARTED.get().trigger(watcher);
     }
 
     public Set<MapId> getMapIds() {
@@ -589,8 +666,11 @@ public class MapTableBlockEntity extends SmartBlockEntity
             ConnectivityHandler.splitMulti(this);
             return;
         }
-        if (level.getGameTime() % MAP_SYNC_INTERVAL_TICKS == 0)
+        if (level.getGameTime() % MAP_SYNC_INTERVAL_TICKS == 0) {
             syncMapsToPlayers();
+            if (level instanceof ServerLevel serverLevel)
+                creditSpotterCharting(serverLevel);
+        }
         if (linked && level instanceof ServerLevel serverLevel)
             chartSurroundings(serverLevel);
         if (linked && level.getGameTime() - lastLinkTick > LINK_TIMEOUT_TICKS) {

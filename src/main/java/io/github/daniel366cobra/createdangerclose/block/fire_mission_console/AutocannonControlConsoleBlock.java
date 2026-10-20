@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -42,7 +43,7 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
         if (!(console instanceof AutocannonControlConsoleBlockEntity autocannons))
             return;
         level.blockEvent(pos, this, FireMissionConsoleBlockEntity.BUTTON_PRESS_EVENT, 0);
-        AutocannonControlConsoleBlockEntity.Pull pull = autocannons.pullTrigger(computer);
+        AutocannonControlConsoleBlockEntity.Pull pull = autocannons.pullTrigger(computer, player);
         if (pull == AutocannonControlConsoleBlockEntity.Pull.HELD)
             return;
         level.playSound(null, pos, SoundEvents.STONE_BUTTON_CLICK_ON, SoundSource.BLOCKS, 0.6f, 1f);
@@ -68,6 +69,8 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
         boolean free = autocannons.isWeaponsFree();
         level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.5f, free ? 0.7f : 0.5f);
         message(player, free ? "mode.auto" : "mode.manual");
+        if (free)
+            CDCTriggers.WEAPONS_FREE.get().trigger(player);
     }
 
     private static void message(Player player, String key) {

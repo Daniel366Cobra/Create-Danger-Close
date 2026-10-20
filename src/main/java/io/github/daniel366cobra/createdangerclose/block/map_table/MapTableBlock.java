@@ -56,6 +56,9 @@ public class MapTableBlock extends Block implements IWrenchable, IBE<MapTableBlo
             if (!player.getAbilities().instabuild)
                 stack.shrink(1);
             level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 1f, 1f);
+            MapTableBlockEntity controller = table.getControllerBE();
+            if (controller != null && player instanceof ServerPlayer serverPlayer)
+                controller.creditFilled(serverPlayer);
         });
         return ItemInteractionResult.SUCCESS;
     }

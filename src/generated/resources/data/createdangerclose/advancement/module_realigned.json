@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:equipment_malfunction",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:module_realigned"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.module_realigned.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "create:wrench"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.module_realigned.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

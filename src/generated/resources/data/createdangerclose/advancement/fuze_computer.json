@@ -1,5 +1,5 @@
 {
-  "parent": "createdangerclose:root",
+  "parent": "createdangerclose:integrator",
   "criteria": {
     "trigger": {
       "conditions": {

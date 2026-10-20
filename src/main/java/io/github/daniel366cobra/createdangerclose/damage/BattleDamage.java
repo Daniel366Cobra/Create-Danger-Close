@@ -70,7 +70,7 @@ public final class BattleDamage {
     }
 
     /** A copy: damage may change the set. */
-    private static List<BattleDamageable> loadedIn(Level level) {
+    static List<BattleDamageable> loadedIn(Level level) {
         List<BattleDamageable> found = new ArrayList<>();
         for (BattleDamageable equipment : LOADED)
             if (equipment.damageLevel() == level)

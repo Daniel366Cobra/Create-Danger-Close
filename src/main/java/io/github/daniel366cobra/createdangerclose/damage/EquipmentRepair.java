@@ -3,10 +3,13 @@ package io.github.daniel366cobra.createdangerclose.damage;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.ComputerModuleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairInputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairOutputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.foundation.damage.Fault;
 import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -43,6 +46,9 @@ public final class EquipmentRepair {
             return;
         health.repair(Fault.JOSTLED);
         CDCStats.EQUIPMENT_REALIGNED.awardTo(event.getEntity());
+        CDCTriggers.EQUIPMENT_MALFUNCTION.get().trigger(event.getEntity());
+        if (health.blockEntity instanceof BallisticComputerBlockEntity || health.blockEntity instanceof ComputerModuleBlockEntity)
+            CDCTriggers.MODULE_REALIGNED.get().trigger(event.getEntity());
         level.playSound(null, event.getPos(), SoundEvents.ANVIL_LAND, SoundSource.BLOCKS,
                 0.3f, 1.3f + level.random.nextFloat() * 0.4f);
     }
@@ -73,6 +79,8 @@ public final class EquipmentRepair {
         if (!player.getAbilities().instabuild)
             held.shrink(1);
         CDCStats.EQUIPMENT_REPAIRED.awardTo(player);
+        CDCTriggers.EQUIPMENT_MALFUNCTION.get().trigger(player);
+        (fault == Fault.BROKEN_COG ? CDCTriggers.COG_REPLACED : CDCTriggers.MECHANISM_REPLACED).get().trigger(player);
         level.playSound(null, event.getPos(), SoundEvents.SMITHING_TABLE_USE, SoundSource.BLOCKS, 0.8f, 1.1f);
     }
 

@@ -356,8 +356,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         if (operator == null || movedContraption == null
                 || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
             return;
-        if (tube.getCrackedLensCount() > 0)
+        if (tube.getCrackedLensCount() > 0) {
+            CDCTriggers.EQUIPMENT_MALFUNCTION.get().trigger(operator);
             CDCTriggers.LENS_CRACKED.get().trigger(operator);
+        }
         float dustiest = Math.max(lensDust[0], lensDust[1]);
         if (dustiest >= LensDust.DUSTY)
             CDCTriggers.LENS_DUSTY.get().trigger(operator);
@@ -394,6 +396,15 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     @Override
     public List<DamagePart> damageParts() {
+        return lensParts(false);
+    }
+
+    @Override
+    public List<DamagePart> faultyParts() {
+        return lensParts(true);
+    }
+
+    private List<DamagePart> lensParts(boolean cracked) {
         if (level == null || movedContraption == null
                 || !(movedContraption.getContraption() instanceof RangefinderContraption tube))
             return List.of();
@@ -404,7 +415,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 ship != null ? ship.logicalPose().transformPositionInverse(world) : world, 1f);
         List<DamagePart> parts = new ArrayList<>();
         for (BlockPos lens : tube.getLenses()) {
-            if (tube.isLensCracked(lens))
+            if (tube.isLensCracked(lens) != cracked)
                 continue;
             Vec3 center = RangefinderOptics.toWorld(level, tubeEntity.toGlobalVector(lens.getCenter(), 1f));
             parts.add(new DamagePart(lens, DamagePart.PartKind.LENS, new AABB(lens), center, worldToTube));

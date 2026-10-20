@@ -1,5 +1,5 @@
 {
-  "parent": "createdangerclose:root",
+  "parent": "createdangerclose:ballistic_computer",
   "criteria": {
     "trigger": {
       "conditions": {

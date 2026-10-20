@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:equipment_malfunction",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:mechanism_replaced"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.mechanism_replaced.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "create:precision_mechanism"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.mechanism_replaced.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

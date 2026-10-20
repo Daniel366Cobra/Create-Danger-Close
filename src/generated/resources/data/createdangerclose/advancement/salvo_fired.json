@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:salvo_fired"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.salvo_fired.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:fire_mission_console"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.salvo_fired.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

@@ -1,5 +1,5 @@
 {
-  "parent": "createdangerclose:root",
+  "parent": "createdangerclose:differentiator",
   "criteria": {
     "trigger": {
       "conditions": {

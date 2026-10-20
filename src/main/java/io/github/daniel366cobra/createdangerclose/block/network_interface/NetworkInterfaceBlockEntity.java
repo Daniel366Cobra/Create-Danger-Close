@@ -36,6 +36,9 @@ import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.Fir
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.entity.player.Player;
+import dev.ryanhcode.sable.Sable;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import org.jetbrains.annotations.Nullable;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -59,6 +62,8 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
 
     private EquipmentHealth health;
     private SensorReading reading = new SensorReading.None();
+    // Whoever stands this close as it starts passing something on is credited with the link.
+    private static final double LINK_WITNESS_RANGE = 8;
     private boolean isPowered = false;
 
     public NetworkInterfaceBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
@@ -330,6 +335,11 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     private void setSensorReading(SensorReading newReading) {
         if (newReading.equals(reading))
             return;
+        if (reading.kind() == SensorReading.Kind.NONE && newReading.kind() != SensorReading.Kind.NONE)
+            for (Player player : level.players())
+                if (player.distanceToSqr(Sable.HELPER.projectOutOfSubLevel(level, Vec3.atCenterOf(worldPosition)))
+                        <= LINK_WITNESS_RANGE * LINK_WITNESS_RANGE)
+                    CDCTriggers.INTERFACE_LINKED.get().trigger(player);
         reading = newReading;
         notifyUpdate();
     }

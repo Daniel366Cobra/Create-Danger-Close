@@ -1,0 +1,27 @@
+{
+  "parent": "createdangerclose:salvo_fired",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:village_shelled"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.village_shelled.description"
+    },
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "minecraft:bell"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.village_shelled.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

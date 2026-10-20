@@ -1,0 +1,33 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "conditions": {
+        "items": [
+          {
+            "items": "createdangerclose:map_table"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.map_table.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:map_table"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.map_table.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

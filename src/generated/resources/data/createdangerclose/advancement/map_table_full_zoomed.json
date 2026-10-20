@@ -1,0 +1,28 @@
+{
+  "parent": "createdangerclose:map_table_full",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:map_table_full_zoomed"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.map_table_full_zoomed.description"
+    },
+    "frame": "challenge",
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "minecraft:cartography_table"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.map_table_full_zoomed.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

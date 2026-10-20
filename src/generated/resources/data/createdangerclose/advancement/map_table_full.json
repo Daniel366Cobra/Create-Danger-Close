@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:map_table",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:map_table_full"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.map_table_full.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:filled_map"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.map_table_full.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

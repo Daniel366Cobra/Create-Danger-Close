@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:map_table",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:fix_charted"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.fix_charted.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:spyglass"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.fix_charted.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

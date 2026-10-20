@@ -34,10 +34,11 @@ final class MapCharting {
     /**
      * @param radius map pixels
      * @param step   only this column step (0..15), as vanilla spreads drawing over ticks; -1 for all
+     * @return whether any pixel changed
      */
-    static void chart(ServerLevel level, MapItemSavedData data, double x, double z, int radius, int step) {
+    static boolean chart(ServerLevel level, MapItemSavedData data, double x, double z, int radius, int step) {
         if (data.locked || level.dimension() != data.dimension || radius <= 0)
-            return;
+            return false;
         int scale = 1 << data.scale;
         int centerX = data.centerX, centerZ = data.centerZ;
         int px = Mth.floor(x - centerX) / scale + 64;
@@ -46,7 +47,7 @@ final class MapCharting {
 
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         BlockPos.MutableBlockPos below = new BlockPos.MutableBlockPos();
-        boolean redrawNext = false;
+        boolean redrawNext = false, changed = false;
         for (int column = px - radius + 1; column < px + radius; column++) {
             if (step >= 0 && (column & 15) != step && !redrawNext)
                 continue;
@@ -127,7 +128,9 @@ final class MapCharting {
                 if (row >= 0 && distanceSq < radius * radius && (!nearEdge || (column + row & 1) != 0))
                     redrawNext |= data.updateColor(column, row, color.getPackedId(brightness));
             }
+            changed |= redrawNext;
         }
+        return changed;
     }
 
     /** As vanilla's MapItem. */

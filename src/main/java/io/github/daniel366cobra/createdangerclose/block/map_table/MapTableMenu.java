@@ -2,11 +2,13 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import io.github.daniel366cobra.createdangerclose.registries.CDCMenuTypes;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -120,6 +122,14 @@ public class MapTableMenu extends AbstractContainerMenu {
         else
             slot.setChanged();
         return original;
+    }
+
+    /** Server: a map placed by any kind of click may fill the table. */
+    @Override
+    public void clicked(int slotId, int button, ClickType clickType, Player player) {
+        super.clicked(slotId, button, clickType, player);
+        if (controller != null && player instanceof ServerPlayer serverPlayer)
+            controller.creditFilled(serverPlayer);
     }
 
     /** Server: the screen's buttons, through vanilla's button packet (validity already checked). */

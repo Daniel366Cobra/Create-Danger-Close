@@ -1,0 +1,27 @@
+{
+  "parent": "createdangerclose:salvo_fired",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:own_side_shelled"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.own_side_shelled.description"
+    },
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "minecraft:tnt"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.own_side_shelled.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

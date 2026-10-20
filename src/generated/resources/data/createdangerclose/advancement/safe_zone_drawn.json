@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:map_table",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:safe_zone_drawn"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.safe_zone_drawn.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "minecraft:lime_banner"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.safe_zone_drawn.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

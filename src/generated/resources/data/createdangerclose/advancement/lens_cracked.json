@@ -1,5 +1,5 @@
 {
-  "parent": "createdangerclose:rangefinder_lock",
+  "parent": "createdangerclose:equipment_malfunction",
   "criteria": {
     "trigger": {
       "trigger": "createdangerclose:lens_cracked"

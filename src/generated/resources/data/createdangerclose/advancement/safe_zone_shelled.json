@@ -1,0 +1,27 @@
+{
+  "parent": "createdangerclose:salvo_fired",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:safe_zone_shelled"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.safe_zone_shelled.description"
+    },
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "minecraft:white_banner"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.safe_zone_shelled.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

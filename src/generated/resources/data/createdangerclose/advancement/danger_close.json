@@ -1,0 +1,28 @@
+{
+  "parent": "createdangerclose:salvo_fired",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:danger_close"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.danger_close.description"
+    },
+    "frame": "goal",
+    "hidden": true,
+    "icon": {
+      "count": 1,
+      "id": "minecraft:fire_charge"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.danger_close.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

@@ -390,6 +390,14 @@
         "title": "Create: Danger Close",
         "description": "A tale of cannons and cogwheels"
       },
+      "ballistic_computer": {
+        "title": "Clattering Cogitator",
+        "description": "Obtain a Ballistic Computer"
+      },
+      "interface_linked": {
+        "title": "Rotary Relay",
+        "description": "Connect something to a battle network through a Battle Network Interface"
+      },
       "differentiator": {
         "title": "Keep Up!",
         "description": "Obtain a Differentiator to lead moving targets"
@@ -449,6 +457,74 @@
       "lens_cleaned": {
         "title": "Spotless 20/20",
         "description": "Clean a Rangefinder lens with a Water bucket"
+      },
+      "equipment_malfunction": {
+        "title": "Something's Not Right...",
+        "description": "Take a close look at malfunctioning equipment"
+      },
+      "module_realigned": {
+        "title": "Out of Whack",
+        "description": "Beat a jostled computer module back into submission"
+      },
+      "cog_replaced": {
+        "title": "Really Grinds My Gears",
+        "description": "Replace a broken cogwheel"
+      },
+      "mechanism_replaced": {
+        "title": "Costly Repairs",
+        "description": "Replace a broken Precision Mechanism"
+      },
+      "servo_unseized": {
+        "title": "It's Oil Right",
+        "description": "Free a seized servo with Honeycomb, or watch piped oil free it"
+      },
+      "map_table": {
+        "title": "Where are the Minis?",
+        "description": "Obtain a Map Table to plot the battle on"
+      },
+      "map_table_full": {
+        "title": "Lay of the Land",
+        "description": "Fill a Map Table of the largest size with maps"
+      },
+      "map_table_full_zoomed": {
+        "title": "Strategic Vision",
+        "description": "Fill a Map Table of the largest size with fully zoomed-out maps"
+      },
+      "safe_zone_drawn": {
+        "title": "Laws of War",
+        "description": "Designate a safe zone on a Map Table"
+      },
+      "fix_charted": {
+        "title": "Watch & Sketch",
+        "description": "Watch a Map Table chart the ground around a Rangefinder fix"
+      },
+      "spotter_charted": {
+        "title": "Boots on the Ground",
+        "description": "Watch a Map Table update its map from a spotter in the field"
+      },
+      "salvo_fired": {
+        "title": "Music of Battle",
+        "description": "Fire your guns from a fire control console"
+      },
+      "danger_close": {
+        "title": "Danger Close",
+        "description": "Bring fire down next to a friendly spotter"
+      },
+      "own_side_shelled": {
+        "title": "By Your Own Petard",
+        "description": "Forgot to set fire sectors?"
+      },
+      "safe_zone_shelled": {
+        "title": "Geneva Suggestion",
+        "description": "Fire into a safe zone"
+      },
+      "village_shelled": {
+        "title": "Feel a Hero Yet?",
+        "description": "Shell a village"
+      },
+      "weapons_free": {
+        "title": "Human Out of the Loop",
+        "description": "Trust the computer with the hard decision"
       }
     }
   }

@@ -9,10 +9,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * The Fire Mission Console's desk for autocannons: the trigger fires those on target while held; the
@@ -32,6 +35,9 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
     // -1: no warned press.
     private long dangerArmedTick = -1;
     private boolean dangerConfirmed;
+    // Server: who pulled the trigger, credited once the guns fire on that pull.
+    @Nullable private UUID gunner;
+    private boolean creditPending;
 
     public AutocannonControlConsoleBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -107,12 +113,14 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
     }
 
     /** Server. */
-    Pull pullTrigger(BallisticComputerBlockEntity computer) {
+    Pull pullTrigger(BallisticComputerBlockEntity computer, Player player) {
         long now = level.getGameTime();
         boolean newPress = now - lastTriggerTick > TRIGGER_HOLD_TICKS;
         lastTriggerTick = now;
         if (!newPress)
             return Pull.HELD;
+        gunner = player.getUUID();
+        creditPending = true;
         CServer.DangerClose config = CDCConfig.server().dangerClose;
         if (config.allowDangerClose.get() && computer.isAutocannonDangerClose()) {
             if (dangerArmedTick >= 0 && now - dangerArmedTick <= config.confirmSeconds.get() * 20) {
@@ -133,14 +141,19 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
         if (level == null || level.isClientSide())
             return;
         boolean held = level.getGameTime() - lastTriggerTick <= TRIGGER_HOLD_TICKS;
-        if (!held)
+        if (!held) {
             dangerConfirmed = false;
+            creditPending = false;
+        }
         if (!held && !weaponsFree)
             return;
         BallisticComputerBlockEntity computer = getComputer();
         // Weapons free needs a live target: an Integrator hold drifts. The trigger is the gunner's call.
-        if (computer != null && (held || computer.isTargetLive()))
-            computer.fireAutocannons(held && dangerConfirmed);
+        if (computer != null && (held || computer.isTargetLive())) {
+            Player creditTo = creditPending && gunner != null ? level.getPlayerByUUID(gunner) : null;
+            if (computer.fireAutocannons(held && dangerConfirmed, creditTo) > 0)
+                creditPending = false;
+        }
     }
 
     // --- NBT ---

@@ -1,0 +1,33 @@
+{
+  "parent": "createdangerclose:root",
+  "criteria": {
+    "trigger": {
+      "conditions": {
+        "items": [
+          {
+            "items": "createdangerclose:ballistic_computer"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.ballistic_computer.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:ballistic_computer"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.ballistic_computer.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

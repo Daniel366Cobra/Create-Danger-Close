@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:ballistic_computer",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:interface_linked"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.interface_linked.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:network_interface"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.interface_linked.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

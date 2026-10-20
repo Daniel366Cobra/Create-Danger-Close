@@ -1,0 +1,26 @@
+{
+  "parent": "createdangerclose:salvo_fired",
+  "criteria": {
+    "trigger": {
+      "trigger": "createdangerclose:weapons_free"
+    }
+  },
+  "display": {
+    "description": {
+      "translate": "advancement.createdangerclose.weapons_free.description"
+    },
+    "icon": {
+      "count": 1,
+      "id": "createdangerclose:autocannon_control_console"
+    },
+    "title": {
+      "translate": "advancement.createdangerclose.weapons_free.title"
+    }
+  },
+  "requirements": [
+    [
+      "trigger"
+    ]
+  ],
+  "sends_telemetry_event": true
+}
