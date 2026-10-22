@@ -99,5 +99,12 @@ public final class NavigationConsoleScenes {
                 .attachKeyFrame()
                 .text("Look at the console with Goggles to read it, and to see which sensors are missing");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(util.vector().topOf(console))
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("It also defines the ship's forward direction: whoever faces its controls faces the bow");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 }

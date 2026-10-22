@@ -55,13 +55,16 @@ import java.util.function.UnaryOperator;
 /**
  * Trains a rangefinder tube in yaw. A stress consumer: the tube does not spin with the shaft but
  * eases toward the seated operator's heading (held after they leave), at most
- * {@link #DEG_PER_TICK_PER_RPM} per RPM. Angles are relative to the assembled heading.
+ * {@link #DEG_PER_TICK_PER_RPM} per RPM. Unpowered, it parks at the assembled heading, to which angles
+ * are relative.
  */
 public class RangefinderBearingBlockEntity extends KineticBlockEntity
         implements IBearingBlockEntity, IDisplayAssemblyExceptions, SensorReading.Provider, BattleDamageable {
 
     // A quarter of CBC's mount scale: 6°/s at 32 RPM.
     private static final float DEG_PER_TICK_PER_RPM = 0.0375f / 4;
+    // Unpowered (or overstressed), it returns to its assembled heading at this speed.
+    private static final float PARKING_RPM = 64;
     // From rest to top speed, and back.
     private static final float ACCELERATION_TICKS = 10;
     // Within this of the server, the client keeps its own smooth motion.
@@ -210,8 +213,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     // --- Training ---
 
-    /** The heading of the seated (or last) operator; with none yet, it stays put. */
+    /** The heading of the seated (or last) operator; with none yet, it stays put. Unpowered, the assembled heading. */
     public float getTargetAngle() {
+        if (getSpeed() == 0)
+            return 0;
         return operatorTarget != null ? operatorTarget : angle;
     }
 
@@ -272,7 +277,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
             return;
 
         Player operator = getOperator();
-        if (operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc)
+        // Parked, it waits at the assembled heading for the next operator rather than the last one.
+        if (getSpeed() == 0)
+            operatorTarget = null;
+        else if (operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc)
             operatorTarget = angleForOperator(rc, operator);
         if (!level.isClientSide && operator != lastOperator) {
             lastOperator = operator;
@@ -641,7 +649,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
     /** Trapezoidal motion: accelerate up to top speed, never faster than it can brake to the target. Both scale with RPM. */
     private void stepTraining() {
-        float maxSpeed = Math.abs(getSpeed()) * DEG_PER_TICK_PER_RPM;
+        float maxSpeed = (getSpeed() != 0 ? Math.abs(getSpeed()) : PARKING_RPM) * DEG_PER_TICK_PER_RPM;
         if (level.isClientSide)
             maxSpeed *= ServerSpeedProvider.get();
         if (maxSpeed <= 0) {

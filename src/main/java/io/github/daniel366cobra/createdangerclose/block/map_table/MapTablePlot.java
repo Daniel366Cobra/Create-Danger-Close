@@ -2,12 +2,12 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import io.github.daniel366cobra.createdangerclose.client.CDCRenderTypes;
 import io.github.daniel366cobra.createdangerclose.config.CClient;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.world.item.DyeColor;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -42,9 +42,10 @@ public final class MapTablePlot {
      * Onto a sheet spanning (0, 0)–(sheetSize, sheetSize), north at low y.
      *
      * @param pixel one line pixel in pose units
+     * @param type  untextured, position and color at least
      * @param lift  along the pose's z, in front of the maps
      */
-    public static void render(PoseStack pose, MultiBufferSource buffers, MapTableBlockEntity controller,
+    public static void render(PoseStack pose, MultiBufferSource buffers, RenderType type, MapTableBlockEntity controller,
                               float sheetSize, float pixel, float lift, int packedLight) {
         BattlePlot plot = controller.getShownPlot(AnimationTickHolder.getPartialTicks());
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
@@ -53,7 +54,7 @@ public final class MapTablePlot {
             return;
 
         double scale = sheetSize / (sheet.sizeInPixels() * sheet.blocksPerPixel());
-        Pen pen = new Pen(buffers.getBuffer(CDCRenderTypes.overlay()), pose.last().pose(),
+        Pen pen = new Pen(buffers.getBuffer(type), pose.last().pose(),
                 sheetSize, lift, pixel * CDCConfig.client().lineWidth.getF(), packedLight);
 
         CClient colors = CDCConfig.client();
@@ -100,14 +101,15 @@ public final class MapTablePlot {
      * @param borderLift above {@code lift}, so the border does not z-fight the infill
      * @param drawing    a zone being dragged out, in sheet fractions (u0, v0, u1, v1), or null
      */
-    public static void renderSafeZones(PoseStack pose, MultiBufferSource buffers, MapTableBlockEntity controller,
+    public static void renderSafeZones(PoseStack pose, MultiBufferSource buffers, RenderType type,
+                                       MapTableBlockEntity controller,
                                        float sheetSize, float pixel, float lift, float borderLift, int packedLight,
                                        @Nullable float[] drawing) {
         List<MapTableBlockEntity.SafeZone> zones = controller.getSafeZones();
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         if (sheet == null || zones.isEmpty() && drawing == null)
             return;
-        VertexConsumer consumer = buffers.getBuffer(CDCRenderTypes.overlay());
+        VertexConsumer consumer = buffers.getBuffer(type);
         float width = pixel * CDCConfig.client().lineWidth.getF();
         Pen fill = new Pen(consumer, pose.last().pose(), sheetSize, lift, width, packedLight);
         Pen border = new Pen(consumer, pose.last().pose(), sheetSize, borderLift, width, packedLight);

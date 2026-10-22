@@ -52,6 +52,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Vector3d;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -98,6 +99,13 @@ public class MapTableBlockEntity extends SmartBlockEntity
     protected long lastLinkTick;
     // Controller only: as last carried over by an interface.
     protected BattlePlot plot = BattlePlot.EMPTY;
+    // Controller: what the network knows of the ship's heading and course, for the own marker.
+    protected CourseSensors courseSensors = CourseSensors.NONE;
+    // Client: course without a Navigation Console, smoothed; shown above one speed and dropped below a lower one.
+    private static final double UNDERWAY_SPEED = 0.5, STOPPED_SPEED = 0.3;
+    private static final double COURSE_SMOOTHING = 0.5;
+    private final Vector3d smoothedVelocity = new Vector3d();
+    private boolean underway;
     // Client: renderers glide from the previous plot, as the interface polls only every so often.
     private BattlePlot plotShownBefore = BattlePlot.EMPTY;
     private long plotArrivalTick;
@@ -111,6 +119,14 @@ public class MapTableBlockEntity extends SmartBlockEntity
     @Nullable protected MapPlacement clientMapPlacement;
     // Ponder only: stands in for the maps and the link.
     @Nullable protected PonderChart ponderChart;
+
+    /**
+     * @param bow                  in the ship's frame, from a Navigation Console on the network; null without one
+     * @param velocityX, velocityZ whether a Velocity Sensor covers that ship axis
+     */
+    public record CourseSensors(@Nullable Direction bow, boolean velocityX, boolean velocityZ) {
+        public static final CourseSensors NONE = new CourseSensors(null, false, false);
+    }
 
     /** North-west corner, blocks per map pixel, and dimension of the stitched sheet. */
     public record Sheet(double westX, double northZ, int blocksPerPixel, int width, ResourceKey<Level> dimension) {
@@ -391,16 +407,17 @@ public class MapTableBlockEntity extends SmartBlockEntity
     // --- Battle network link (controller only) ---
 
     /** Called each time an interface reads this table. */
-    public void markLinked(BattlePlot plot) {
+    public void markLinked(BattlePlot plot, CourseSensors courseSensors) {
         if (level == null)
             return;
         lastLinkTick = level.getGameTime();
         if (level instanceof ServerLevel serverLevel && CDCConfig.server().mapTable.allowChartingAroundFixes.get()
                 && chartRangedTargets(serverLevel, plot))
             watchers(serverLevel).forEach(CDCTriggers.FIX_CHARTED.get()::trigger);
-        if (!linked || !plot.equals(this.plot)) {
+        if (!linked || !plot.equals(this.plot) || !courseSensors.equals(this.courseSensors)) {
             linked = true;
             this.plot = plot;
+            this.courseSensors = courseSensors;
             sendData();
         }
     }
@@ -524,6 +541,38 @@ public class MapTableBlockEntity extends SmartBlockEntity
         Vec3 center = new Vec3(worldPosition.getX() + width / 2.0, worldPosition.getY() + 1, worldPosition.getZ() + width / 2.0);
         SubLevel ship = level != null ? Sable.HELPER.getContaining(level, center) : null;
         return ship != null ? ship.logicalPose().transformPosition(center) : center;
+    }
+
+    // --- Own course (controller, client) ---
+
+    /** Horizontal velocity at the ship's center of mass, along the ship axes with Velocity Sensors only. */
+    private void tickCourse() {
+        Vec3 center = new Vec3(worldPosition.getX() + width / 2.0, worldPosition.getY() + 1, worldPosition.getZ() + width / 2.0);
+        SubLevel ship = linked ? Sable.HELPER.getContaining(level, center) : null;
+        Vector3d velocity = new Vector3d();
+        if (ship != null && (courseSensors.velocityX() || courseSensors.velocityZ())) {
+            var pose = ship.logicalPose();
+            Sable.HELPER.getVelocity(level, ship, pose.rotationPoint(), velocity);
+            pose.orientation().transformInverse(velocity)
+                    .mul(courseSensors.velocityX() ? 1 : 0, 0, courseSensors.velocityZ() ? 1 : 0);
+            pose.orientation().transform(velocity);
+            velocity.y = 0;
+        }
+        smoothedVelocity.lerp(velocity, COURSE_SMOOTHING);
+        double speed = smoothedVelocity.length();
+        underway = Double.isFinite(speed) && speed > (underway ? STOPPED_SPEED : UNDERWAY_SPEED);
+        if (!Double.isFinite(speed))
+            smoothedVelocity.zero();
+    }
+
+    public CourseSensors getCourseSensors() {
+        return courseSensors;
+    }
+
+    /** Client: the ship's horizontal course in the world, or null if stopped or unmeasured. */
+    @Nullable
+    public Vec3 getCourse() {
+        return underway ? new Vec3(smoothedVelocity.x, 0, smoothedVelocity.z) : null;
     }
 
     /** Empty unless linked to a Ballistic Computer. */
@@ -659,6 +708,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
         if (updateConnectivity)
             updateConnectivity();
 
+        if (level != null && level.isClientSide && isController())
+            tickCourse();
         if (level == null || level.isClientSide || !isController())
             return;
         // Larger than the server now allows: split, and the blocks join again within the limit.
@@ -676,6 +727,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         if (linked && level.getGameTime() - lastLinkTick > LINK_TIMEOUT_TICKS) {
             linked = false;
             plot = BattlePlot.EMPTY;
+            courseSensors = CourseSensors.NONE;
             sendData();
         }
     }
@@ -880,6 +932,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
         gunLabels = !compound.getBoolean("HideLabels");
         if (clientPacket) {
             linked = compound.getBoolean("Linked");
+            Direction bow = compound.contains("Bow") ? Direction.from2DDataValue(compound.getInt("Bow")) : null;
+            courseSensors = new CourseSensors(bow, compound.getBoolean("VelocityX"), compound.getBoolean("VelocityZ"));
             BattlePlot arrived = compound.contains("Plot") ? BattlePlot.read(compound.getCompound("Plot")) : BattlePlot.EMPTY;
             if (!arrived.equals(plot)) {
                 // Glide on from wherever the drawing is now (it may be mid-glide).
@@ -934,6 +988,10 @@ public class MapTableBlockEntity extends SmartBlockEntity
         // Only clients need these: the link lapses on its own, and the map knows where it lies.
         if (clientPacket) {
             compound.putBoolean("Linked", linked);
+            if (courseSensors.bow() != null)
+                compound.putInt("Bow", courseSensors.bow().get2DDataValue());
+            compound.putBoolean("VelocityX", courseSensors.velocityX());
+            compound.putBoolean("VelocityZ", courseSensors.velocityZ());
             if (!plot.isEmpty())
                 compound.put("Plot", plot.write());
             MapPlacement map = getMapPlacement();

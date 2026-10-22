@@ -41,11 +41,10 @@ public class NavigationConsoleRenderer extends SafeBlockEntityRenderer<Navigatio
         float faceTurn = (float) Math.toRadians(-(front.toYRot() + 180));
         VertexConsumer vb = buffer.getBuffer(RenderType.cutoutMipped());
 
-        // Attitude is yaw, then pitch nose-up about the ship's X, then roll about its Z. The ball turns by
-        // the inverse, after undoing the console's facing on the ship.
+        // Attitude is yaw, then pitch nose-up, then roll about the bow, which is the model's +Z. The ball
+        // turns by the inverse.
         part(CDCPartialModels.NAV_CONSOLE_BALL, state, faceTurn)
                 .translate(BALL_CENTER_X * PX, BALL_CENTER_Y * PX, BALL_CENTER_Z * PX)
-                .rotate(-faceTurn, Direction.UP)
                 .rotate(rad(-be.getBallRoll(partialTicks)), Direction.SOUTH)
                 .rotate(rad(be.getBallPitch(partialTicks)), Direction.EAST)
                 .rotate(rad(be.getBallHeading(partialTicks)), Direction.UP)

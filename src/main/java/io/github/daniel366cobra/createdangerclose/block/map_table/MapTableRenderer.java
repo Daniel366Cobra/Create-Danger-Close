@@ -2,6 +2,7 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import io.github.daniel366cobra.createdangerclose.client.CDCRenderTypes;
 import io.github.daniel366cobra.createdangerclose.client.RenderLight;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -66,9 +67,9 @@ public class MapTableRenderer implements BlockEntityRenderer<MapTableBlockEntity
         pose.translate(BORDER, 1 + LIFT, BORDER);
         pose.mulPose(Axis.XP.rotationDegrees(90));
         // Safe zones under the plot lines.
-        MapTablePlot.renderSafeZones(pose, buffers, table, width * cell, PLOT_PIXEL * bold,
+        MapTablePlot.renderSafeZones(pose, buffers, CDCRenderTypes.overlay(), table, width * cell, PLOT_PIXEL * bold,
                 -MARKER_LIFT / 4, -MARKER_LIFT * 3 / 8, light, null);
-        MapTablePlot.render(pose, buffers, table, width * cell, PLOT_PIXEL * bold, -MARKER_LIFT / 2, light);
+        MapTablePlot.render(pose, buffers, CDCRenderTypes.overlay(), table, width * cell, PLOT_PIXEL * bold, -MARKER_LIFT / 2, light);
         pose.popPose();
 
         List<MapTableMarker.Marker> markers = MapTableMarker.computeAll(table);

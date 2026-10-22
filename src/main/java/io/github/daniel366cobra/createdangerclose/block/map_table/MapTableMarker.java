@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
@@ -31,8 +32,10 @@ import java.util.Optional;
 
 /**
  * Markers on a map table's sheet, in vanilla's decoration sprites: the target (red X) and, on a
- * battle network, the table's own arrow, turning with the ship, or a banner ashore. Off the sheet the
- * arrow becomes a dot on the nearest edge, large within 256 map pixels, as vanilla does for players.
+ * battle network, the table's own ship, or a banner ashore. The ship is an arrow along its bow if a
+ * Navigation Console is on the network, else along its course if Velocity Sensors measure it, else a
+ * large dot. Off the sheet it becomes a dot on the nearest edge, large within 256 map pixels, as vanilla
+ * does for players.
  */
 public final class MapTableMarker {
 
@@ -47,7 +50,7 @@ public final class MapTableMarker {
 
     private MapTableMarker() {}
 
-    /** Ship heading arrow (off the sheet, a dot on its edge), or a banner ashore (on the edge if off). Null without a network, loaded maps, or in another dimension. */
+    /** Ship's arrow or dot (off the sheet, a dot on its edge), or a banner ashore (on the edge if off). Null without a network, loaded maps, or in another dimension. */
     @Nullable
     public static Marker computeOwn(MapTableBlockEntity controller) {
         Level level = controller.getLevel();
@@ -59,22 +62,28 @@ public final class MapTableMarker {
 
         BlockPos origin = controller.getBlockPos();
         Vec3 position = new Vec3(origin.getX() + width / 2.0, origin.getY() + 1, origin.getZ() + width / 2.0);
-        Vec3 north = new Vec3(0, 0, -1);
+        // The Ponder chart's scene is a ship sailing north.
+        Vec3 heading = controller.getPonderChart() != null ? new Vec3(0, 0, -1) : null;
         SubLevel ship = controller.getPonderChart() != null ? null : Sable.HELPER.getContaining(level, position);
         if (ship != null) {
             position = ship.logicalPose().transformPosition(position);
-            north = ship.logicalPose().transformNormal(north);
+            Direction bow = controller.getCourseSensors().bow();
+            heading = bow != null ? ship.logicalPose().transformNormal(Vec3.atLowerCornerOf(bow.getNormal()))
+                    : controller.getCourse();
         }
 
         float px = (float) sheet.pixelX(position.x);
         float py = (float) sheet.pixelY(position.z);
         float u = Mth.clamp(px, 0, sheetPixels) / sheetPixels;
         float v = Mth.clamp(py, 0, sheetPixels) / sheetPixels;
-        // Ashore there is no heading: a pin, on the edge when off the sheet. The Ponder chart keeps the arrow, as its scene is a ship.
+        // Ashore there is no heading: a pin, on the edge when off the sheet.
         if (ship == null && controller.getPonderChart() == null)
             return new Marker(MapDecorationTypes.BLUE_BANNER, u, v, 0);
         if (px >= 0 && py >= 0 && px <= sheetPixels && py <= sheetPixels) {
-            float yaw = (float) Math.toDegrees(Math.atan2(-north.x, north.z));
+            // Stopped, or nothing to tell which way: vanilla's large off-map dot.
+            if (heading == null)
+                return new Marker(MapDecorationTypes.PLAYER_OFF_MAP, u, v, 0);
+            float yaw = (float) Math.toDegrees(Math.atan2(-heading.x, heading.z));
             return new Marker(MapDecorationTypes.PLAYER, u, v, yaw);
         }
 

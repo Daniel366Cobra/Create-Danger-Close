@@ -14,6 +14,7 @@ import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReadin
 import net.createmod.catnip.animation.LerpedFloat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -171,6 +172,11 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
         }
     }
 
+    /** In the ship's frame: whoever faces the controls faces the bow. */
+    public Direction getBow() {
+        return getBlockState().getValue(NavigationConsoleBlock.FACING).getOpposite();
+    }
+
     private void readOwnShipState() {
         hasPose = false;
         SubLevel subLevel = Sable.HELPER.getContaining(level, worldPosition);
@@ -179,9 +185,10 @@ public class NavigationConsoleBlockEntity extends SmartBlockEntity implements IH
 
         Quaterniondc q = subLevel.logicalPose().orientation();
 
-        // Heading/pitch of the ship's +Z axis, roll of its +X axis about it.
-        Vector3d forward = q.transform(new Vector3d(0, 0, 1));
-        Vector3d right = q.transform(new Vector3d(1, 0, 0));
+        // Heading/pitch of the bow, roll of the starboard axis about it.
+        Vector3d bow = new Vector3d(getBow().getStepX(), 0, getBow().getStepZ());
+        Vector3d forward = q.transform(new Vector3d(bow));
+        Vector3d right = q.transform(new Vector3d(0, 1, 0).cross(bow));
         Vector3d up = q.transform(new Vector3d(0, 1, 0));
         double heading = Math.toDegrees(Math.atan2(-forward.x, forward.z));
         shipHeadingDeg = heading < 0 ? heading + 360 : heading;

@@ -249,7 +249,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         if (controller == null) {
             return new SensorReading.None();
         }
-        controller.markLinked(findComputerPlot());
+        controller.markLinked(findComputerPlot(), findShipCourseSensors());
         // Placed on a pixel: sigma of a pixel over √12.
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         double sigma = sheet != null ? sheet.blocksPerPixel() / Math.sqrt(12) : 0;
@@ -295,6 +295,42 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         }
 
         return new SensorReading.NavTarget(targetPos, navTable.getRelativeAngle());
+    }
+
+    /** For a map table's own marker: the bow from a Navigation Console, and which horizontal ship axes have Velocity Sensors. */
+    private MapTableBlockEntity.CourseSensors findShipCourseSensors() {
+        KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
+        if (network == null)
+            return MapTableBlockEntity.CourseSensors.NONE;
+        Direction bow = null;
+        boolean velocityX = false, velocityZ = false;
+        for (KineticBlockEntity member : network.members.keySet()) {
+            if (!(member instanceof SensorReading.Provider provider))
+                continue;
+            switch (provider.getSensorReading()) {
+                case SensorReading.Velocity v -> {
+                    velocityX |= v.dominantAxis() == 0;
+                    velocityZ |= v.dominantAxis() == 2;
+                }
+                case SensorReading.NavConsole ignored -> {
+                    // The first found, if there are several.
+                    if (bow == null && member instanceof NetworkInterfaceBlockEntity other
+                            && other.getFacedNavigationConsole() instanceof NavigationConsoleBlockEntity console)
+                        bow = console.getBow();
+                }
+                default -> { }
+            }
+        }
+        return new MapTableBlockEntity.CourseSensors(bow, velocityX, velocityZ);
+    }
+
+    @Nullable
+    private NavigationConsoleBlockEntity getFacedNavigationConsole() {
+        if (level == null)
+            return null;
+        BlockPos facing = worldPosition.relative(getBlockState().getValue(FACING));
+        return level.isLoaded(facing) && level.getBlockEntity(facing) instanceof NavigationConsoleBlockEntity console
+                ? console : null;
     }
 
     private BattlePlot findComputerPlot() {

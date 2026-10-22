@@ -14,6 +14,7 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -211,11 +212,12 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         MapTableBlockEntity controller = menu.getController();
         if (controller != null) {
             // One line pixel per GUI pixel at any zoom, between maps (z ≈ 1) and markers.
+            // The GUI type: with a shader pack, Iris swaps the overlay's shader even in screens, and it draws nothing.
             pose.pushPose();
             pose.translate(originX, originY, 0);
-            MapTablePlot.renderSafeZones(pose, graphics.bufferSource(), controller, zoomedSize, 1, 1.25f, 1.375f,
+            MapTablePlot.renderSafeZones(pose, graphics.bufferSource(), RenderType.gui(), controller, zoomedSize, 1, 1.25f, 1.375f,
                     LightTexture.FULL_BRIGHT, drawing);
-            MapTablePlot.render(pose, graphics.bufferSource(), controller, zoomedSize, 1, 1.5f,
+            MapTablePlot.render(pose, graphics.bufferSource(), RenderType.gui(), controller, zoomedSize, 1, 1.5f,
                     LightTexture.FULL_BRIGHT);
             graphics.flush();
             pose.popPose();

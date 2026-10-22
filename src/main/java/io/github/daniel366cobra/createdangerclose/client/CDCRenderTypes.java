@@ -44,7 +44,7 @@ public final class CDCRenderTypes extends RenderType {
         return OPAQUE_TEXT.apply(texture);
     }
 
-    /** Untextured translucent quads drawn over the maps: plot lines and safe zones. */
+    /** Untextured translucent quads drawn over the maps on a table: plot lines and safe zones. Not for screens: Iris swaps its shader there too. */
     public static RenderType overlay() {
         return OVERLAY;
     }

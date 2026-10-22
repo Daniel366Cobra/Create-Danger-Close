@@ -339,7 +339,9 @@
       "navigation_console.tooltip": {
         "summary": "Shows the ship's own _attitude_, _speed_ and _altitude_ through Goggles.",
         "condition1": "When a powered Battle Network Interface faces it:",
-        "behaviour1": "_Shows_ each reading the network has a _sensor_ for."
+        "behaviour1": "_Shows_ each reading the network has a _sensor_ for.",
+        "condition2": "Facing:",
+        "behaviour2": "Whoever faces the controls faces the _bow_. A _Map Table_ on the network points the ship's arrow that way."
       },
       "fuze_computer.tooltip": {
         "summary": "A module for the _Ballistic Computer_. Works out fuze times.",

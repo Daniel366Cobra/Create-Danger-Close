@@ -158,11 +158,11 @@ public final class MapTableScenes {
                 .text("A Network Interface facing it sends the target to the Ballistic Computer...");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
-        scene.overlay().showText(PonderTiming.TEXT)
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .pointAt(onChart(controller, SHIP_U, SHIP_V))
                 .placeNearTarget()
-                .text("...and the table shows where the ship is");
-        scene.idle(PonderTiming.AFTER_TEXT);
+                .text("...and the table shows where the ship is, its arrow aligned with the ship's velocity vector or the forward direction defined by the Navigation Console");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
         scene.overlay().showText(PonderTiming.LONG_TEXT)
                 .colored(PonderPalette.RED)
