@@ -511,6 +511,8 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                     .style(ChatFormatting.DARK_RED)
                     .forGoggles(tooltip);
         }
+
+        super.addToGoggleTooltip(tooltip, isPlayerSneaking);
         return true;
     }
 

@@ -26,8 +26,6 @@ public final class FireMissionConsoleScenes {
     // The target moves: retrained slowly enough that an order comes mid-move.
     private static final float RETRAIN_DEG = -30;
     private static final int RETRAIN_TICKS = 80;
-    // Multiple of the 1 RPM keep-alive.
-    private static final float TRAINING_SPEED_FACTOR = 32;
     private static final int FUZE_DEMO_NOTCHES = 4, FUZE_NOTCH_TICKS = 2;
 
     /**
@@ -55,10 +53,11 @@ public final class FireMissionConsoleScenes {
                 .add(util.select().position(mount))
                 .add(util.select().position(lever));
         Selection consoleBranch = util.select().fromTo(0, 1, 2, 0, 1, 3);
-        // Servo outputs to the mount (traverse gearing in the floor layer).
-        Selection cannonNetworks = util.select().fromTo(2, 1, 0, 2, 1, 2)
-                .add(util.select().fromTo(2, 0, 0, 4, 0, 0))
-                .add(util.select().fromTo(4, 1, 1, 4, 1, 2));
+        // Servo outputs to the mount (traverse gearing in the floor layer), saved still.
+        Selection mountSelection = util.select().position(mount);
+        ServoDrive yawDrive = ServoDrive.yaw(util.select().fromTo(3, 0, 0, 4, 0, 0),
+                util.select().fromTo(2, 1, 0, 2, 1, 2).add(util.select().position(2, 0, 0)), mountSelection);
+        ServoDrive pitchDrive = ServoDrive.pitch(util.select().fromTo(4, 1, 1, 4, 1, 2), null, mountSelection);
 
         // The console faces north: left to right (east to west) fuze knob, trajectory lever, fire button (model pixels).
         Vec3 fuzeKnob = onConsole(console, 12.5, 17, 7.5);
@@ -109,7 +108,7 @@ public final class FireMissionConsoleScenes {
                 .text("The guns train onto the computer's firing solution");
         scene.idle(20);
         showGunsReady(scene, console, 0);
-        train(scene, cannonNetworks, mount, aim, TRAVERSE_DEG, DIRECT_DEG, TRAINING_TICKS);
+        train(scene, yawDrive, pitchDrive, mount, aim, TRAVERSE_DEG, DIRECT_DEG, TRAINING_TICKS);
         showGunsReady(scene, console, 1);
         scene.idle(PonderTiming.AFTER_TEXT - 20 - TRAINING_TICKS);
 
@@ -125,7 +124,7 @@ public final class FireMissionConsoleScenes {
         scene.idle(PonderTiming.AFTER_TEXT);
 
         showGunsReady(scene, console, 0);
-        train(scene, cannonNetworks, mount, aim, 0, PLUNGING_DEG - DIRECT_DEG, TRAINING_TICKS);
+        train(scene, yawDrive, pitchDrive, mount, aim, 0, PLUNGING_DEG - DIRECT_DEG, TRAINING_TICKS);
         showGunsReady(scene, console, 1);
         scene.overlay().showText(PonderTiming.TEXT)
                 .colored(PonderPalette.BLUE)
@@ -138,7 +137,7 @@ public final class FireMissionConsoleScenes {
         showPlunging(scene, console, false);
         scene.idle(10);
         showGunsReady(scene, console, 0);
-        train(scene, cannonNetworks, mount, aim, 0, DIRECT_DEG - PLUNGING_DEG, TRAINING_TICKS);
+        train(scene, yawDrive, pitchDrive, mount, aim, 0, DIRECT_DEG - PLUNGING_DEG, TRAINING_TICKS);
         showGunsReady(scene, console, 1);
         scene.overlay().showText(PonderTiming.TEXT)
                 .colored(PonderPalette.BLUE)
@@ -162,7 +161,7 @@ public final class FireMissionConsoleScenes {
 
         // The target moves; an order given while the gun is still training is refused.
         showGunsReady(scene, console, 0);
-        scene.world().multiplyKineticSpeed(cannonNetworks, TRAINING_SPEED_FACTOR);
+        yawDrive.lay(scene, RETRAIN_DEG);
         scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountYaw(mount, -RETRAIN_DEG, RETRAIN_TICKS));
         aim.turn(RETRAIN_DEG * 30 / RETRAIN_TICKS, 0, 30);
         scene.overlay().showControls(fireButton, Pointing.DOWN, 30).rightClick();
@@ -176,7 +175,7 @@ public final class FireMissionConsoleScenes {
                 .text("Guns still training onto their solution hold their fire, so no shell is wasted");
         aim.turn(RETRAIN_DEG * (RETRAIN_TICKS - 40) / RETRAIN_TICKS, 0, RETRAIN_TICKS - 40);
         showGunsReady(scene, console, 1);
-        scene.world().multiplyKineticSpeed(cannonNetworks, 1 / TRAINING_SPEED_FACTOR);
+        yawDrive.stop(scene);
         scene.idle(PonderTiming.AFTER_LONG_TEXT - (RETRAIN_TICKS - 40));
 
         // On target again: now it fires.
@@ -262,18 +261,20 @@ public final class FireMissionConsoleScenes {
         scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showFuzeOffset(ticks));
     }
 
-    /** Traverse (left) and elevate, running the cannon networks fast. Texts shown just before stay up meanwhile. */
-    private static void train(CreateSceneBuilder scene, Selection cannonNetworks, BlockPos mount,
+    /** Traverse (left) and elevate, running the moving axes' drives. Texts shown just before stay up meanwhile. */
+    private static void train(CreateSceneBuilder scene, ServoDrive yawDrive, ServoDrive pitchDrive, BlockPos mount,
                               CannonAim aim,
                               float traverseDeg, float elevationDeg, int ticks) {
-        scene.world().multiplyKineticSpeed(cannonNetworks, TRAINING_SPEED_FACTOR);
+        yawDrive.lay(scene, traverseDeg);
+        pitchDrive.lay(scene, elevationDeg);
         // CBC's mount yaw runs opposite to Ponder's rotation (east 270, north 180).
         if (traverseDeg != 0)
             scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountYaw(mount, -traverseDeg, ticks));
         if (elevationDeg != 0)
             scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountPitch(mount, elevationDeg, ticks));
         aim.turn(traverseDeg, elevationDeg, ticks);
-        scene.world().multiplyKineticSpeed(cannonNetworks, 1 / TRAINING_SPEED_FACTOR);
+        yawDrive.stop(scene);
+        pitchDrive.stop(scene);
     }
 
     private static void fire(CreateSceneBuilder scene, SceneBuildingUtil util, float traverseDeg, float elevationDeg) {

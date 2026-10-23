@@ -25,14 +25,17 @@ Create Danger Close (CDC) implements the following gameplay mechanics:
 
 *The corvette Tenax laying her gun to the rangefinder on the flying bridge.*
 
-<img src="./images/tenax_rangefinder_gui.png" width="600" alt="The rangefinder sight, reading bearing, range and rates">
+<img src="./images/tenax_rangefinder_gui.png" width="600" alt="The rangefinder sight reticle">
 
-*Through the rangefinder: bearing, range, range rate and bearing rate.*
+*Observing through the rangefinder.*
 
-<img src="./images/tenax_gunnery_station.png" width="600" alt="The gunnery station below deck, with a Fire Mission Console and a Ballistic Computer bank">
+<img src="./images/tenax_ballistic_computer.png" width="600" alt="The Ballistic Computer bank below deck">
 
-*The gunnery station below deck: a Fire Mission Console beside a Ballistic Computer and its modules.*
+*Her ballistic computer below deck, with all modules required for naval combat.*
 
+<img src="./images/tenax_gunnery_station.png" width="600" alt="The fire mission console and the map table">
+
+*Her gunnery station: Fire mission console and Map table, showing the target and fire sector.*
 ## Usage
 
 This addon is best used for PvP multiplayer combat: just like in real life, effective gunnery requires coordination and cooperation. CDC aims to preserve the thrill of it while avoiding the tedium.

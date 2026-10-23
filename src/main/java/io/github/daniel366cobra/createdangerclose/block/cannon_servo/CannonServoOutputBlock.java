@@ -27,10 +27,11 @@ public class CannonServoOutputBlock extends PairOutputBlock<CannonServoOutputBlo
         return CDCBlocks.CANNON_SERVO_INPUT.get();
     }
 
-    /** Right-click with an empty hand: the protractor dial, to set the limits it may turn through. */
+    /** Right-click with an empty hand: the protractor dial, to set the limits it may turn through. Not on the shaft side, where shafts go. */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!(level.getBlockEntity(pos) instanceof CannonServoOutputBlockEntity servo))
+        if (hasShaftTowards(level, pos, state, hit.getDirection())
+                || !(level.getBlockEntity(pos) instanceof CannonServoOutputBlockEntity servo))
             return InteractionResult.PASS;
         ServoAxis axis = servo.getDetectedAxis();
         if (axis != ServoAxis.PITCH && axis != ServoAxis.YAW && axis != ServoAxis.SWIVEL)

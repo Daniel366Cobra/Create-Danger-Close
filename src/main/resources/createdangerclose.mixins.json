@@ -8,6 +8,7 @@
     "MapItemMixin",
     "MapItemSavedDataAccessor",
     "MapItemSavedDataMixin",
+    "RotationPropagatorInvoker",
     "SwivelBearingAccessor"
   ],
   "client": [

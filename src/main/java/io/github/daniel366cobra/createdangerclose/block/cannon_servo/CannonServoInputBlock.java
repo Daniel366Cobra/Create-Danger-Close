@@ -26,10 +26,11 @@ public class CannonServoInputBlock extends PairInputBlock<CannonServoInputBlockE
         return CDCBlocks.CANNON_SERVO_OUTPUT.get();
     }
 
-    /** Right-click with an empty hand: name the guns it lays, for the consoles. */
+    /** Right-click with an empty hand: name the guns it lays, for the consoles. Not on the shaft side, where shafts go. */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!(level.getBlockEntity(pos) instanceof CannonServoInputBlockEntity servo))
+        if (hasShaftTowards(level, pos, state, hit.getDirection())
+                || !(level.getBlockEntity(pos) instanceof CannonServoInputBlockEntity servo))
             return InteractionResult.PASS;
         // Through the client-only executor, so the screen class is only ever reached on a client.
         if (level.isClientSide)

@@ -1205,11 +1205,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     lay = candidateLay;
                     break;
                 }
-                // This bearing cannot bring that gun round: it is out of arc.
+                // This bearing cannot bring that gun round: it is out of arc (a gun not yet solved keeps its reason).
                 outOfArc.add(candidate.pos());
-                aimCache.remove(candidate.pos());
-                lastPitchResults.put(candidate.reportPos(),
-                        BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.OUT_OF_ARC));
+                if (aimCache.remove(candidate.pos()) != null)
+                    lastPitchResults.put(candidate.reportPos(),
+                            BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.OUT_OF_ARC));
             }
             if (director == null) {
                 joint.servo().receiveFiringSolution(null);
@@ -1263,29 +1263,41 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             for (int i = 0; i < k - index - 1; i++)
                 rotation.transform(axesBetween.get(i));
         }
-        FireSolution aim = aimCache.get(gun.pos());
+        FireSolution aim = layFor(joint, gun);
         Vector3d wanted = frameOf(gun.mount()).transform(aimDirection(aim.pitchDeg(), aim.yawDeg()));
         Vector3d raised = new Quaterniond().fromAxisAngleRad(axis, Math.toRadians(1)).transform(new Vector3d(barrel));
         return new Lay(turnAbout(axis, barrel, wanted), pitchOf(raised) >= pitchOf(barrel) ? 1 : -1);
     }
 
     /**
-     * In order: the gun the bearing under it serves, the one it served last poll, then the rest,
-     * with last poll's out-of-arc guns last.
+     * What a bearing lays a gun for: its solution. A turret, like a mount's yaw, also trains on the
+     * line of sight while the gun has none (no shell, too little charge); a cradle waits for one.
+     */
+    @Nullable
+    private FireSolution layFor(Joint joint, Gun gun) {
+        FireSolution aim = aimCache.get(gun.pos());
+        if (aim != null && aim.valid())
+            return aim;
+        return tilts(joint) || gun.mount().barrel() == null ? null : lineOfSight(gun.mount());
+    }
+
+    /**
+     * In order: solved guns first; then the gun the bearing under it serves, the one it served last poll,
+     * then the rest, with last poll's out-of-arc guns last.
      */
     private List<Gun> candidates(Joint joint, List<Gun> guns, Map<BlockPos, List<Joint>> chains,
                                  Set<BlockPos> redundant, Map<BlockPos, BlockPos> directorThisPoll) {
         List<Gun> candidates = new ArrayList<>();
         for (Gun gun : guns) {
-            FireSolution aim = aimCache.get(gun.pos());
-            if (!redundant.contains(gun.pos()) && aim != null && aim.valid() && chains.get(gun.pos()).contains(joint))
+            if (!redundant.contains(gun.pos()) && chains.get(gun.pos()).contains(joint) && layFor(joint, gun) != null)
                 candidates.add(gun);
         }
         Joint under = joint.swivel().hull() != null ? jointByPlate.get(joint.swivel().hull()) : null;
         BlockPos preferred = under != null ? directorThisPoll.get(under.swivel().swivelPos()) : null;
         BlockPos previous = directors.get(joint.swivel().swivelPos());
         candidates.sort(Comparator
-                .comparingInt((Gun gun) -> gun.pos().equals(preferred) ? 0 : gun.pos().equals(previous) ? 1
+                .comparingInt((Gun gun) -> aimCache.containsKey(gun.pos()) ? 0 : 1)
+                .thenComparingInt(gun -> gun.pos().equals(preferred) ? 0 : gun.pos().equals(previous) ? 1
                         : outOfArcLastPoll.contains(gun.pos()) ? 3 : 2)
                 .thenComparingLong(gun -> gun.pos().asLong()));
         return candidates;
@@ -1737,6 +1749,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
 
         // No ballistic solution: keep tracking along the line of sight.
+        return lineOfSight(mount);
+    }
+
+    /** Straight at the target, in the gun's own frame; null on a ship without attitude sensors. */
+    @Nullable
+    private FireSolution lineOfSight(ServoStatus.MountSnapshot mount) {
         SubLevel mountSubLevel = subLevelOf(mount);
         if (onShip(mount) && !hasOrientationSensors()) return null;
 

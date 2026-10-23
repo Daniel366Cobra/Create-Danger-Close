@@ -37,7 +37,8 @@ public final class CDCPonderScenes {
                         CDCBlocks.CORRELATOR, CDCBlocks.FUZE_COMPUTER)
                 .addStoryBoard("ballistic_computer", BallisticComputerScenes::ballisticComputer, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.CANNON_SERVO_INPUT)
-                .addStoryBoard("cannon_servo", CannonServoScenes::cannonServo, CDCPonderTags.FIRE_CONTROL);
+                .addStoryBoard("cannon_servo", CannonServoScenes::cannonServo, CDCPonderTags.FIRE_CONTROL)
+                .addStoryBoard("cannon_servo_swivel", CannonServoScenes::swivelTurret, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.RANGEFINDER_BEARING, CDCBlocks.RANGEFINDER_LENS, CDCBlocks.RANGEFINDER_EYEPIECE)
                 .addStoryBoard("rangefinder", RangefinderScenes::rangefinder, CDCPonderTags.FIRE_CONTROL)
                 .addStoryBoard("rangefinder", RangefinderScenes::rangefinderUpkeep, CDCPonderTags.DAMAGE_AND_MAINTENANCE);

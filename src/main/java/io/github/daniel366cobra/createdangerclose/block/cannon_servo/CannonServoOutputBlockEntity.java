@@ -1,8 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.block.cannon_servo;
 
-import com.simibubi.create.Create;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
-import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
@@ -10,7 +8,7 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.simulated_team.simulated.content.blocks.swivel_bearing.SwivelBearingBlock;
 import dev.simulated_team.simulated.content.blocks.swivel_bearing.SwivelBearingBlockEntity;
 import dev.simulated_team.simulated.content.blocks.swivel_bearing.link_block.SwivelBearingPlateBlock;
-import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.KineticLoad;
+import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.DriveTrain;
 import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairOutputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
@@ -54,10 +52,12 @@ import static io.github.daniel366cobra.createdangerclose.foundation.sensor.Servo
 public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         implements IHaveGoggleInformation, SensorReading.Provider {
 
-    private static final float KEEP_ALIVE_RPM = 1.0f;
+    // The least drive worth having: on a share below it the servo is starved, and crawls.
+    private static final float CRAWL_RPM = 1.0f;
     private static final int CLIENT_SYNC_INTERVAL_TICKS = 10;
 
-    private float desiredGeneratedSpeed = KEEP_ALIVE_RPM;
+    // Idle, it stands still: a mount is locked by its interface, a swivel by not turning.
+    private float desiredGeneratedSpeed = 0;
     private boolean initialSpeedApplied = false;
 
     // --- Drive ---
@@ -71,7 +71,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     // Below this commanded rate the mount is locked once on target.
     private static final float HOLD_RATE_DEG_PER_TICK = 0.01f;
 
-    // Interface RPM per generated RPM (sign: gearboxes, magnitude: gearing). NaN until measured.
+    // Interface (or swivel cog) RPM per generated RPM (sign: gearboxes, magnitude: gearing). NaN with nothing driven.
     private float transmissionRatio = Float.NaN;
 
     public static final class SlavedMount {
@@ -140,7 +140,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     private EquipmentHealth health;
     // --- Power (see updatePower) ---
     private static final int POWER_INTERVAL_TICKS = 5;
-    // su per RPM of drive (see KineticLoad).
+    // su per RPM of drive (see DriveTrain.perRpm).
     private float mountImpact;
     // RPM, and the share it comes from (su).
     private float rpmLimit = Float.MAX_VALUE;
@@ -192,7 +192,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
         pollCannonNetwork();
         dropUnloadedStress();
-        measureTransmission();
         if (level.getGameTime() % POWER_INTERVAL_TICKS == 0)
             updatePower();
         drivingLimited = false;
@@ -224,18 +223,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             return;
         unloadedDropped = true;
         getOrCreateNetwork().initFromTE(0, 0, 0);
-    }
-
-    /** The only source on its network, never fully stopped while powered: the mount's speed over ours is the transmission. */
-    private void measureTransmission() {
-        KineticBlockEntity driven = swivelCog != null ? swivelCog
-                : !slavedMounts.isEmpty() ? slavedMounts.get(0).iface : null;
-        if (driven == null) return;
-        float own = getSpeed();
-        float atMount = driven.getSpeed();
-        if (Math.abs(own) > 1e-3f && Math.abs(atMount) > 1e-3f) {
-            transmissionRatio = atMount / own;
-        }
     }
 
     private float getInputSpeed() {
@@ -289,8 +276,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
                 sm.iface.setSequencedAngleLimit(0);
             }
         }
-        // A swivel has no lock: any rotation winds it round, so it is held by standing still.
-        applyGeneratedSpeed(isPowered && swivel == null ? KEEP_ALIVE_RPM : 0f);
+        applyGeneratedSpeed(0);
     }
 
     // --- Swivel bearing (turret yaw) ---
@@ -326,15 +312,18 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             }
             return;
         }
+        // Disengaged (a clutch): nothing to turn.
+        if (Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f) {
+            applyGeneratedSpeed(0);
+            return;
+        }
         float facingSign = swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxisDirection()
                 == Direction.AxisDirection.POSITIVE ? 1 : -1;
         // No faster than a cannon mount traverses at full drive.
         float maxTraverse = MOUNT_DEG_PER_TICK_PER_RPM * maxDriveRpm();
         float angleRate = Mth.clamp(rate + CORRECTION_GAIN * error, -maxTraverse, maxTraverse);
         float cogRpm = angleRate / (SWIVEL_DEG_PER_TICK_PER_RPM * facingSign);
-        // Until the cog has turned once the transmission is unknown: start as if direct, then correct.
-        float ratio = Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f ? 1 : transmissionRatio;
-        applyGeneratedSpeed(Mth.clamp(cogRpm / ratio, -maxDriveRpm(), maxDriveRpm()));
+        applyGeneratedSpeed(Mth.clamp(cogRpm / transmissionRatio, -maxDriveRpm(), maxDriveRpm()));
     }
 
     /** The turret's actual angle from the hull and turret poses, as Simulated does; else its target angle. */
@@ -367,7 +356,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
      * The limit drops at once and rises gently.
      */
     private void updatePower() {
-        mountImpact = KineticLoad.perRpmOf(this, mountImpact);
         CannonServoInputBlockEntity input = getAdjacentInput();
         if (input == null || !input.hasNetwork() || mountImpact <= 0) {
             rpmLimit = Float.MAX_VALUE;
@@ -377,14 +365,13 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         }
         powerShare = fairShare(input);
         float shareRpm = powerShare / mountImpact;
-        // Too little even to hold the mount: overstressed until the share covers it with a margin.
-        overstressHold = shareRpm < (overstressHold ? KEEP_ALIVE_RPM * RESUME_FACTOR : KEEP_ALIVE_RPM);
+        // Too little even to crawl: overstressed until the share covers it with a margin.
+        overstressHold = shareRpm < (overstressHold ? CRAWL_RPM * RESUME_FACTOR : CRAWL_RPM);
         rpmLimit = rampedLimit(rpmLimit, shareRpm);
     }
 
     private void commitDraw() {
         // Every tick: the speed may just have changed, and the capacity must follow at once.
-        mountImpact = KineticLoad.perRpmOf(this, mountImpact);
         boolean overstressed = overstressHold && Math.abs(desiredGeneratedSpeed) > 1e-3f;
         float load = mountImpact * Math.abs(desiredGeneratedSpeed);
         // Overstressed, the cannon side does no work: the battle network pays nothing.
@@ -401,18 +388,18 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         requestedRpm = 0;
     }
 
-    /** Driving, not just holding (for sharing the battle network's power). */
+    /** Driving faster than a crawl (for sharing the battle network's power). */
     @Override
     public boolean isPassingPower() {
-        return Math.abs(desiredGeneratedSpeed) > KEEP_ALIVE_RPM + 1e-3f;
+        return Math.abs(desiredGeneratedSpeed) > CRAWL_RPM + 1e-3f;
     }
 
     private void applyGeneratedSpeed(float rpm) {
-        // Capped by the power share; too little to hold: keep-alive speed, overstressed (see commitDraw).
+        // Capped by the power share; too little even for that: a crawl, overstressed (see commitDraw).
         requestedRpm = Math.max(requestedRpm, Math.abs(rpm));
         if (overstressHold && rpm != 0) {
             drivingLimited = true;
-            rpm = Math.copySign(Math.min(Math.abs(rpm), KEEP_ALIVE_RPM), rpm);
+            rpm = Math.copySign(Math.min(Math.abs(rpm), CRAWL_RPM), rpm);
         } else if (Math.abs(rpm) > rpmLimit) {
             drivingLimited = true;
             rpm = Math.copySign(rpmLimit, rpm);
@@ -471,11 +458,11 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             if (Math.abs(error) > SNAP_EPSILON_DEG && sm.mount != null)
                 snapMount(sm, sm.currentAngle + error, pitch);
             sm.iface.setSequencedAngleLimit(0);
-            applyGeneratedSpeed(KEEP_ALIVE_RPM);
+            applyGeneratedSpeed(0);
             return;
         }
 
-        // Not measured yet (keep-alive provides it), or disengaged.
+        // Disengaged (a clutch): nothing to turn.
         if (Float.isNaN(transmissionRatio) || Math.abs(transmissionRatio) < 1e-3f) {
             applyIdleControl();
             return;
@@ -501,37 +488,33 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         sm.mount.sendData();
     }
 
-    // --- Network polling (server only) ---
+    // --- Drive train polling (server only) ---
 
+    /** What the output side drives, traced whether or not it turns. One mount axis or one swivel, else invalid. */
     private void pollCannonNetwork() {
-        KineticNetwork network = Create.TORQUE_PROPAGATOR.getOrCreateNetworkFor(this);
-        // A still servo generates nothing and Create drops the swivel cog from our network: keep it until we turn it again.
-        if (swivel != null && !swivel.isRemoved() && Math.abs(desiredGeneratedSpeed) < 1e-4f
-                && level.getBlockEntity(swivel.getBlockPos()) == swivel) {
-            detectedAxis = ServoAxis.SWIVEL;
-            slavedMounts.clear();
-            return;
-        }
+        List<DriveTrain.Link> train = DriveTrain.trace(this);
+        mountImpact = DriveTrain.perRpm(train);
         swivel = null;
         swivelCog = null;
-        if (network == null) {
-            slavedMounts.clear();
-            detectedAxis = ServoAxis.NONE;
-            return;
-        }
+        transmissionRatio = Float.NaN;
 
         List<SlavedMount> newMounts = new ArrayList<>();
+        float mountRatio = Float.NaN, swivelRatio = Float.NaN;
         ServoAxis axisThisPoll = ServoAxis.NONE;
+        boolean mixedAxes = false;
         int swivels = 0;
 
-        for (KineticBlockEntity member : network.members.keySet()) {
+        for (DriveTrain.Link link : train) {
+            KineticBlockEntity member = link.be();
             if (member == this) continue;
-            // A swivel bearing's cog: this servo turns a turret.
+            // A swivel bearing's cog: this servo turns a turret. The first is reported even when invalid.
             if (member instanceof SwivelBearingBlockEntity.SwivelBearingCogwheelBlockEntity cog
                     && cog.getParentBlockEntity() instanceof SwivelBearingBlockEntity bearing) {
-                swivels++;
-                swivel = bearing;
-                swivelCog = cog;
+                if (swivels++ == 0) {
+                    swivel = bearing;
+                    swivelCog = cog;
+                    swivelRatio = link.ratio();
+                }
                 continue;
             }
             if (!(member instanceof CannonMountInterfaceBlockEntity iface)) continue;
@@ -548,9 +531,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             if (axisThisPoll == ServoAxis.NONE) {
                 axisThisPoll = axis;
             } else if (axisThisPoll != axis) {
-                detectedAxis = ServoAxis.INVALID;
-                slavedMounts.clear();
-                return;
+                mixedAxes = true;
             }
 
             if (!(level.getBlockEntity(iface.getBlockPos()) instanceof CannonMountBlockEntity mount)) {
@@ -560,25 +541,25 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             SlavedMount sm = new SlavedMount(iface.getBlockPos(), mount, iface, axis);
             readMountState(sm);
             newMounts.add(sm);
+            mountRatio = link.ratio();
         }
 
-        if (newMounts.size() > 1) {
-            detectedAxis = ServoAxis.INVALID;
-            slavedMounts.clear();
-            return;
-        }
-
+        slavedMounts.clear();
         if (swivels > 0) {
-            // A swivel alone on the network; with anything else one servo would drive two things.
-            detectedAxis = swivels == 1 && axisThisPoll == ServoAxis.NONE
-                    ? ServoAxis.SWIVEL : ServoAxis.INVALID;
-            slavedMounts.clear();
+            // A swivel alone; with anything else one servo would drive two things.
+            detectedAxis = swivels == 1 && axisThisPoll == ServoAxis.NONE ? ServoAxis.SWIVEL : ServoAxis.INVALID;
+            if (detectedAxis == ServoAxis.SWIVEL)
+                transmissionRatio = swivelRatio;
             return;
         }
-
-        this.detectedAxis = axisThisPoll;
-        this.slavedMounts.clear();
-        this.slavedMounts.addAll(newMounts);
+        if (mixedAxes || newMounts.size() > 1) {
+            detectedAxis = ServoAxis.INVALID;
+            return;
+        }
+        detectedAxis = axisThisPoll;
+        slavedMounts.addAll(newMounts);
+        if (!newMounts.isEmpty())
+            transmissionRatio = mountRatio;
     }
 
     private void readMountState(SlavedMount sm) {

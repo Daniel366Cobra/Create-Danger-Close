@@ -38,8 +38,6 @@ public final class AutocannonControlScenes {
     private static final int FIRE_TICKS = 1, RUN_OUT_TICKS = 3, RECOIL_ANIMATION_TICKS = ROUND_TICKS;
     private static final double RECOIL_BLOCKS = 0.5;
     private static final int TRIGGER_HOLD_TICKS = 40;
-    // Multiple of the 1 RPM keep-alive.
-    private static final float TRAINING_SPEED_FACTOR = 32;
     private static final int FUZE_DEMO_NOTCHES = 3;
 
     private static final BlockPos CANNON_PIVOT = new BlockPos(5, 3, 0);
@@ -73,11 +71,13 @@ public final class AutocannonControlScenes {
         Selection computerStack = util.select().position(computer)
                 .add(util.select().fromTo(5, 2, 3, 5, 2, 4));
         Selection servos = util.select().fromTo(0, 1, 2, 1, 1, 3);
-        // Servo outputs to the mount (traverse gearing in the floor layer).
-        Selection cannonNetworks = util.select().fromTo(0, 1, 0, 0, 1, 2)
-                .add(util.select().fromTo(1, 1, 1, 5, 1, 1))
-                .add(util.select().position(1, 1, 2))
-                .add(util.select().fromTo(0, 0, 0, 5, 0, 0));
+        // Servo outputs to the mount (traverse gearing in the floor layer), saved still.
+        Selection mountSelection = util.select().position(mount);
+        Drives drives = new Drives(
+                ServoDrive.yaw(util.select().fromTo(1, 0, 0, 5, 0, 0),
+                        util.select().fromTo(0, 1, 0, 0, 1, 2).add(util.select().position(0, 0, 0)), mountSelection),
+                ServoDrive.pitch(util.select().fromTo(1, 1, 1, 1, 1, 2),
+                        util.select().fromTo(2, 1, 1, 5, 1, 1), mountSelection));
         Selection gunDrives = util.select().fromTo(0, 1, 0, 0, 1, 1)
                 .add(util.select().fromTo(1, 1, 1, 5, 1, 1));
         Selection mountAndFeed = util.select().position(mount).add(util.select().position(4, 1, 0));
@@ -141,7 +141,7 @@ public final class AutocannonControlScenes {
         scene.idle(20);
         scene.world().rotateBearing(bearing, RANGEFINDER_LAY_DEG, LAY_TICKS);
         scene.world().rotateSection(tube, 0, RANGEFINDER_LAY_DEG, 0, LAY_TICKS);
-        train(scene, cannonNetworks, mount, gun, GUN_LAY_TRAVERSE_DEG, GUN_LAY_ELEVATION_DEG, LAY_TICKS, null);
+        train(scene, drives, mount, gun, GUN_LAY_TRAVERSE_DEG, GUN_LAY_ELEVATION_DEG, LAY_TICKS, null);
         showGunsReady(scene, console, 1);
         scene.idle(PonderTiming.AFTER_LONG_TEXT - 20 - LAY_TICKS);
 
@@ -149,7 +149,7 @@ public final class AutocannonControlScenes {
                 .pointAt(util.vector().topOf(bearing))
                 .placeNearTarget()
                 .text("As the target moves, the guns follow it with the rangefinder");
-        track(scene, bearing, tube, cannonNetworks, mount, gun, FIRST_PASS_DEG, FIRST_PASS_ELEVATION_DEG,
+        track(scene, bearing, tube, drives, mount, gun, FIRST_PASS_DEG, FIRST_PASS_ELEVATION_DEG,
                 FIRST_PASS_TICKS, null);
         scene.idle(PonderTiming.AFTER_TEXT - FIRST_PASS_TICKS);
 
@@ -184,7 +184,7 @@ public final class AutocannonControlScenes {
                 .pointAt(muzzle(util, aim))
                 .placeNearTarget()
                 .text("In AUTO, the autocannons fire by themselves whenever they are on a target being ranged");
-        track(scene, bearing, tube, cannonNetworks, mount, gun, AUTO_PASS_DEG, AUTO_PASS_ELEVATION_DEG,
+        track(scene, bearing, tube, drives, mount, gun, AUTO_PASS_DEG, AUTO_PASS_ELEVATION_DEG,
                 AUTO_PASS_TICKS, util);
         scene.idle(Math.max(0, PonderTiming.AFTER_LONG_TEXT - AUTO_PASS_TICKS));
 
@@ -193,7 +193,7 @@ public final class AutocannonControlScenes {
                 .pointAt(util.vector().blockSurface(eyepiece, Direction.NORTH))
                 .placeNearTarget()
                 .text("Once the rangefinder stops ranging, they hold their fire: a held target drifts");
-        track(scene, bearing, tube, cannonNetworks, mount, gun, CEASE_PASS_DEG, 0, CEASE_PASS_TICKS, null);
+        track(scene, bearing, tube, drives, mount, gun, CEASE_PASS_DEG, 0, CEASE_PASS_TICKS, null);
         scene.idle(PonderTiming.AFTER_LONG_TEXT - CEASE_PASS_TICKS);
 
         // Map table targets count as live: they fire on those too.
@@ -264,20 +264,21 @@ public final class AutocannonControlScenes {
 
     /** Turns rangefinder and gun together (left, seen from above), firing if {@code firingUtil} is given. */
     private static void track(CreateSceneBuilder scene, BlockPos bearing, ElementLink<WorldSectionElement> tube,
-                              Selection cannonNetworks, BlockPos mount, Gun gun,
+                              Drives drives, BlockPos mount, Gun gun,
                               float turnDeg, float elevationDeg, int ticks,
                               SceneBuildingUtil firingUtil) {
         scene.world().rotateBearing(bearing, turnDeg, ticks);
         scene.world().rotateSection(tube, 0, turnDeg, 0, ticks);
-        train(scene, cannonNetworks, mount, gun, turnDeg, elevationDeg, ticks, firingUtil);
+        train(scene, drives, mount, gun, turnDeg, elevationDeg, ticks, firingUtil);
     }
 
-    /** Traverse (left) and elevate, running the cannon networks fast; fires every {@link #ROUND_TICKS} if {@code firingUtil} is given. */
-    private static void train(CreateSceneBuilder scene, Selection cannonNetworks, BlockPos mount, Gun gun,
+    /** Traverse (left) and elevate, running the moving axes' drives; fires every {@link #ROUND_TICKS} if {@code firingUtil} is given. */
+    private static void train(CreateSceneBuilder scene, Drives drives, BlockPos mount, Gun gun,
                               float traverseDeg, float elevationDeg, int ticks,
                               SceneBuildingUtil firingUtil) {
         CannonAim aim = gun.aim();
-        scene.world().multiplyKineticSpeed(cannonNetworks, TRAINING_SPEED_FACTOR);
+        drives.yaw().lay(scene, traverseDeg);
+        drives.pitch().lay(scene, elevationDeg);
         // CBC's mount yaw grows the other way round to Ponder's rotation.
         if (traverseDeg != 0)
             scene.addInstruction(CBCAnimateBlockEntityInstruction.cannonMountYaw(mount, -traverseDeg, ticks));
@@ -294,8 +295,11 @@ public final class AutocannonControlScenes {
                     aim.turn(traverseDeg * step / ticks, elevationDeg * step / ticks, step - FIRE_TICKS);
             }
         }
-        scene.world().multiplyKineticSpeed(cannonNetworks, 1 / TRAINING_SPEED_FACTOR);
+        drives.yaw().stop(scene);
+        drives.pitch().stop(scene);
     }
+
+    private record Drives(ServoDrive yaw, ServoDrive pitch) {}
 
     private record Gun(CannonAim aim, ElementLink<WorldSectionElement> barrel) {}
 
