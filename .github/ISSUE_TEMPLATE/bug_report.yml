@@ -1,0 +1,75 @@
+name: Bug report
+description: "Something in Create: Danger Close doesn't work as it should."
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The build and what you did with it. Screenshots or a schematic help a lot.
+      placeholder: |
+        1. Place a ballistic computer...
+        2. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - On the ground
+        - On a ship (Sable/Aeronautics)
+        - Both
+    validations:
+      required: true
+
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game
+      options:
+        - Singleplayer
+        - Multiplayer (dedicated server)
+        - Multiplayer (LAN or hosted from a client)
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: As shown in the mods list.
+      value: |
+        Danger Close:
+        NeoForge:
+        Create:
+        Create Big Cannons:
+        Simulated:
+        Sable:
+    validations:
+      required: true
+
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other mods
+      description: The modpack and its version, or the other mods you run. Renderer mods (Sodium, Iris) matter for visual bugs.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        Upload logs/latest.log (and the crash report, if the game crashed) to https://mclo.gs and paste the
+        link here, or drag the files into this box. For multiplayer bugs, the server's log too.
+    validations:
+      required: true
