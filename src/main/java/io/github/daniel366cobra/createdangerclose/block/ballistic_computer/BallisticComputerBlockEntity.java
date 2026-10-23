@@ -1,10 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.block.ballistic_computer;
 
 import com.simibubi.create.Create;
-import java.util.Comparator;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.HashMap;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
@@ -15,10 +11,14 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonFiring;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.config.CServer;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
+import io.github.daniel366cobra.createdangerclose.foundation.advancement.DelayedTriggers;
 import io.github.daniel366cobra.createdangerclose.foundation.ballistics.BallisticSolver;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ComputerServo;
@@ -26,34 +26,30 @@ import io.github.daniel366cobra.createdangerclose.foundation.sensor.FireSolution
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoStatus;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.core.Direction;
-import net.createmod.catnip.animation.LerpedFloat;
-import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
-import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
-import net.minecraft.world.phys.Vec3;
-import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity.FireControlStatus;
 import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
-import io.github.daniel366cobra.createdangerclose.foundation.advancement.DelayedTriggers;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.StructureTags;
+import net.createmod.catnip.animation.LerpedFloat;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.util.Mth;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.StructureTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.maps.MapId;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaterniond;
 import org.joml.Quaterniondc;
@@ -62,8 +58,12 @@ import org.joml.Vector3dc;
 import rbasamoyai.createbigcannons.config.CBCConfigs;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,17 +71,17 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 
-import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.PITCH;
-import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.YAW;
 import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.FIXED_GUN;
+import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.PITCH;
 import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.SWIVEL;
+import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.YAW;
 
 /**
  * Core of the fire control computer. A facing Battle Network Interface drives each poll
  * ({@link #pollFrom}); when it stops, the computer goes idle.
  *
- * <p>Sensors only gate capabilities. Orientation, position and velocity come from the Sable
- * pose; the only sensor value read is a navigation table's target.
+ * <p>Sensors only gate capabilities: orientation, position and velocity come from the Sable pose.
+ * Targets come from rangefinders, map tables and navigation tables.
  */
 public class BallisticComputerBlockEntity extends SmartBlockEntity
         implements IHaveGoggleInformation {
@@ -208,6 +208,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     // For map tables: the last poll's rangefinder fixes and gun ranges.
     private BattlePlot plot = BattlePlot.EMPTY;
     private List<BattlePlot.RangefinderFix> plotFixes = List.of();
+    @Nullable private BattlePlot.MergedFix plotMerged;
 
     private final Map<BlockPos, BallisticSolver.Result> lastPitchResults = new HashMap<>();
     // Each console lists only its own guns.
@@ -364,7 +365,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         for (BlockPos mountPos : dangerCloseGuns.keySet())
             danger |= !isAutocannon(mountPos) && isOnTarget(mountPos);
         long now = level.getGameTime();
-        if (danger && dangerConfig.allowDangerClose.get() && (dangerArmedTick < 0
+        if (danger && dangerConfig.confirmDangerClose.get() && (dangerArmedTick < 0
                 || now - dangerArmedTick > dangerConfig.confirmSeconds.get() * 20)) {
             dangerArmedTick = now;
             return new SalvoResult(0, bigCannonCount(), true);
@@ -421,16 +422,22 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /** "Turret C ×2, Bow-2, +3": counted per name, the overflow as a number. */
     private static String listNames(Map<String, Integer> counts) {
         List<String> parts = new ArrayList<>();
+        int more = countNames(counts, MAX_SALVO_NAMES, parts);
+        if (more > 0)
+            parts.add("+" + more);
+        return String.join(", ", parts);
+    }
+
+    /** "Turret C ×2" per name, up to {@code max} names into {@code parts}; returns how many guns the rest name. */
+    private static int countNames(Map<String, Integer> counts, int max, List<String> parts) {
         int more = 0;
         for (Map.Entry<String, Integer> entry : counts.entrySet()) {
-            if (parts.size() < MAX_SALVO_NAMES)
+            if (parts.size() < max)
                 parts.add(entry.getValue() > 1 ? entry.getKey() + " ×" + entry.getValue() : entry.getKey());
             else
                 more += entry.getValue();
         }
-        if (more > 0)
-            parts.add("+" + more);
-        return String.join(", ", parts);
+        return more;
     }
 
     /** The guns that would fire right now (as fired) and those that would hold (server). */
@@ -464,7 +471,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (!(level instanceof ServerLevel serverLevel))
             return 0;
         autocannonOrderTick = level.getGameTime();
-        boolean checkDanger = CDCConfig.server().dangerClose.allowDangerClose.get() && !dangerCloseConfirmed;
+        boolean checkDanger = CDCConfig.server().dangerClose.confirmDangerClose.get() && !dangerCloseConfirmed;
         List<BlockPos> firing = new ArrayList<>();
         for (BlockPos mountPos : barrels.keySet()) {
             if (!isAutocannon(mountPos))
@@ -510,8 +517,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return false;
         if (targetSource != TargetSource.RANGEFINDER)
             return true;
-        float rpm = Math.max(1, panelNetworkRpm);
-        long window = 2L * Math.round(640f / rpm) + 5;
+        long window = 2L * NetworkInterfaceBlockEntity.pollIntervalTicks(Math.max(1, panelNetworkRpm)) + 5;
         return level.getGameTime() - targetSampleTick <= window;
     }
 
@@ -633,7 +639,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         gimbalCount = navHeadingCount = altitudeCount = 0;
         Arrays.fill(velocityAxisCounts, 0);
 
-
         hasTarget = false;
         targetSource = TargetSource.NONE;
         targetX = targetY = targetZ = 0;
@@ -645,6 +650,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         plot = BattlePlot.EMPTY;
         plotFixes = List.of();
+        plotMerged = null;
     }
 
     /** The rangefinder fixes and gun ranges of the last poll, for map tables. */
@@ -806,17 +812,17 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 }
             }
             if (!(member instanceof SensorReading.Provider provider)) continue;
+            SensorReading reading = provider.getSensorReading();
 
             // A jostled interface reading attitude or driving the computer skews every aim too.
             if (member instanceof NetworkInterfaceBlockEntity networkInterface
-                    && (provider.getSensorReading() instanceof SensorReading.Gimbal
-                    || provider.getSensorReading() instanceof SensorReading.NavHeading
-                    || provider.getSensorReading() instanceof SensorReading.Computer)) {
+                    && (reading instanceof SensorReading.Gimbal || reading instanceof SensorReading.NavHeading
+                    || reading instanceof SensorReading.Computer)) {
                 bankBiasYaw += networkInterface.getHealth().biasYaw();
                 bankBiasPitch += networkInterface.getHealth().biasPitch();
             }
 
-            switch (provider.getSensorReading()) {
+            switch (reading) {
                 case SensorReading.Gimbal ignored -> gimbalCount++;
                 case SensorReading.NavHeading ignored -> navHeadingCount++;
                 case SensorReading.NavTarget t -> {
@@ -859,17 +865,20 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             targetSigma = mapTarget.sigma();
         }
 
+        Set<BlockPos> merged = useRangefinderTargets(rangefinderReadings);
         List<BattlePlot.RangefinderFix> fixes = new ArrayList<>();
         for (Map.Entry<BlockPos, SensorReading.Rangefinder> entry : rangefinderReadings.entrySet()) {
             Vector3d position = extrapolate(entry.getValue());
             // The line of sight starts at the rangefinder bearing, wherever its ship is.
             Vec3 origin = RangefinderOptics.toWorld(level, Vec3.atCenterOf(entry.getKey()));
+            boolean inMerge = !merged.isEmpty()
+                    && (merged.contains(entry.getKey()) || entry.getKey().equals(directingRangefinder));
             fixes.add(new BattlePlot.RangefinderFix(position.x, position.y, position.z,
-                    entry.getValue().rangeSigma(), origin.x, origin.z));
+                    entry.getValue().rangeSigma(), origin.x, origin.z, inMerge));
         }
         plotFixes = fixes;
-
-        Set<BlockPos> merged = useRangefinderTargets(rangefinderReadings);
+        // Merged rangefinders make one fix, tighter than any of theirs.
+        plotMerged = merged.isEmpty() ? null : new BattlePlot.MergedFix(targetX, targetZ, targetSigma);
         for (RangefinderBearingBlockEntity rangefinder : rangefinders) {
             BlockPos pos = rangefinder.getBlockPos();
             rangefinder.setFireControlStatus(directingRangefinder == null ? FireControlStatus.NONE
@@ -1012,7 +1021,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     // --- Solving ---
 
-
     /** A gun the computer aims: a cannon mount with a pitch servo, or a fixed mount read by an interface. */
     private record Gun(ServoStatus.MountSnapshot mount, ServoStatus status, ComputerServo servo) {
         BlockPos pos() { return mount.mountPos(); }
@@ -1126,7 +1134,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         // Danger close: which guns would land near our own side (their pivots join the list).
         List<SubLevel> hulls = new ArrayList<>();
-        SubLevel ownHull = level != null ? Sable.HELPER.getContaining(level, worldPosition) : null;
+        SubLevel ownHull = Sable.HELPER.getContaining(level, worldPosition);
         if (ownHull != null)
             hulls.add(ownHull);
         for (Gun gun : guns) {
@@ -1162,7 +1170,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             if (range != null)
                 ranges.add(range);
         }
-        plot = plotFixes.isEmpty() && ranges.isEmpty() ? BattlePlot.EMPTY : new BattlePlot(plotFixes, ranges);
+        plot = plotFixes.isEmpty() && ranges.isEmpty() ? BattlePlot.EMPTY : new BattlePlot(plotFixes, ranges, plotMerged);
     }
 
     /**
@@ -1237,7 +1245,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 if (joint.driven() && directorThisPoll.containsKey(joint.swivel().swivelPos())
                         && !gun.pos().equals(directorThisPoll.get(joint.swivel().swivelPos())))
                     passenger = true;
-            if (passenger && hasTarget)
+            if (passenger)
                 passengerRange.put(gun.pos(), launchPivot(gun.mount(), subLevelOf(gun.mount()))
                         .distance(targetX, targetY, targetZ));
         }
@@ -1423,11 +1431,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 Mth.clamp(point.z, zone.minZ(), zone.maxZ() + 1));
     }
 
-    /** Whether some gun's next shell would land near our own side (last poll). */
-    public boolean isDangerClose() {
-        return !dangerCloseGuns.isEmpty();
-    }
-
     /** Among the guns a console orders that are on target, the gravest reason to confirm; null if none. */
     @Nullable
     public Danger dangerOnTarget(boolean autocannons) {
@@ -1449,7 +1452,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         return Mth.wrapDegrees(tilts(joint) ? sense * angle : -angle);
     }
 
-    /** The bearings carrying this gun, from the one under it down to the root. */
     /**
      * Each gun shows the name set closest to it: its pitch servo's, its yaw servo's, then the swivels'
      * carrying it, innermost first. A named servo none of its guns show learns what they show instead.
@@ -1495,6 +1497,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             servo.receiveShownName(shown.contains(servo) ? null : shownInstead.get(servo));
     }
 
+    /** The bearings carrying this gun, from the one under it down to the root. */
     private List<Joint> chainOf(ServoStatus.MountSnapshot mount) {
         List<Joint> chain = new ArrayList<>();
         SubLevel subLevel = subLevelOf(mount);
@@ -1606,9 +1609,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : level.getSeaLevel();
         }
 
-        int flightTicks = mount.maxFlightTicks() > 0 ? mount.maxFlightTicks() : Integer.MAX_VALUE;
+        int lifetime = mount.maxFlightTicks() > 0 ? mount.maxFlightTicks() : Integer.MAX_VALUE;
         double radius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
-                Math.min(45, maxElevation), referenceY - muzzleWorld.y, flightTicks);
+                Math.min(45, maxElevation), referenceY - muzzleWorld.y, lifetime);
         if (radius <= 0)
             return null;
 
@@ -2090,11 +2093,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             this.autocannonReports.clear();
             this.reportNames.clear();
             ListTag results = compound.getList("PitchResults", Tag.TAG_COMPOUND);
+            BallisticSolver.Result.Reason[] reasons = BallisticSolver.Result.Reason.values();
             for (int i = 0; i < results.size(); i++) {
                 CompoundTag t = results.getCompound(i);
                 BlockPos pos = BlockPos.of(t.getLong("Pos"));
-                BallisticSolver.Result.Reason reason =
-                        BallisticSolver.Result.Reason.values()[t.getInt("Reason")];
+                BallisticSolver.Result.Reason reason = reasons[Mth.clamp(t.getInt("Reason"), 0, reasons.length - 1)];
                 BallisticSolver.Result r = t.getBoolean("Valid")
                         ? new BallisticSolver.Result(true, reason, t.getDouble("Pitch"), 0,
                         t.getInt("Fuze"), 0, t.getInt("Fuze"))
@@ -2289,8 +2292,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     .style(ChatFormatting.GRAY)
                     .forGoggles(tooltip);
 
-            if (hasTargetVelocity) {
-                double speed = Math.sqrt(targetVelX * targetVelX + targetVelY * targetVelY + targetVelZ * targetVelZ) * 20;
+            if (isTrackingTarget()) {
+                double speed = getTargetSpeed() * 20;
                 CDCLang.builder()
                         .add(Component.translatable("createdangerclose.ballistic_computer.target_speed"))
                         .add(Component.literal(": ").withStyle(ChatFormatting.RESET))
@@ -2373,13 +2376,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return List.of();
 
         List<String> parts = new ArrayList<>();
-        int more = 0;
-        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
-            if (parts.size() < MAX_LISTED_NAMES)
-                parts.add(entry.getValue() > 1 ? entry.getKey() + " ×" + entry.getValue() : entry.getKey());
-            else
-                more += entry.getValue();
-        }
+        int more = countNames(counts, MAX_LISTED_NAMES, parts);
         if (more > 0)
             parts.add(Component.translatable("createdangerclose.ballistic_computer.more_guns", more).getString());
         if (unnamed > 0)

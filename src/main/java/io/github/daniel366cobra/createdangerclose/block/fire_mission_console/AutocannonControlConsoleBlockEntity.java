@@ -122,7 +122,7 @@ public class AutocannonControlConsoleBlockEntity extends FireMissionConsoleBlock
         gunner = player.getUUID();
         creditPending = true;
         CServer.DangerClose config = CDCConfig.server().dangerClose;
-        if (config.allowDangerClose.get() && computer.isAutocannonDangerClose()) {
+        if (config.confirmDangerClose.get() && computer.isAutocannonDangerClose()) {
             if (dangerArmedTick >= 0 && now - dangerArmedTick <= config.confirmSeconds.get() * 20) {
                 dangerConfirmed = true;
                 dangerArmedTick = -1;

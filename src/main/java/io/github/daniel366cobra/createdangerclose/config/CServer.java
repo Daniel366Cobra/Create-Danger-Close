@@ -113,7 +113,7 @@ public class CServer extends CDCConfigBase {
     }
 
     public static class DangerClose extends CDCConfigBase {
-        public final ConfigBool allowDangerClose = b(true, "allowDangerClose",
+        public final ConfigBool confirmDangerClose = b(true, "confirmDangerClose",
                 "Whether a salvo that would land near your own guns, spotters or ships waits for a",
                 "second press of the fire button to confirm it.");
         public final ConfigDouble confirmSeconds = d(5, 1, 30, "confirmSeconds",

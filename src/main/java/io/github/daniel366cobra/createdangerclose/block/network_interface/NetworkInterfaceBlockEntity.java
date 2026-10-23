@@ -69,6 +69,14 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
     private int linkedTicks = 0;
     private boolean isPowered = false;
 
+    // Ticks between polls times RPM: every 20 ticks at the 32 RPM floor.
+    private static final float POLL_TICKS_RPM = 640;
+
+    /** How often devices on the battle network work at its speed (positive RPM), ticks. */
+    public static int pollIntervalTicks(float rpm) {
+        return Math.max(1, Math.round(POLL_TICKS_RPM / rpm));
+    }
+
     public NetworkInterfaceBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
     }
@@ -112,7 +120,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
             return;
         }
 
-        int pollInterval = (int) Math.max(1, 640f / currentSpeed);
+        int pollInterval = pollIntervalTicks(currentSpeed);
 
         if ((level.getGameTime() % pollInterval == 0)) {
             pollSensor();

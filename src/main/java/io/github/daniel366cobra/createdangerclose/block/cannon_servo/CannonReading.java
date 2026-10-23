@@ -18,22 +18,22 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
 import rbasamoyai.createbigcannons.cannon_control.contraption.AbstractMountedCannonContraption;
-import rbasamoyai.createbigcannons.cannon_control.contraption.MountedBigCannonContraption;
 import rbasamoyai.createbigcannons.cannon_control.contraption.MountedAutocannonContraption;
+import rbasamoyai.createbigcannons.cannon_control.contraption.MountedBigCannonContraption;
+import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
+import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
 import rbasamoyai.createbigcannons.cannons.autocannon.AutocannonBlock;
 import rbasamoyai.createbigcannons.cannons.autocannon.breech.AbstractAutocannonBreechBlockEntity;
 import rbasamoyai.createbigcannons.cannons.autocannon.material.AutocannonMaterial;
 import rbasamoyai.createbigcannons.cannons.autocannon.material.AutocannonMaterialProperties;
-import rbasamoyai.createbigcannons.munitions.autocannon.AutocannonAmmoItem;
-import rbasamoyai.createbigcannons.munitions.autocannon.AutocannonCartridgeItem;
-import rbasamoyai.createbigcannons.munitions.autocannon.ammo_container.AutocannonAmmoContainerItem;
-import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
-import rbasamoyai.createbigcannons.cannon_control.fixed_cannon_mount.FixedCannonMountBlockEntity;
-import rbasamoyai.createbigcannons.cannons.big_cannons.BigCannonBlock;
 import rbasamoyai.createbigcannons.cannons.big_cannons.BigCannonBehavior;
+import rbasamoyai.createbigcannons.cannons.big_cannons.BigCannonBlock;
 import rbasamoyai.createbigcannons.cannons.big_cannons.IBigCannonBlockEntity;
 import rbasamoyai.createbigcannons.index.CBCDataComponents;
 import rbasamoyai.createbigcannons.index.CBCMunitionPropertiesHandlers;
+import rbasamoyai.createbigcannons.munitions.autocannon.AutocannonAmmoItem;
+import rbasamoyai.createbigcannons.munitions.autocannon.AutocannonCartridgeItem;
+import rbasamoyai.createbigcannons.munitions.autocannon.ammo_container.AutocannonAmmoContainerItem;
 import rbasamoyai.createbigcannons.munitions.big_cannon.BigCannonMunitionBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.FuzedProjectileBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.ProjectileBlock;
@@ -45,6 +45,8 @@ import rbasamoyai.createbigcannons.munitions.fuzes.DelayedInertiaFuzeItem;
 import rbasamoyai.createbigcannons.munitions.fuzes.TimedFuzeItem;
 
 import java.util.List;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.PITCH;
 
@@ -128,75 +130,42 @@ public final class CannonReading {
         }
     }
 
+    // Each kind of shell has its own handler; a type it has no entry for reads as zeroed defaults.
+    private static final List<Function<EntityType<?>, BallisticPropertiesComponent>> BALLISTICS = List.of(
+            t -> CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE.getPropertiesOf(t).ballistics(),
+            t -> CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE.getPropertiesOf(t).ballistics(),
+            t -> CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL.getPropertiesOf(t).ballistics(),
+            t -> CBCMunitionPropertiesHandlers.FLUID_SHELL.getPropertiesOf(t).ballistics(),
+            t -> CBCMunitionPropertiesHandlers.SMOKE_SHELL.getPropertiesOf(t).ballistics(),
+            t -> CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL.getPropertiesOf(t).ballistics(),
+            t -> CBCMunitionPropertiesHandlers.MORTAR_STONE.getPropertiesOf(t).ballistics());
+    private static final List<Function<EntityType<?>, BigCannonProjectilePropertiesComponent>> BIG_CANNON_PROPERTIES = List.of(
+            t -> CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE.getPropertiesOf(t).bigCannonProperties(),
+            t -> CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE.getPropertiesOf(t).bigCannonProperties(),
+            t -> CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL.getPropertiesOf(t).bigCannonProperties(),
+            t -> CBCMunitionPropertiesHandlers.BAG_OF_GRAPESHOT.getPropertiesOf(t).bigCannonProperties(),
+            t -> CBCMunitionPropertiesHandlers.FLUID_SHELL.getPropertiesOf(t).bigCannonProperties(),
+            t -> CBCMunitionPropertiesHandlers.SMOKE_SHELL.getPropertiesOf(t).bigCannonProperties(),
+            t -> CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL.getPropertiesOf(t).bigCannonProperties(),
+            t -> CBCMunitionPropertiesHandlers.MORTAR_STONE.getPropertiesOf(t).bigCannonProperties());
+
+    /** gravity() == 0 means no entry (every shipped shell's is negative); with none, the zeroed default. */
     static BallisticPropertiesComponent resolveBallistics(EntityType<?> projectileType) {
-        // HE, fluid, smoke. gravity() == 0 means no entry for this type (every shipped shell's is negative).
-        BallisticPropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).ballistics();
-        if (common.gravity() != 0) return common;
-
-        BallisticPropertiesComponent inert = CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).ballistics();
-        if (inert.gravity() != 0) return inert;
-
-        BallisticPropertiesComponent shrapnel = CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (shrapnel.gravity() != 0) return shrapnel;
-
-        BallisticPropertiesComponent fluid = CBCMunitionPropertiesHandlers.FLUID_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (fluid.gravity() != 0) return fluid;
-
-        BallisticPropertiesComponent smoke = CBCMunitionPropertiesHandlers.SMOKE_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (smoke.gravity() != 0) return smoke;
-
-        BallisticPropertiesComponent mortar = CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL
-                .getPropertiesOf(projectileType).ballistics();
-        if (mortar.gravity() != 0) return mortar;
-
-        BallisticPropertiesComponent stone = CBCMunitionPropertiesHandlers.MORTAR_STONE
-                .getPropertiesOf(projectileType).ballistics();
-        if (stone.gravity() != 0) return stone;
-
-        // Nothing matched: the zeroed default lets the solver fall back.
-        return common;
+        return firstEntry(BALLISTICS, projectileType, b -> b.gravity() != 0);
     }
 
+    /** minimumChargePower() == 0 means no entry (every shipped shell's is at least 1). */
     static BigCannonProjectilePropertiesComponent resolveBigCannonProperties(EntityType<?> projectileType) {
-        // minimumChargePower() == 0 means no entry (every shipped shell's is at least 1).
-        BigCannonProjectilePropertiesComponent common = CBCMunitionPropertiesHandlers.COMMON_SHELL_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (common.minimumChargePower() != 0) return common;
+        return firstEntry(BIG_CANNON_PROPERTIES, projectileType, p -> p.minimumChargePower() != 0);
+    }
 
-        BigCannonProjectilePropertiesComponent inert = CBCMunitionPropertiesHandlers.INERT_BIG_CANNON_PROJECTILE
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (inert.minimumChargePower() != 0) return inert;
-
-        BigCannonProjectilePropertiesComponent shrapnel = CBCMunitionPropertiesHandlers.SHRAPNEL_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (shrapnel.minimumChargePower() != 0) return shrapnel;
-
-        BigCannonProjectilePropertiesComponent grapeshot = CBCMunitionPropertiesHandlers.BAG_OF_GRAPESHOT
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (grapeshot.minimumChargePower() != 0) return grapeshot;
-
-        BigCannonProjectilePropertiesComponent fluid = CBCMunitionPropertiesHandlers.FLUID_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (fluid.minimumChargePower() != 0) return fluid;
-
-        BigCannonProjectilePropertiesComponent smoke = CBCMunitionPropertiesHandlers.SMOKE_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (smoke.minimumChargePower() != 0) return smoke;
-
-        BigCannonProjectilePropertiesComponent mortar = CBCMunitionPropertiesHandlers.DROP_MORTAR_SHELL
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (mortar.minimumChargePower() != 0) return mortar;
-
-        BigCannonProjectilePropertiesComponent stone = CBCMunitionPropertiesHandlers.MORTAR_STONE
-                .getPropertiesOf(projectileType).bigCannonProperties();
-        if (stone.minimumChargePower() != 0) return stone;
-
-        return common;
+    private static <T> T firstEntry(List<Function<EntityType<?>, T>> handlers, EntityType<?> type, Predicate<T> found) {
+        for (Function<EntityType<?>, T> handler : handlers) {
+            T properties = handler.apply(type);
+            if (found.test(properties))
+                return properties;
+        }
+        return handlers.get(0).apply(type);
     }
 
     /** Their timer counts the delay after impact. */
@@ -235,7 +204,9 @@ public final class CannonReading {
             if (cannonInfo == null) return true;  // behavior updated, but map not synced
 
             CompoundTag beTag = behavior.blockEntity.saveWithFullMetadata(registries);
-            beTag.remove("x"); beTag.remove("y"); beTag.remove("z");
+            beTag.remove("x");
+            beTag.remove("y");
+            beTag.remove("z");
             mounted.getBlocks().put(cannonLocalPos, new StructureBlockInfo(
                     cannonInfo.pos(), cannonInfo.state(), beTag));
 

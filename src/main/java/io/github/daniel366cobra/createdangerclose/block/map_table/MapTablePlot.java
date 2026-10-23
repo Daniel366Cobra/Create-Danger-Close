@@ -84,14 +84,23 @@ public final class MapTablePlot {
                         pixel * AIM_DASH, pixel * AIM_GAP);
             }
         }
+        BattlePlot.MergedFix merged = plot.merged();
+        pen.color = rangefinderColor;
         for (BattlePlot.RangefinderFix fix : plot.fixes()) {
-            pen.color = rangefinderColor;
-            double x = sheet.pixelX(fix.x()) / sheet.sizeInPixels() * sheetSize;
-            double y = sheet.pixelY(fix.z()) / sheet.sizeInPixels() * sheetSize;
-            pen.circle(x, y, SIGMA_CIRCLE * fix.sigma() * scale, pixel * DOT, pixel * DOT_GAP);
+            // Merged rangefinders' sights all end on the one solid fix, in place of their own dotted ones.
+            boolean inMerge = fix.merged() && merged != null;
+            double x = sheet.pixelX(inMerge ? merged.x() : fix.x()) / sheet.sizeInPixels() * sheetSize;
+            double y = sheet.pixelY(inMerge ? merged.z() : fix.z()) / sheet.sizeInPixels() * sheetSize;
+            if (!inMerge)
+                pen.circle(x, y, SIGMA_CIRCLE * fix.sigma() * scale, pixel * DOT, pixel * DOT_GAP);
             pen.line(sheet.pixelX(fix.originX()) / sheet.sizeInPixels() * sheetSize,
                     sheet.pixelY(fix.originZ()) / sheet.sizeInPixels() * sheetSize,
                     x, y, pixel * AIM_DASH, pixel * AIM_GAP);
+        }
+        if (merged != null) {
+            double x = sheet.pixelX(merged.x()) / sheet.sizeInPixels() * sheetSize;
+            double y = sheet.pixelY(merged.z()) / sheet.sizeInPixels() * sheetSize;
+            pen.circle(x, y, SIGMA_CIRCLE * merged.sigma() * scale, pixel * DASH, 0);
         }
     }
 
