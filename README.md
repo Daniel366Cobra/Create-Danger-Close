@@ -13,7 +13,7 @@ Create Danger Close (CDC) implements the following gameplay mechanics:
 * Per-axis arc limits: Cannon mounts and Swivel bearings can be constrained to fire sectors, avoiding hitting your own structures.
 * Gunnery stations: the Fire Mission Console sets the trajectory and fuze correction, and fires Big Cannons. The Autocannon Control Console lays and fires Autocannons, manually or automatically.
 * Navigation Console: shows the ship's own attitude, speed and altitude.
-* Multiblock Map tables: filled Maps can be placed on top, allowing target selection for BVR fire missions.
+* Multiblock Map tables: filled Maps can be placed on top, allowing target selection for BVR fire missions and designation of safe zones.
 * Situational awareness and reconnaissance: players with a copy of a map displayed on a Map table will be shown as green arrows. Holding the map in the active hand will send terrain updates to the table for fire corrections. Fire that would land near allies is held until confirmed.
 * Kinetic Network Coupler: runs a separate kinetic network off another one's rotation, so several factory lines or battle networks can share one power source. It gears down when power is short, then decouples its own side.
 * Damage and maintenance: explosions and shell hits jostle or break components, requiring repairs. Lenses gather dust over time, washed off by rain or a water bucket. Mechanisms use up their lubrication as they run, and may seize.
@@ -43,7 +43,7 @@ This addon is best used for PvP multiplayer combat: just like IRL, effective gun
 
 ## Dependencies
 
-<a href="https://www.curseforge.com/minecraft/mc-mods/create" rel="nofollow">Create</a>, <a href="https://www.curseforge.com/minecraft/mc-mods/create-big-cannons" rel="nofollow">Create Big Cannons</a> and <a href="https://www.curseforge.com/minecraft/mc-mods/create-aeronautics" rel="nofollow">Create Aeronautics</a> are all required.
+[Create](https://www.curseforge.com/minecraft/mc-mods/create), [Create Big Cannons](https://www.curseforge.com/minecraft/mc-mods/create-big-cannons) and [Create Aeronautics](https://www.curseforge.com/minecraft/mc-mods/create-aeronautics) are all required.
 
 ## License
 
@@ -51,4 +51,4 @@ The code is licensed under the MIT License. The assets (textures, models and oth
 
 ## Issues
 
-Please report any issues you find on the mod's <a href="https://github.com/Daniel366Cobra/Create-Danger-Close/issues" rel="nofollow">GitHub</a>.
+Please report any issues you find on the mod's [GitHub](https://github.com/Daniel366Cobra/Create-Danger-Close/issues).
