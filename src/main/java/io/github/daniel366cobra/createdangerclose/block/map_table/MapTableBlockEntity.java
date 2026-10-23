@@ -2,48 +2,49 @@ package io.github.daniel366cobra.createdangerclose.block.map_table;
 
 import com.simibubi.create.api.connectivity.ConnectivityHandler;
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
-import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
-import net.minecraft.ChatFormatting;
-import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
-import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
-import io.github.daniel366cobra.createdangerclose.mixin.MapItemSavedDataAccessor;
-import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import com.simibubi.create.foundation.blockEntity.IMultiBlockEntityContainer;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
+import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
+import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.mixin.MapItemSavedDataAccessor;
+import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.createmod.catnip.nbt.NBTHelper;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.SectionPos;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.util.Mth;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.IntArrayTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundMapItemDataPacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MapItem;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.maps.MapDecoration;
+import net.minecraft.world.level.saveddata.maps.MapDecorationType;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.level.saveddata.maps.MapId;
 import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
@@ -134,7 +135,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
             return 128.0 * width;
         }
 
-    /** Sheet fraction (north-west = 0, 0) to world. */
+        /** Sheet fraction (north-west = 0, 0) to world. */
         public double worldX(double u) {
             return westX + u * sizeInPixels() * blocksPerPixel;
         }
@@ -143,7 +144,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
             return northZ + v * sizeInPixels() * blocksPerPixel;
         }
 
-    /** World to sheet pixels. */
+        /** World to sheet pixels. */
         public double pixelX(double x) {
             return (x - westX) / blocksPerPixel;
         }
@@ -674,8 +675,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     private static boolean isPlayerMarker(MapDecoration marker) {
-        return marker.type().is(MapDecorationTypes.PLAYER) || marker.type().is(MapDecorationTypes.PLAYER_OFF_MAP)
-                || marker.type().is(MapDecorationTypes.PLAYER_OFF_LIMITS);
+        MapDecorationType type = marker.type().value();
+        return type == MapDecorationTypes.PLAYER.value() || type == MapDecorationTypes.PLAYER_OFF_MAP.value()
+                || type == MapDecorationTypes.PLAYER_OFF_LIMITS.value();
     }
 
     /**

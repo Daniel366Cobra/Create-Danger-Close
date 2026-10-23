@@ -6,6 +6,7 @@ import com.simibubi.create.foundation.blockEntity.behaviour.BehaviourType;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.config.CServer;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
@@ -13,7 +14,6 @@ import io.github.daniel366cobra.createdangerclose.foundation.damage.BattleDamage
 import io.github.daniel366cobra.createdangerclose.foundation.damage.DamagePart;
 import io.github.daniel366cobra.createdangerclose.foundation.damage.Fault;
 import io.github.daniel366cobra.createdangerclose.registries.CDCFluids;
-import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonServoOutputBlockEntity;
 import io.github.daniel366cobra.createdangerclose.registries.CDCStats;
 import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.minecraft.ChatFormatting;
@@ -30,6 +30,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -127,7 +128,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
     }
 
     @Nullable
-    public static EquipmentHealth of(@Nullable net.minecraft.world.level.block.entity.BlockEntity be) {
+    public static EquipmentHealth of(@Nullable BlockEntity be) {
         return be == null ? null : BlockEntityBehaviour.get(be, TYPE);
     }
 
@@ -244,9 +245,7 @@ public class EquipmentHealth extends BlockEntityBehaviour implements BattleDamag
                 seize();
         }
         drawFromReservoir();
-        if ((int) (before * 100) != (int) (lubrication * 100))
-            changed();
-        else if (reservoirChanged)
+        if ((int) (before * 100) != (int) (lubrication * 100) || reservoirChanged)
             changed();
         reservoirChanged = false;
     }

@@ -2,6 +2,7 @@ package io.github.daniel366cobra.createdangerclose.block.cannon_servo;
 
 import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.SubLevel;
@@ -19,14 +20,11 @@ import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoLimits;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoStatus;
 import io.github.daniel366cobra.createdangerclose.mixin.SwivelBearingAccessor;
-import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Direction;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -36,6 +34,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaterniond;
 import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountBlockEntity;
@@ -122,7 +122,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
     private final List<SlavedMount> slavedMounts = new ArrayList<>();
     @Nullable private SwivelBearingBlockEntity swivel;
-    @Nullable private KineticBlockEntity swivelCog;
     // For the goggles (synced).
     private float shownSwivelAngle, shownSwivelTarget;
     // For the goggles' invalid-setup message (synced).
@@ -148,7 +147,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     // Held back by the power share this tick; the goggles show it with the draw (su).
     private boolean drivingLimited;
     private boolean shownLimited;
-    // Too little power even to hold the mount.
+    // Too little power even to crawl.
     private boolean overstressHold, shownStarved;
     private float requestedRpm;
     private float shownDraw, shownShare;
@@ -200,8 +199,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         shownLimited = drivingLimited;
         shownStarved = overstressHold;
         shownShare = powerShare;
-        swivelSeen = swivel != null;
-        swivelTilts = swivel != null && swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxis() != Direction.Axis.Y;
         dialAngle = readDialAngle();
         if (detectedAxis == ServoAxis.SWIVEL && swivel != null) {
             shownSwivelAngle = Mth.wrapDegrees((float) swivelActualAngle());
@@ -226,12 +223,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     }
 
     private float getInputSpeed() {
-        Direction inputDir = getBlockState().getValue(FACING).getOpposite();
-        BlockPos inputPos = worldPosition.relative(inputDir);
-        if (!(level.getBlockEntity(inputPos) instanceof CannonServoInputBlockEntity input)) {
-            return 0f;
-        }
-        return input.getSpeed();
+        CannonServoInputBlockEntity input = getAdjacentInput();
+        return input != null ? input.getSpeed() : 0;
     }
 
     private void applyControl() {
@@ -495,7 +488,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         List<DriveTrain.Link> train = DriveTrain.trace(this);
         mountImpact = DriveTrain.perRpm(train);
         swivel = null;
-        swivelCog = null;
         transmissionRatio = Float.NaN;
 
         List<SlavedMount> newMounts = new ArrayList<>();
@@ -512,7 +504,6 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
                     && cog.getParentBlockEntity() instanceof SwivelBearingBlockEntity bearing) {
                 if (swivels++ == 0) {
                     swivel = bearing;
-                    swivelCog = cog;
                     swivelRatio = link.ratio();
                 }
                 continue;
@@ -545,6 +536,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         }
 
         slavedMounts.clear();
+        swivelSeen = swivel != null;
+        swivelTilts = swivel != null && swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxis() != Direction.Axis.Y;
         if (swivels > 0) {
             // A swivel alone; with anything else one servo would drive two things.
             detectedAxis = swivels == 1 && axisThisPoll == ServoAxis.NONE ? ServoAxis.SWIVEL : ServoAxis.INVALID;
@@ -643,8 +636,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         this.isPowered = compound.getBoolean("IsPowered");
 
         ServoAxis[] axes = ServoAxis.values();
-        int ServoAxisOrd = compound.getInt("detectedAxis");
-        this.detectedAxis = (ServoAxisOrd >= 0 && ServoAxisOrd < axes.length) ? axes[ServoAxisOrd] : ServoAxis.NONE;
+        int axisOrdinal = compound.getInt("detectedAxis");
+        this.detectedAxis = axisOrdinal >= 0 && axisOrdinal < axes.length ? axes[axisOrdinal] : ServoAxis.NONE;
         mountImpact = compound.getFloat("MountImpact");
         this.limits = compound.contains("Limits") ? ServoLimits.read(compound.getCompound("Limits"), null) : null;
         this.swivelSense = compound.getInt("SwivelSense") < 0 ? -1 : 1;

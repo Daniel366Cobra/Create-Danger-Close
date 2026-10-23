@@ -172,6 +172,17 @@ dependencies {
     // Dev client only: renderer mods players often run, to reproduce their rendering bugs.
     devClientMods("maven.modrinth:sodium:${sodium_version}")
     devClientMods("maven.modrinth:iris:${iris_version}")
+
+    // Unit tests for code that needs no game running (the ballistic solver).
+    testImplementation(platform("org.junit:junit-bom:${junit_version}"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // Minecraft's own (1.21.1): the solver's vectors, without the game on the test classpath.
+    testImplementation("org.joml:joml:1.10.5")
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
 }
 
 // Sodium 0.8's jar is a loader library with the mod nested inside, which only loads from a mods

@@ -18,12 +18,14 @@ public final class BallisticSolver {
     // 1e-4 rad: far finer than a servo holds a gun.
     private static final int BISECTION_ITERATIONS = 20;
     private static final double BISECTION_TOLERANCE = 1e-4;
-    private static final double MOVING_TARGET_ITERATIONS = 10;
+    private static final int MOVING_TARGET_ITERATIONS = 10;
     private static final double MOVING_TARGET_TOLERANCE_TICKS = 0.5;
     private static final int LAUNCH_OFFSET_ITERATIONS = 10;
     private static final double LAUNCH_OFFSET_TOLERANCE = 0.25; // blocks
     // A non-converging aim correction is still accepted within this miss.
     private static final double LAUNCH_OFFSET_ACCEPTABLE_MISS = 1.0; // blocks
+    // A solution passes this close above or below the target, blocks (also the reach check's slack).
+    private static final double HIT_TOLERANCE = 1.0;
     // Near-vertical shots are useless.
     private static final double MAX_HIGH_ARC_DEG = 85;
 
@@ -242,7 +244,7 @@ public final class BallisticSolver {
                 muzzleVelocity, gravity, drag, isQuadraticDrag,
                 horizontalRange, dy);
 
-        if (highTraj == null || highTraj.vertical() < dy - 1.0) {
+        if (highTraj == null || highTraj.vertical() < dy - HIT_TOLERANCE) {
             return Result.invalid(Result.Reason.OUT_OF_RANGE);
         }
 
@@ -290,7 +292,10 @@ public final class BallisticSolver {
         }
 
         double pitchDeg = Math.toDegrees(theta);
-        if (pitchDeg > maxElevationDeg || pitchDeg < maxDepressionDeg) {
+        // Pinned against a limit that no pitch in the arc gets past: a target steeply below, say, that
+        // even the lowest depression overshoots.
+        if (pitchDeg > maxElevationDeg || pitchDeg < maxDepressionDeg
+                || Math.abs(finalTraj.vertical() - dy) > HIT_TOLERANCE) {
             return Result.invalid(Result.Reason.OUT_OF_ARC);
         }
 

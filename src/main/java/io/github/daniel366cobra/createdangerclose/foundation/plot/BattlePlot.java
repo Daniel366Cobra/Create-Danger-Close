@@ -12,19 +12,25 @@ import java.util.function.ToDoubleFunction;
 /**
  * What the Ballistic Computer knows, for map tables: world space, blocks, built each poll.
  *
- * @param guns how far each armed mount can reach, and where it points
+ * @param guns   how far each armed mount can reach, and where it points
+ * @param merged the one fix several rangefinders on one target make together (a Correlator's); null if none
  */
-public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
+public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nullable MergedFix merged) {
 
-    public static final BattlePlot EMPTY = new BattlePlot(List.of(), List.of());
+    public static final BattlePlot EMPTY = new BattlePlot(List.of(), List.of(), null);
 
     /**
      * Carried forward to the poll on its tracked velocity.
      *
      * @param sigma            1σ range error, blocks
      * @param originX, originZ the rangefinder, for its line of sight
+     * @param merged           part of the {@linkplain BattlePlot#merged merged fix}, drawn as that
      */
-    public record RangefinderFix(double x, double y, double z, double sigma, double originX, double originZ) {}
+    public record RangefinderFix(double x, double y, double z, double sigma, double originX, double originZ,
+                                 boolean merged) {}
+
+    /** @param sigma 1σ error of the merged position, blocks */
+    public record MergedFix(double x, double z, double sigma) {}
 
     /**
      * Reach with the current shell and charge, down to the target's height (or the ground).
@@ -92,9 +98,13 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
             }
             unpairedFixes.remove(from);
             blendedFixes.add(new RangefinderFix(lerp(from.x, fix.x, t), lerp(from.y, fix.y, t), lerp(from.z, fix.z, t),
-                    lerp(from.sigma, fix.sigma, t), lerp(from.originX, fix.originX, t), lerp(from.originZ, fix.originZ, t)));
+                    lerp(from.sigma, fix.sigma, t), lerp(from.originX, fix.originX, t), lerp(from.originZ, fix.originZ, t),
+                    fix.merged));
         }
-        return new BattlePlot(blendedFixes, blendedGuns);
+        MergedFix blendedMerged = merged == null || to.merged == null ? to.merged
+                : new MergedFix(lerp(merged.x, to.merged.x, t), lerp(merged.z, to.merged.z, t),
+                        lerp(merged.sigma, to.merged.sigma, t));
+        return new BattlePlot(blendedFixes, blendedGuns, blendedMerged);
     }
 
     @Nullable
@@ -127,9 +137,18 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
             t.putDouble("Sigma", fix.sigma());
             t.putDouble("OriginX", fix.originX());
             t.putDouble("OriginZ", fix.originZ());
+            if (fix.merged())
+                t.putBoolean("Merged", true);
             fixList.add(t);
         }
         tag.put("Fixes", fixList);
+        if (merged != null) {
+            CompoundTag t = new CompoundTag();
+            t.putDouble("X", merged.x());
+            t.putDouble("Z", merged.z());
+            t.putDouble("Sigma", merged.sigma());
+            tag.put("MergedFix", t);
+        }
         ListTag gunList = new ListTag();
         for (GunRange gun : guns) {
             CompoundTag t = new CompoundTag();
@@ -154,7 +173,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
         for (Tag entry : tag.getList("Fixes", Tag.TAG_COMPOUND)) {
             CompoundTag t = (CompoundTag) entry;
             fixes.add(new RangefinderFix(t.getDouble("X"), t.getDouble("Y"), t.getDouble("Z"), t.getDouble("Sigma"),
-                    t.getDouble("OriginX"), t.getDouble("OriginZ")));
+                    t.getDouble("OriginX"), t.getDouble("OriginZ"), t.getBoolean("Merged")));
         }
         List<GunRange> guns = new ArrayList<>();
         for (Tag entry : tag.getList("Guns", Tag.TAG_COMPOUND)) {
@@ -164,6 +183,11 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns) {
                     t.getDouble("ArcFrom"), t.contains("ArcLength") ? t.getDouble("ArcLength") : 360,
                     t.getString("Name")));
         }
-        return fixes.isEmpty() && guns.isEmpty() ? EMPTY : new BattlePlot(fixes, guns);
+        MergedFix merged = null;
+        if (tag.contains("MergedFix")) {
+            CompoundTag t = tag.getCompound("MergedFix");
+            merged = new MergedFix(t.getDouble("X"), t.getDouble("Z"), t.getDouble("Sigma"));
+        }
+        return fixes.isEmpty() && guns.isEmpty() ? EMPTY : new BattlePlot(fixes, guns, merged);
     }
 }

@@ -4,6 +4,7 @@ import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
@@ -28,6 +29,12 @@ public final class DelayedTriggers {
 
     public static void schedule(ServerPlayer player, Supplier<SimpleTrigger> trigger, int delayTicks) {
         PENDING.add(new Pending(player.getUUID(), trigger, serverTick + Math.max(0, delayTicks)));
+    }
+
+    /** Single player: a world left before its trigger was due must not award it in the next one. */
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        PENDING.clear();
     }
 
     @SubscribeEvent

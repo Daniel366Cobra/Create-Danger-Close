@@ -11,6 +11,7 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.utility.ServerSpeedProvider;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.config.CServer;
 import io.github.daniel366cobra.createdangerclose.damage.BattleDamage;
@@ -32,7 +33,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
@@ -40,6 +40,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -120,9 +121,9 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     public enum FireControlStatus {
         NONE,
         DIRECTING,
-    /** Same target as the directing rangefinder; readings are merged. */
+        /** Same target as the directing rangefinder; readings are merged. */
         MERGED,
-    /** Another rangefinder is directing; readings unused. */
+        /** Another rangefinder is directing; readings unused. */
         STANDBY
     }
 
@@ -506,7 +507,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     /** Readings come at the battle network's pace, like its other devices. */
     private int sampleInterval() {
         float rpm = Math.abs(getSpeed());
-        return rpm < 1 ? Integer.MAX_VALUE : Math.max(1, Math.round(640f / rpm));
+        return rpm < 1 ? Integer.MAX_VALUE : NetworkInterfaceBlockEntity.pollIntervalTicks(rpm);
     }
 
     private void takeSample(Player operator, RangefinderOptics.Sight sight) {

@@ -68,9 +68,10 @@ public final class MapTableScenes {
         double aimX = target.x - middle.x, aimZ = target.z - middle.z, aimLength = Math.hypot(aimX, aimZ);
         BattlePlot plot = new BattlePlot(
                 List.of(new BattlePlot.RangefinderFix(westX + FIX_U * SHEET_BLOCKS, 64,
-                        northZ + FIX_V * SHEET_BLOCKS, FIX_SIGMA, middle.x, middle.z)),
+                        northZ + FIX_V * SHEET_BLOCKS, FIX_SIGMA, middle.x, middle.z, false)),
                 List.of(new BattlePlot.GunRange(middle.x, middle.z, GUN_RANGE,
-                        aimX / aimLength, aimZ / aimLength, GUN_MIN_RANGE, 0, 360, "")));
+                        aimX / aimLength, aimZ / aimLength, GUN_MIN_RANGE, 0, 360, "")),
+                null);
         // Marker yaw 0 points south.
         float spotterYaw = (float) Math.toDegrees(Math.atan2(-(TARGET_U - SPOTTER_U), TARGET_V - SPOTTER_V));
         List<MapTableMarker.Marker> spotters = List.of(new MapTableMarker.Marker(
