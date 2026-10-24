@@ -2,6 +2,12 @@
 
 **Create Danger Close** is an addon for Create, Create Simulated (Aeronautics) and Create Big Cannons, centered around pre-radar era gunnery.
 
+<div align="center">
+
+[![CurseForge downloads](https://img.shields.io/curseforge/dt/1762082?logo=curseforge&label=CurseForge&color=F16436)](https://www.curseforge.com/minecraft/mc-mods/create-danger-close)
+[![Discord](https://img.shields.io/discord/1563604911948701776?logo=discord&label=Discord&color=5865F2)](https://discord.gg/G3rqubuMf)
+</div>
+
 ## Contents
 
 Create Danger Close (CDC) implements the following gameplay mechanics:
