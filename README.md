@@ -5,7 +5,7 @@
 <div align="center">
 
 [![CurseForge downloads](https://img.shields.io/curseforge/dt/1762082?logo=curseforge&label=CurseForge&color=F16436)](https://www.curseforge.com/minecraft/mc-mods/create-danger-close)
-[![Discord](https://img.shields.io/discord/1563604911948701776?logo=discord&label=Discord&color=5865F2)](https://discord.gg/G3rqubuMf)
+[![Discord](https://img.shields.io/discord/1563604911948701776?logo=discord&label=Discord&color=5865F2)](https://discord.gg/Gf8sZDaYqT)
 </div>
 
 ## Contents
