@@ -1,0 +1,134 @@
+name: Publish
+
+# Runs when a GitHub Release is published: builds the jar, attaches it to the release, uploads it to
+# CurseForge and posts it to Discord. A pre-release is a test build: #dev-builds only, jar attached.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+env:
+  UPDATES_ROLE: "1563650420339900497"
+  DEV_BUILDS_ROLE: "1563650678398787764"
+  CURSEFORGE_ID: "1762082"
+  CURSEFORGE_URL: https://www.curseforge.com/minecraft/mc-mods/create-danger-close
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # The tag names the version players see on Discord; the jar's comes from gradle.properties.
+      - name: Check the tag matches mod_version
+        id: mod
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2)
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match mod_version $version: tag it v$version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$(grep -E '^mod_name=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+          echo "jar=build/libs/$(grep -E '^mod_id=' gradle.properties | cut -d= -f2)-$version.jar" >> "$GITHUB_OUTPUT"
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: Attach the jar to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          JAR: ${{ steps.mod.outputs.jar }}
+        run: gh release upload "$TAG" "$JAR" --clobber
+
+      # Before the Discord post, so its link has the new file. Test builds stay off CurseForge.
+      - name: Upload to CurseForge
+        if: ${{ !github.event.release.prerelease }}
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_UPLOAD_TOKEN }}
+          BODY: ${{ github.event.release.body }}
+          NAME: ${{ steps.mod.outputs.name }}
+          VERSION: ${{ steps.mod.outputs.version }}
+          JAR: ${{ steps.mod.outputs.jar }}
+        run: |
+          if [ -z "$CURSEFORGE_TOKEN" ]; then
+            echo "::error::No CURSEFORGE_UPLOAD_TOKEN secret"
+            exit 1
+          fi
+          # CurseForge's IDs for Minecraft 1.21.1, NeoForge, Java 21, Client and Server.
+          metadata=$(jq -n --arg changelog "${BODY:-No changelog.}" --arg name "$NAME $VERSION" '{
+            changelog: $changelog,
+            changelogType: "markdown",
+            displayName: $name,
+            gameVersions: [11779, 10150, 11135, 9638, 9639],
+            releaseType: "release",
+            relations: {projects: [
+              {slug: "create", type: "requiredDependency"},
+              {slug: "create-big-cannons", type: "requiredDependency"},
+              {slug: "create-aeronautics", type: "requiredDependency"},
+              {slug: "cc-tweaked", type: "optionalDependency"}
+            ]}
+          }')
+          curl --fail-with-body -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" --form-string "metadata=$metadata" \
+              -F "file=@$JAR" "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/upload-file"
+
+      - name: Post to Discord
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          DEV_WEBHOOK: ${{ secrets.DISCORD_DEV_WEBHOOK }}
+          BODY: ${{ github.event.release.body }}
+          URL: ${{ github.event.release.html_url }}
+          NAME: ${{ steps.mod.outputs.name }}
+          VERSION: ${{ steps.mod.outputs.version }}
+          JAR: ${{ steps.mod.outputs.jar }}
+        run: |
+          if [ "$PRERELEASE" = true ]; then
+            webhook=$DEV_WEBHOOK role=$DEV_BUILDS_ROLE download=""
+            heading="Test build **$NAME $VERSION**: feel free to test. Bugs → GitHub issues (mention the build), discussion → #general-english."
+          else
+            webhook=$RELEASE_WEBHOOK role=$UPDATES_ROLE download="[CurseForge]($CURSEFORGE_URL) · [GitHub]($URL)"
+            heading="**$NAME $VERSION** is out!"
+          fi
+          if [ -z "$webhook" ]; then
+            echo "::warning::No webhook secret for this channel, so nothing was posted."
+            exit 0
+          fi
+          # Embeds never ping: the role mention goes in the content, and only that role may be pinged.
+          payload=$(jq -n --arg content "<@&$role> $heading" --arg role "$role" --arg title "$NAME $VERSION" \
+              --arg url "$URL" --arg body "${BODY:-No changelog.}" --arg download "$download" '{
+            content: $content,
+            allowed_mentions: {roles: [$role]},
+            embeds: [{
+              title: $title,
+              url: $url,
+              description: (if ($body | length) > 4000 then ($body | .[0:4000]) + "…" else $body end),
+              color: 14251782,
+              fields: (if $download == "" then [] else [{name: "Download", value: $download}] end)
+            }]
+          }')
+          if [ "$PRERELEASE" = true ]; then
+            curl --fail-with-body -sS --form-string "payload_json=$payload" -F "files[0]=@$JAR" "$webhook?wait=true" > /dev/null
+          else
+            curl --fail-with-body -sS -H "Content-Type: application/json" -d "$payload" "$webhook?wait=true" > /dev/null
+          fi
