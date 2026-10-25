@@ -460,7 +460,11 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     }
 
     public boolean isOnTarget() {
-        return Math.abs(AngleHelper.getShortestAngleDiff(angle, getTargetAngle())) < ON_TARGET_DEG;
+        // Where the operator looks, not the target angle: parked, that stays at the assembled heading.
+        Player operator = getOperator();
+        float wanted = operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc
+                ? angleForOperator(rc, operator) : getTargetAngle();
+        return Math.abs(AngleHelper.getShortestAngleDiff(angle, wanted)) < ON_TARGET_DEG;
     }
 
     // --- Ranging ---

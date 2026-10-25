@@ -381,14 +381,18 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         CannonServoInputBlockEntity input = getAdjacentInput();
         if (input != null)
             input.setDrawImpact(Math.abs(input.getSpeed()) > 1e-3f ? draw / Math.abs(input.getSpeed()) : 0);
-        // Slightly over the load so rounding never overstresses; starved, short of it so Create shows overstress.
-        // The tap is covered down to a crawl whatever the speed, so slowing down never outruns the capacity.
-        float capacity = overstressed
-                ? Math.min(powerShare, load * UNDER_OFFER) / speed
-                : mountImpact * CAPACITY_HEADROOM + MIN_CAPACITY + tapLoad * CAPACITY_HEADROOM / CRAWL_RPM;
-        offerCapacity(capacity);
+        // Starved, short of the load so Create shows overstress.
+        offerCapacity(overstressed ? Math.min(powerShare, load * UNDER_OFFER) / speed : capacityAt(speed));
         shownDraw = requestedRpm > 0 ? mountImpact * requestedRpm + tapLoad : 0;
         requestedRpm = 0;
+    }
+
+    /**
+     * Per RPM, slightly over the load so rounding never overstresses. The tap runs at its own speed,
+     * so it takes more per RPM the slower the output turns.
+     */
+    private float capacityAt(float speed) {
+        return mountImpact * CAPACITY_HEADROOM + MIN_CAPACITY + (speed > 1e-3f ? tapLoad * CAPACITY_HEADROOM / speed : 0);
     }
 
     /** Driving faster than a crawl (for sharing the battle network's power). */
@@ -408,6 +412,10 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             rpm = Math.copySign(rpmLimit, rpm);
         }
         if (Math.abs(desiredGeneratedSpeed - rpm) < 1e-4f) return;
+        // Starting or slowing down raises the tap's capacity per RPM: offer it before the speed changes.
+        float old = Math.abs(desiredGeneratedSpeed), speed = Math.abs(rpm);
+        if (tapLoad > 0 && !overstressHold && speed > 1e-3f && (old < 1e-3f || speed < old))
+            offerCapacity(capacityAt(speed));
         desiredGeneratedSpeed = rpm;
         if (level != null && !level.isClientSide) {
             updateGeneratedRotation();
@@ -870,7 +878,9 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
         if (tapLoad > 0) {
             CDCLang.builder()
-                    .add(Component.translatable("createdangerclose.cannon_servo_output.auxiliary", Math.round(tapLoad)))
+                    .add(Component.translatable(Math.abs(getSpeed()) > 1e-3f
+                            ? "createdangerclose.cannon_servo_output.auxiliary"
+                            : "createdangerclose.cannon_servo_output.auxiliary_stopped", Math.round(tapLoad)))
                     .style(ChatFormatting.GRAY)
                     .forGoggles(tooltip);
         }
