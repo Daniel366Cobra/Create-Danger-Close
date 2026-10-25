@@ -2,6 +2,8 @@ package io.github.daniel366cobra.createdangerclose.mixin;
 
 import com.simibubi.create.content.kinetics.RotationPropagator;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 
@@ -18,6 +20,11 @@ public interface RotationPropagatorInvoker {
 
     @Invoker("getRotationSpeedModifier")
     static float createdangerclose$getRotationSpeedModifier(KineticBlockEntity from, KineticBlockEntity to) {
+        throw new AssertionError();
+    }
+
+    @Invoker("isLargeCogToSpeedController")
+    static boolean createdangerclose$isLargeCogToSpeedController(BlockState from, BlockState to, BlockPos diff) {
         throw new AssertionError();
     }
 }

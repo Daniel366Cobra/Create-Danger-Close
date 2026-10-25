@@ -3,6 +3,7 @@ package io.github.daniel366cobra.createdangerclose.block.kinetic_pair;
 import com.simibubi.create.content.kinetics.base.DirectionalShaftHalvesBlockEntity;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.gearbox.GearboxBlockEntity;
+import com.simibubi.create.content.kinetics.speedController.SpeedControllerBlockEntity;
 import com.simibubi.create.content.kinetics.transmission.ClutchBlockEntity;
 import com.simibubi.create.content.kinetics.transmission.GearshiftBlockEntity;
 import io.github.daniel366cobra.createdangerclose.mixin.RotationPropagatorInvoker;
@@ -24,8 +25,11 @@ import java.util.Map;
  */
 public final class DriveTrain {
 
-    /** A block it drives, turning {@code ratio} RPM per RPM of the source (sign: sense of rotation). */
-    public record Link(KineticBlockEntity be, float ratio) {}
+    /**
+     * A block it drives, turning {@code ratio} RPM per RPM of the source (sign: sense of rotation).
+     * Governed: past a speed controller, turning {@code ratio} RPM whenever the source turns at all.
+     */
+    public record Link(KineticBlockEntity be, float ratio, boolean governed) {}
 
     private static final int MAX_LINKS = 256;
 
@@ -33,38 +37,68 @@ public final class DriveTrain {
 
     /** The source first, then outward. */
     public static List<Link> trace(KineticBlockEntity source) {
-        Map<KineticBlockEntity, Float> ratios = new LinkedHashMap<>();
+        Map<KineticBlockEntity, Link> links = new LinkedHashMap<>();
         // The side each block was reached from.
         Map<KineticBlockEntity, Direction> entries = new HashMap<>();
         ArrayDeque<KineticBlockEntity> queue = new ArrayDeque<>();
-        ratios.put(source, 1f);
+        links.put(source, new Link(source, 1, false));
         queue.add(source);
-        while (!queue.isEmpty() && ratios.size() < MAX_LINKS) {
+        while (!queue.isEmpty() && links.size() < MAX_LINKS) {
             KineticBlockEntity from = queue.poll();
+            Link reached = links.get(from);
             for (KineticBlockEntity to : RotationPropagatorInvoker.createdangerclose$getConnectedNeighbours(from)) {
-                if (ratios.containsKey(to))
+                if (links.containsKey(to))
                     continue;
                 BlockPos diff = to.getBlockPos().subtract(from.getBlockPos());
                 Direction towards = Direction.getNearest(diff.getX(), diff.getY(), diff.getZ());
-                float modifier = modifier(from, entries.get(from), to, towards);
-                if (modifier == 0)
-                    continue;
-                ratios.put(to, ratios.get(from) * modifier);
+                float setting = controllerSetting(from, to);
+                if (!Float.isNaN(setting)) {
+                    links.put(to, new Link(to, setting, true));
+                } else {
+                    float modifier = modifier(from, entries.get(from), to, towards);
+                    if (modifier == 0)
+                        continue;
+                    links.put(to, new Link(to, reached.ratio() * modifier, reached.governed()));
+                }
                 entries.put(to, towards.getOpposite());
                 queue.add(to);
             }
         }
-        List<Link> links = new ArrayList<>(ratios.size());
-        ratios.forEach((be, ratio) -> links.add(new Link(be, ratio)));
-        return links;
+        return new ArrayList<>(links.values());
     }
 
     /** su per RPM of the source: each block's impact at its own speed (gearing included). */
     public static float perRpm(List<Link> links) {
         float load = 0;
         for (int i = 1; i < links.size(); i++)
-            load += links.get(i).be().calculateStressApplied() * Math.abs(links.get(i).ratio());
+            if (!links.get(i).governed())
+                load += links.get(i).be().calculateStressApplied() * Math.abs(links.get(i).ratio());
         return load;
+    }
+
+    /** su whenever the source turns at all: what runs past speed controllers, at their settings. */
+    public static float governedLoad(List<Link> links) {
+        float load = 0;
+        for (Link link : links)
+            if (link.governed())
+                load += link.be().calculateStressApplied() * Math.abs(link.ratio());
+        return load;
+    }
+
+    /** Between a speed controller and the large cog on it, the far one turns at the setting (RPM); else NaN. */
+    private static float controllerSetting(KineticBlockEntity from, KineticBlockEntity to) {
+        BlockState fromState = from.getBlockState(), toState = to.getBlockState();
+        KineticBlockEntity controller;
+        if (RotationPropagatorInvoker.createdangerclose$isLargeCogToSpeedController(fromState, toState,
+                to.getBlockPos().subtract(from.getBlockPos())))
+            controller = to;
+        else if (RotationPropagatorInvoker.createdangerclose$isLargeCogToSpeedController(toState, fromState,
+                from.getBlockPos().subtract(to.getBlockPos())))
+            controller = from;
+        else
+            return Float.NaN;
+        return controller instanceof SpeedControllerBlockEntity speedController
+                ? speedController.targetSpeed.getValue() : Float.NaN;
     }
 
     private static float modifier(KineticBlockEntity from, Direction fromEntry, KineticBlockEntity to, Direction towards) {

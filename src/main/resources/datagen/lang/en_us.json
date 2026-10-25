@@ -152,6 +152,8 @@
         "no_mount": "No cannon mount on network",
         "too_many_mounts": "Too many cannon mounts on network",
         "invalid_swivel": "A Swivel Bearing must be the only thing this servo drives",
+        "governed_axis": "Cannot lay a mount or Swivel Bearing past a Rotation Speed Controller",
+        "auxiliary": "Auxiliary machinery: %s su",
         "swivel_angle": "Bearing: %s° (turning to %s°)",
         "power_limited": "Driving slower: not enough power on the battle network",
         "power_starved": "Cannon network overstressed: not enough power on the battle network",

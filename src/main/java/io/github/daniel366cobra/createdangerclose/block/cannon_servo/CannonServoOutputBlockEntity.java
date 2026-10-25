@@ -125,7 +125,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     // For the goggles (synced).
     private float shownSwivelAngle, shownSwivelTarget;
     // For the goggles' invalid-setup message (synced).
-    private boolean swivelSeen;
+    private boolean swivelSeen, governedAxis;
     // Create's convertToAngular.
     private static final float SWIVEL_DEG_PER_TICK_PER_RPM = 0.3f;
     // Null for none.
@@ -141,6 +141,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     private static final int POWER_INTERVAL_TICKS = 5;
     // su per RPM of drive (see DriveTrain.perRpm).
     private float mountImpact;
+    // su whenever it turns: machinery tapped off past speed controllers (see DriveTrain.governedLoad; synced).
+    private float tapLoad;
     // RPM, and the share it comes from (su).
     private float rpmLimit = Float.MAX_VALUE;
     private float powerShare;
@@ -269,7 +271,12 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
                 sm.iface.setSequencedAngleLimit(0);
             }
         }
-        applyGeneratedSpeed(0);
+        applyGeneratedSpeed(idleRpm());
+    }
+
+    /** Machinery tapped off past a speed controller keeps running while a mount idles: a crawl, the mount locked. */
+    private float idleRpm() {
+        return isPowered && tapLoad > 0 && (detectedAxis == PITCH || detectedAxis == YAW) ? CRAWL_RPM : 0;
     }
 
     // --- Swivel bearing (turret yaw) ---
@@ -357,7 +364,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             return;
         }
         powerShare = fairShare(input);
-        float shareRpm = powerShare / mountImpact;
+        // The tapped machinery comes first: it runs at its own speed whenever the output turns.
+        float shareRpm = Math.max(0, powerShare - tapLoad) / mountImpact;
         // Too little even to crawl: overstressed until the share covers it with a margin.
         overstressHold = shareRpm < (overstressHold ? CRAWL_RPM * RESUME_FACTOR : CRAWL_RPM);
         rpmLimit = rampedLimit(rpmLimit, shareRpm);
@@ -365,19 +373,21 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
     private void commitDraw() {
         // Every tick: the speed may just have changed, and the capacity must follow at once.
-        boolean overstressed = overstressHold && Math.abs(desiredGeneratedSpeed) > 1e-3f;
-        float load = mountImpact * Math.abs(desiredGeneratedSpeed);
+        float speed = Math.abs(desiredGeneratedSpeed);
+        boolean overstressed = overstressHold && speed > 1e-3f;
+        float load = speed > 1e-3f ? mountImpact * speed + tapLoad : 0;
         // Overstressed, the cannon side does no work: the battle network pays nothing.
         float draw = overstressed ? 0 : load;
         CannonServoInputBlockEntity input = getAdjacentInput();
         if (input != null)
             input.setDrawImpact(Math.abs(input.getSpeed()) > 1e-3f ? draw / Math.abs(input.getSpeed()) : 0);
         // Slightly over the load so rounding never overstresses; starved, short of it so Create shows overstress.
+        // The tap is covered down to a crawl whatever the speed, so slowing down never outruns the capacity.
         float capacity = overstressed
-                ? Math.min(powerShare, load * UNDER_OFFER) / Math.abs(desiredGeneratedSpeed)
-                : mountImpact * CAPACITY_HEADROOM + MIN_CAPACITY;
+                ? Math.min(powerShare, load * UNDER_OFFER) / speed
+                : mountImpact * CAPACITY_HEADROOM + MIN_CAPACITY + tapLoad * CAPACITY_HEADROOM / CRAWL_RPM;
         offerCapacity(capacity);
-        shownDraw = mountImpact * requestedRpm;
+        shownDraw = requestedRpm > 0 ? mountImpact * requestedRpm + tapLoad : 0;
         requestedRpm = 0;
     }
 
@@ -451,7 +461,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             if (Math.abs(error) > SNAP_EPSILON_DEG && sm.mount != null)
                 snapMount(sm, sm.currentAngle + error, pitch);
             sm.iface.setSequencedAngleLimit(0);
-            applyGeneratedSpeed(0);
+            applyGeneratedSpeed(idleRpm());
             return;
         }
 
@@ -487,6 +497,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     private void pollCannonNetwork() {
         List<DriveTrain.Link> train = DriveTrain.trace(this);
         mountImpact = DriveTrain.perRpm(train);
+        tapLoad = DriveTrain.governedLoad(train);
         swivel = null;
         transmissionRatio = Float.NaN;
 
@@ -494,11 +505,19 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         float mountRatio = Float.NaN, swivelRatio = Float.NaN;
         ServoAxis axisThisPoll = ServoAxis.NONE;
         boolean mixedAxes = false;
+        governedAxis = false;
         int swivels = 0;
 
         for (DriveTrain.Link link : train) {
             KineticBlockEntity member = link.be();
             if (member == this) continue;
+            // Past a speed controller it turns at the controller's speed, not ours: no axis to lay.
+            if (link.governed()) {
+                if (member instanceof SwivelBearingBlockEntity.SwivelBearingCogwheelBlockEntity
+                        || member instanceof CannonMountInterfaceBlockEntity)
+                    governedAxis = true;
+                continue;
+            }
             // A swivel bearing's cog: this servo turns a turret. The first is reported even when invalid.
             if (member instanceof SwivelBearingBlockEntity.SwivelBearingCogwheelBlockEntity cog
                     && cog.getParentBlockEntity() instanceof SwivelBearingBlockEntity bearing) {
@@ -538,6 +557,10 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         slavedMounts.clear();
         swivelSeen = swivel != null;
         swivelTilts = swivel != null && swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxis() != Direction.Axis.Y;
+        if (governedAxis) {
+            detectedAxis = ServoAxis.INVALID;
+            return;
+        }
         if (swivels > 0) {
             // A swivel alone; with anything else one servo would drive two things.
             detectedAxis = swivels == 1 && axisThisPoll == ServoAxis.NONE ? ServoAxis.SWIVEL : ServoAxis.INVALID;
@@ -591,11 +614,13 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         compound.putFloat("SwivelAngle", shownSwivelAngle);
         compound.putFloat("SwivelTarget", shownSwivelTarget);
         compound.putBoolean("SwivelSeen", swivelSeen);
+        compound.putBoolean("GovernedAxis", governedAxis);
         compound.putFloat("DialAngle", dialAngle);
         compound.putBoolean("PowerLimited", shownLimited);
         compound.putBoolean("PowerStarved", shownStarved);
         compound.putFloat("PowerDraw", shownDraw);
         compound.putFloat("PowerShare", shownShare);
+        compound.putFloat("TapLoad", tapLoad);
         compound.putBoolean("SwivelTilts", swivelTilts);
         compound.putInt("SwivelSense", swivelSense);
         if (limits != null)
@@ -647,11 +672,13 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         this.shownSwivelAngle = compound.getFloat("SwivelAngle");
         this.shownSwivelTarget = compound.getFloat("SwivelTarget");
         this.swivelSeen = compound.getBoolean("SwivelSeen");
+        this.governedAxis = compound.getBoolean("GovernedAxis");
         this.dialAngle = compound.getFloat("DialAngle");
         this.shownLimited = compound.getBoolean("PowerLimited");
         this.shownStarved = compound.getBoolean("PowerStarved");
         this.shownDraw = compound.getFloat("PowerDraw");
         this.shownShare = compound.getFloat("PowerShare");
+        this.tapLoad = compound.getFloat("TapLoad");
         this.swivelTilts = compound.getBoolean("SwivelTilts");
 
         this.slavedMounts.clear();
@@ -816,7 +843,9 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
         if (detectedAxis == ServoAxis.INVALID) {
             CDCLang.builder()
-                    .add(Component.translatable(swivelSeen
+                    .add(Component.translatable(governedAxis
+                            ? "createdangerclose.cannon_servo_output.governed_axis"
+                            : swivelSeen
                             ? "createdangerclose.cannon_servo_output.invalid_swivel"
                             : "createdangerclose.cannon_servo_output.too_many_mounts"))
                     .style(ChatFormatting.RED)
@@ -838,6 +867,13 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
                                 + detectedAxis.name().toLowerCase())))
                 .style(ChatFormatting.GRAY)
                 .forGoggles(tooltip);
+
+        if (tapLoad > 0) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.cannon_servo_output.auxiliary", Math.round(tapLoad)))
+                    .style(ChatFormatting.GRAY)
+                    .forGoggles(tooltip);
+        }
 
         if (detectedAxis == ServoAxis.SWIVEL) {
             CDCLang.builder()
