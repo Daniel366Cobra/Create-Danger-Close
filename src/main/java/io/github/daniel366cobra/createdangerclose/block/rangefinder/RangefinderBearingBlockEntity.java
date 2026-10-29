@@ -108,6 +108,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private float bearingRate;    // degrees per second, positive = clockwise
     // The solution (server only) outlives the operator: fire control keeps shooting on it, extrapolated, until stale.
     public static final long SOLUTION_LIFETIME_TICKS = 200;
+    // Without an Integrator: two polls at the slowest rate, so it does not flicker.
+    public static final long UNHELD_SOLUTION_LIFETIME_TICKS = 40;
+    // How long the computer holds a reading (server only, lapses with the status): the readouts go with it.
+    private long readoutLifetime = UNHELD_SOLUTION_LIFETIME_TICKS;
     // A lock this far off earns an advancement, blocks.
     private static final double FARSIGHTED_RANGE = 300;
     @Nullable private Vec3 targetPosition;
@@ -133,6 +137,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     private long fireControlStatusTick;
     // From the computer's sensors: Gimbal Sensor for pitch and roll, Nav Table with a Magnet for yaw.
     private boolean stabilizedTilt, stabilizedYaw;
+    // A Navigation Console's bow on this ship, in its frame: relative bearings without a heading sensor.
+    @Nullable private Direction bow;
 
     public RangefinderBearingBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -266,10 +272,12 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 illumination = signal;
                 sendData();
             }
-            if ((fireControlStatus != FireControlStatus.NONE || stabilizedTilt || stabilizedYaw)
+            if ((fireControlStatus != FireControlStatus.NONE || stabilizedTilt || stabilizedYaw || bow != null)
                     && level.getGameTime() - fireControlStatusTick > STATUS_LIFETIME_TICKS) {
                 fireControlStatus = FireControlStatus.NONE;
                 stabilizedTilt = stabilizedYaw = false;
+                bow = null;
+                readoutLifetime = UNHELD_SOLUTION_LIFETIME_TICKS;
                 sendData();
             }
         }
@@ -492,8 +500,13 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
             return;
         steadiness.update(sight.direction(), isOnTarget());
 
-        // Readouts stand only while the images stay converged (the tracked target is kept).
-        if (hasRange && !steadiness.canRange()) {
+        // Readouts stand only while the images stay converged (the tracked target is kept),
+        // and only while the computer still holds the reading (two samples at least, so ranging never flickers).
+        if ((hasRange || hasVelocity)
+                && level.getGameTime() - solutionTick > Math.max(readoutLifetime, 2L * sampleInterval())) {
+            hasRange = hasVelocity = false;
+            sendData();
+        } else if (hasRange && !steadiness.canRange()) {
             hasRange = hasVelocity = false;
             sendData();
         } else if (hasVelocity && !steadiness.canTrackVelocity()) {
@@ -601,12 +614,23 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     }
 
     /** Every Ballistic Computer poll, after {@link #setFireControlStatus}. */
-    public void setStabilization(boolean tilt, boolean yaw) {
-        if (tilt != stabilizedTilt || yaw != stabilizedYaw) {
+    /** Every Ballistic Computer poll: how long it holds this rangefinder's readings. */
+    public void setReadoutLifetime(long ticks) {
+        readoutLifetime = ticks;
+    }
+
+    public void setStabilization(boolean tilt, boolean yaw, @Nullable Direction bow) {
+        if (tilt != stabilizedTilt || yaw != stabilizedYaw || bow != this.bow) {
             stabilizedTilt = tilt;
             stabilizedYaw = yaw;
+            this.bow = bow;
             sendData();
         }
+    }
+
+    @Nullable
+    public Direction getBow() {
+        return bow;
     }
 
     public boolean isStabilizedTilt() {
@@ -772,6 +796,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         compound.putInt("FireControlStatus", fireControlStatus.ordinal());
         compound.putBoolean("StabilizedTilt", stabilizedTilt);
         compound.putBoolean("StabilizedYaw", stabilizedYaw);
+        if (bow != null)
+            compound.putInt("Bow", bow.get3DDataValue());
         if (operatorTarget != null)
             compound.putFloat("OperatorTarget", operatorTarget);
         AssemblyException.write(compound, registries, lastException);
@@ -804,6 +830,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
                 ? statuses[statusOrdinal] : FireControlStatus.NONE;
         stabilizedTilt = compound.getBoolean("StabilizedTilt");
         stabilizedYaw = compound.getBoolean("StabilizedYaw");
+        bow = compound.contains("Bow") ? Direction.from3DDataValue(compound.getInt("Bow")) : null;
         operatorTarget = compound.contains("OperatorTarget") ? compound.getFloat("OperatorTarget") : null;
         lastException = AssemblyException.read(compound, registries);
         super.read(compound, registries, clientPacket);

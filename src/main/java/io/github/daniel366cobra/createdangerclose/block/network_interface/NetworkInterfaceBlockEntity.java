@@ -177,7 +177,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         }
         if (be instanceof NavigationConsoleBlockEntity console) {
             console.pollFrom(this);
-            return new SensorReading.NavConsole();
+            return new SensorReading.NavConsole(console.getBow());
         }
         if (be instanceof FixedCannonMountBlockEntity mount) {
             // The computer aims (through carrying bearings) and fires this gun.

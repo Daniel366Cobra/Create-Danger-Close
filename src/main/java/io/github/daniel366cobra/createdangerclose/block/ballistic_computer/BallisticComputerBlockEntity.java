@@ -93,9 +93,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     @Nullable private BlockPos linkedInterface;
     private long lastLinkTick;
 
-    // Without an Integrator: two polls at the slowest rate, so it does not flicker.
-    private static final int UNHELD_SOLUTION_LIFETIME_TICKS = 40;
-
     // --- Module gates: what is in the bank around this computer ---
     private final Set<ComputerModule> modules = EnumSet.noneOf(ComputerModule.class);
     // Another Ballistic Computer touches this one's modules: neither works.
@@ -170,6 +167,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private int gimbalCount = 0;
     private int navHeadingCount = 0;
     private int altitudeCount = 0;
+    // A Navigation Console's bow and where its interface is, for rangefinders on its ship (not saved).
+    @Nullable private Direction navConsoleBow;
+    @Nullable private BlockPos navConsolePos;
     // Per ship axis (X, Y, Z); extra sensors on a covered axis add nothing.
     private final int[] velocityAxisCounts = new int[3];
 
@@ -635,8 +635,19 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
     }
 
+    /** The console's bow for a rangefinder on the same ship; elsewhere their frames differ, so none. */
+    @Nullable
+    private Direction bowFor(RangefinderBearingBlockEntity rangefinder) {
+        if (navConsoleBow == null || navConsolePos == null)
+            return null;
+        SubLevel ship = Sable.HELPER.getContaining(level, rangefinder.getBlockPos());
+        return ship != null && ship == Sable.HELPER.getContaining(level, navConsolePos) ? navConsoleBow : null;
+    }
+
     private void invalidateData() {
         gimbalCount = navHeadingCount = altitudeCount = 0;
+        navConsoleBow = null;
+        navConsolePos = null;
         Arrays.fill(velocityAxisCounts, 0);
 
         hasTarget = false;
@@ -848,7 +859,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                         mapTarget = m;
                 }
                 case SensorReading.Computer ignored -> { }
-                case SensorReading.NavConsole ignored -> { }
+                case SensorReading.NavConsole console -> {
+                    if (navConsoleBow == null) {
+                        navConsoleBow = console.bow();
+                        navConsolePos = member.getBlockPos();
+                    }
+                }
                 case SensorReading.FireConsole ignored -> { }
                 case SensorReading.FixedGun ignored -> { }
                 case SensorReading.None ignored -> { }
@@ -887,7 +903,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     : FireControlStatus.STANDBY);
             if (!merged.isEmpty() && (merged.contains(pos) || pos.equals(directingRangefinder)))
                 CDCTriggers.RANGEFINDERS_MERGED.get().trigger(rangefinder.getOperator());
-            rangefinder.setStabilization(gimbalCount > 0, navHeadingCount > 0);
+            rangefinder.setStabilization(gimbalCount > 0, navHeadingCount > 0, bowFor(rangefinder));
+            rangefinder.setReadoutLifetime(solutionLifetimeTicks());
         }
 
         // Players carrying one of the plotted maps: plotted spotters.
@@ -915,7 +932,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /** Without an Integrator nothing holds a solution between readings. */
     private long solutionLifetimeTicks() {
         return has(ComputerModule.INTEGRATOR)
-                ? RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS : UNHELD_SOLUTION_LIFETIME_TICKS;
+                ? RangefinderBearingBlockEntity.SOLUTION_LIFETIME_TICKS : RangefinderBearingBlockEntity.UNHELD_SOLUTION_LIFETIME_TICKS;
     }
 
     /** Carried forward on its tracked velocity: takes both a Differentiator and an Integrator. */

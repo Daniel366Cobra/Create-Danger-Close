@@ -1,15 +1,20 @@
 package io.github.daniel366cobra.createdangerclose.client.rangefinder;
 
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderContraption;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderOptics;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderSteadiness;
 import io.github.daniel366cobra.createdangerclose.network.RangefinderRangingPayload;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaterniond;
+import org.joml.Vector3d;
 
 /** Client state of the rangefinder view: operated tube, zoom, predicted marker separation, ranging button. */
 public final class RangefinderSight {
@@ -86,11 +91,53 @@ public final class RangefinderSight {
         return rangingSent;
     }
 
-    /** Degrees, or null when not operating. */
+    /**
+     * Degrees clockwise from north. A fort knows where north is; a ship, which turns freely, only with
+     * a heading sensor. Null without, or when not operating.
+     */
     @Nullable
     public static Double getBearing() {
         RangefinderOptics.Sight sight = RangefinderOptics.lineOfSight(Minecraft.getInstance().player);
-        return sight != null ? RangefinderOptics.compassBearing(sight.direction()) : null;
+        if (sight == null)
+            return null;
+        RangefinderBearingBlockEntity bearing = getOperatedBearing();
+        if (RangefinderOptics.operatedShip(Minecraft.getInstance().player) != null
+                && (bearing == null || !bearing.isStabilizedYaw()))
+            return null;
+        return RangefinderOptics.compassBearing(sight.direction());
+    }
+
+    /**
+     * Degrees clockwise from the bow a Navigation Console names, in the ship's frame (so its pitch and
+     * roll do not skew it). Null without one, ashore, or when not operating.
+     */
+    @Nullable
+    public static Double getRelativeBearing() {
+        RangefinderOptics.Sight sight = RangefinderOptics.lineOfSight(Minecraft.getInstance().player);
+        SubLevel ship = RangefinderOptics.operatedShip(Minecraft.getInstance().player);
+        RangefinderBearingBlockEntity bearing = getOperatedBearing();
+        Direction bow = bearing != null ? bearing.getBow() : null;
+        if (sight == null || ship == null || bow == null)
+            return null;
+        Vec3 look = sight.direction();
+        Vector3d local = new Quaterniond(ship.logicalPose().orientation())
+                .transformInverse(new Vector3d(look.x, look.y, look.z));
+        double relative = RangefinderOptics.compassBearing(new Vec3(local.x, 0, local.z))
+                - RangefinderOptics.compassBearing(new Vec3(bow.getStepX(), 0, bow.getStepZ()));
+        return (relative % 360 + 360) % 360;
+    }
+
+    /** Degrees above the horizon; a ship, which rolls, needs a Gimbal Sensor for it. Null without. */
+    @Nullable
+    public static Double getElevation() {
+        RangefinderOptics.Sight sight = RangefinderOptics.lineOfSight(Minecraft.getInstance().player);
+        if (sight == null)
+            return null;
+        RangefinderBearingBlockEntity bearing = getOperatedBearing();
+        if (RangefinderOptics.operatedShip(Minecraft.getInstance().player) != null
+                && (bearing == null || !bearing.isStabilizedTilt()))
+            return null;
+        return Math.toDegrees(Math.asin(Mth.clamp(sight.direction().y, -1, 1)));
     }
 
     public static void tick() {

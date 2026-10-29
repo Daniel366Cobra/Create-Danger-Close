@@ -188,6 +188,12 @@
           "safe_zone": "Safe zones",
           "tooltip": "Right click function"
         },
+        "compass": {
+          "north": "N",
+          "east": "E",
+          "south": "S",
+          "west": "W"
+        },
         "clear": {
           "button": "Clear table",
           "tooltip": "Removes the target and all safe zones"
@@ -206,6 +212,8 @@
       "rangefinder": {
         "readout": {
           "bearing": "BRG %s",
+          "bearing_relative": "REL %s",
+          "elevation": "ELE %s",
           "range": "RNG %s",
           "range_rate": "R/R %s",
           "bearing_rate": "B/R %s",
@@ -214,6 +222,20 @@
             "merged": "MRG",
             "standby": "STBY"
           }
+        },
+        "scale": {
+          "north": "N",
+          "northeast": "NE",
+          "east": "E",
+          "southeast": "SE",
+          "south": "S",
+          "southwest": "SW",
+          "west": "W",
+          "northwest": "NW",
+          "bow": "BOW",
+          "starboard": "STBD",
+          "stern": "STERN",
+          "port": "PORT"
         }
       },
       "rangefinder_bearing": {
@@ -358,7 +380,7 @@
         "condition2": "When powered by Redstone:",
         "behaviour2": "_Illuminates_ the eyepiece reticle. A stronger signal makes it _brighter_.",
         "condition3": "On a battle network with a Ballistic Computer:",
-        "behaviour3": "A _Gimbal Sensor_ stabilizes the sight against the ship's _pitch_ and _roll_; a _Navigation Table_ with a _Redstone Magnet_, against its _yaw_."
+        "behaviour3": "A _Gimbal Sensor_ stabilizes the sight against the ship's _pitch_ and _roll_ and gives its _elevation_; a _Navigation Table_ with a _Redstone Magnet_ steadies its _yaw_ and gives the _true bearing_. A _Navigation Console_ adds the bearing _relative to the bow_."
       },
       "rangefinder_lens.cracked": "Cracked Rangefinder Lens",
       "rangefinder_lens.tooltip": {

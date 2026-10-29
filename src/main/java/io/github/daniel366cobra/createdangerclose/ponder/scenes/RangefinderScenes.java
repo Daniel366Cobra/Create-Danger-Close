@@ -171,6 +171,20 @@ public final class RangefinderScenes {
                 .text("Map Tables on the network chart the ground around the aim point");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
+        // Ashore the sight knows north and the horizon by itself.
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(util.vector().topOf(computer))
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("On a ship, a Navigation Table with a Redstone Magnet gives the sight its true bearing, and a Gimbal Sensor its elevation");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.TEXT)
+                .pointAt(util.vector().topOf(computer))
+                .placeNearTarget()
+                .text("A Navigation Console adds the bearing relative to the bow");
+        scene.idle(PonderTiming.AFTER_TEXT);
+
     }
 
     /** Structure {@code rangefinder.nbt} again: lens cracks and dust, and their fixes, with the lenses turned to the viewer. */

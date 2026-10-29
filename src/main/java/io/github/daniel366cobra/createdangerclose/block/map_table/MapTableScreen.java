@@ -64,6 +64,12 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     private static final double TURRET_SPREAD = 16;
     private static final int GUN_LABEL_BACKDROP = 0xA0202020, GUN_LABEL_COLOR = 0xFFFFFFFF;
 
+    // The compass rose, GUI pixels: off the sheet's corner, its plate's margin around the letters, and
+    // from the needle's center to each letter's (clear of the 9-row needle's tips).
+    private static final int COMPASS_INSET = 2, COMPASS_PADDING = 2, COMPASS_ARM = 10;
+    private static final int COMPASS_NORTH = 0xFFE03C31, COMPASS_SOUTH = 0xFFC6C6C6;
+    private static final String[] COMPASS_POINTS = {"north", "east", "south", "west"};
+
     private float zoom = 1;
     // Fractions of the sheet.
     private float viewU = 0, viewV = 0;
@@ -246,12 +252,66 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
 
         graphics.disableScissor();
 
-        if (zoom > 1) {
-            pose.pushPose();
-            pose.translate(0, 0, 10);
+        pose.pushPose();
+        pose.translate(0, 0, 10);
+        if (zoom > 1)
             graphics.drawString(font, "×" + (int) zoom, sheetX + 2, sheetY + size - 9, 0xFFFFFFFF, true);
-            pose.popPose();
+        renderCompass(graphics, compassBox(sheetX, sheetY, size));
+        pose.popPose();
+    }
+
+    /** The widest of the four letters, less the font's trailing pixel. */
+    private int compassGlyphWidth() {
+        int width = 0;
+        for (String point : COMPASS_POINTS)
+            width = Math.max(width, font.width(compassLetter(point)) - 1);
+        return width;
+    }
+
+    private static Component compassLetter(String point) {
+        return Component.translatable("createdangerclose.map_table.compass." + point);
+    }
+
+    /**
+     * Its plate in the sheet's bottom-right corner (x0, y0, x1, y1): the letters' centers each
+     * COMPASS_ARM from the needle's, their 7 rows and their shadows inside.
+     */
+    private int[] compassBox(int sheetX, int sheetY, int size) {
+        int width = 2 * COMPASS_ARM + compassGlyphWidth() + 1 + 2 * COMPASS_PADDING;
+        int height = 2 * COMPASS_ARM + 8 + 2 * COMPASS_PADDING;
+        int x1 = sheetX + size - COMPASS_INSET, y1 = sheetY + size - COMPASS_INSET;
+        return new int[]{x1 - width, y1 - height, x1, y1};
+    }
+
+    /** North up like the maps: the four points around a needle, its north half red. */
+    private void renderCompass(GuiGraphics graphics, int[] box) {
+        int x0 = box[0], y0 = box[1], x1 = box[2], y1 = box[3];
+        // A plate with its corners left out.
+        graphics.fill(x0 + 1, y0, x1 - 1, y1, GUN_LABEL_BACKDROP);
+        graphics.fill(x0, y0 + 1, x0 + 1, y1 - 1, GUN_LABEL_BACKDROP);
+        graphics.fill(x1 - 1, y0 + 1, x1, y1 - 1, GUN_LABEL_BACKDROP);
+
+        int glyph = compassGlyphWidth(), offset = (glyph - 1) / 2;
+        int cx = x0 + COMPASS_PADDING + offset + COMPASS_ARM, cy = y0 + COMPASS_PADDING + 3 + COMPASS_ARM;
+        // A diamond: 1, 1, 3, 3 wide from each tip, 5 across the middle.
+        for (int k = 1; k <= 4; k++) {
+            int half = (4 - k) / 2;
+            graphics.fill(cx - half, cy - k, cx + half + 1, cy - k + 1, COMPASS_NORTH);
+            graphics.fill(cx - half, cy + k, cx + half + 1, cy + k + 1, COMPASS_SOUTH);
         }
+        graphics.fill(cx - 2, cy, cx + 3, cy + 1, COMPASS_SOUTH);
+        graphics.fill(cx, cy, cx + 1, cy + 1, GUN_LABEL_COLOR);
+
+        compassLetter(graphics, "north", cx - offset, cy - COMPASS_ARM - 3, glyph);
+        compassLetter(graphics, "south", cx - offset, cy + COMPASS_ARM - 3, glyph);
+        compassLetter(graphics, "east", cx + COMPASS_ARM - offset, cy - 3, glyph);
+        compassLetter(graphics, "west", cx - COMPASS_ARM - offset, cy - 3, glyph);
+    }
+
+    /** Centered in a cell glyph pixels wide. */
+    private void compassLetter(GuiGraphics graphics, String point, int x, int y, int glyph) {
+        Component letter = compassLetter(point);
+        graphics.drawString(font, letter, x + (glyph - (font.width(letter) - 1)) / 2, y, GUN_LABEL_COLOR, true);
     }
 
     /**
@@ -295,6 +355,7 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         if (zoom > 1)
             taken.add(new Obstacle(new int[]{sheetX, sheetY + size - 10,
                     sheetX + 2 + font.width("×" + (int) zoom), sheetY + size}, null));
+        taken.add(new Obstacle(compassBox(sheetX, sheetY, size), null));
 
         Map<String, Integer> placed = new HashMap<>();
         Map<String, Integer> sameName = new HashMap<>();

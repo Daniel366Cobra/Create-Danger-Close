@@ -1,5 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.foundation.sensor;
 
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.phys.Vec3;
@@ -205,10 +206,20 @@ public sealed interface SensorReading {
         @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
     }
 
-    /** Not a sensor. */
-    record NavConsole() implements SensorReading {
+    /** Not a sensor, but it names the bow (in its ship's frame) for relative bearings. */
+    record NavConsole(Direction bow) implements SensorReading {
         @Override public Kind kind() { return Kind.NAV_CONSOLE; }
-        @Override public CompoundTag serializeNBT(HolderLookup.Provider registries) { return new CompoundTag(); }
+
+        @Override
+        public CompoundTag serializeNBT(HolderLookup.Provider registries) {
+            CompoundTag tag = new CompoundTag();
+            tag.putInt("bow", bow.get3DDataValue());
+            return tag;
+        }
+
+        static NavConsole fromNBT(CompoundTag tag) {
+            return new NavConsole(tag.contains("bow") ? Direction.from3DDataValue(tag.getInt("bow")) : Direction.NORTH);
+        }
     }
 
     /** Not a sensor. */
@@ -260,7 +271,7 @@ public sealed interface SensorReading {
             case NONE        -> new None();
             case MAP_TARGET  -> MapTarget.fromNBT(tag);
             case COMPUTER    -> new Computer();
-            case NAV_CONSOLE -> new NavConsole();
+            case NAV_CONSOLE -> NavConsole.fromNBT(tag);
             case FIRE_CONSOLE -> new FireConsole();
             case FIXED_GUN   -> FixedGun.fromNBT(tag);
         };
