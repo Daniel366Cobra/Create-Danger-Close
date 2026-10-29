@@ -250,6 +250,8 @@
         "lens_abreast": "The Rangefinder Lenses must sit side by side on a horizontal bar, across their line of sight.",
         "lens_asymmetric": "The Rangefinder Lenses must be equally far from the bearing axis (%s and %s blocks).",
         "lens_obstructed": "Nothing on the tube may stand in front of a Rangefinder Lens (found a block %s ahead).",
+        "lens_offset": "The Rangefinder Lenses must be in line with the bearing axis, not ahead of or behind it (%s blocks off).",
+        "lens_unmounted": "Each Rangefinder Lens must sit on the end of the bar: the block beside it, toward the bearing, must be part of the tube.",
         "eyepiece_count":"A rangefinder needs exactly one Rangefinder Eyepiece (found %s).",
         "eyepiece_facing": "The Rangefinder Eyepiece must face the same way as the lenses.",
         "eyepiece_offcenter": "The Rangefinder Eyepiece must be centered on the bearing axis, midway between the lenses.",

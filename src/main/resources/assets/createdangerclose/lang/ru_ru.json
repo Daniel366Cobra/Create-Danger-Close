@@ -521,6 +521,8 @@
   "createdangerclose.rangefinder_bearing.lens_count": "Дальномеру нужно ровно два объектива дальномера (найдено: %s).",
   "createdangerclose.rangefinder_bearing.lens_facing": "Оба объектива дальномера должны смотреть в одну сторону.",
   "createdangerclose.rangefinder_bearing.lens_obstructed": "Ничто на трубе не должно заслонять объективы дальномера (блок в %s бл. впереди).",
+  "createdangerclose.rangefinder_bearing.lens_offset": "Объективы дальномера должны стоять на одной линии с осью подшипника, а не впереди или позади неё (смещение %s бл.).",
+  "createdangerclose.rangefinder_bearing.lens_unmounted": "Каждый объектив дальномера должен стоять на конце балки: соседний блок со стороны подшипника должен быть частью трубы.",
   "createdangerclose.rangefinder_bearing.must_be_vertical": "Подшипник дальномера должен смотреть вверх или вниз.",
   "createdangerclose.rangefinder_bearing.no_operator": "Нет оператора",
   "createdangerclose.rangefinder_bearing.not_assembled": "Не собран. ПКМ для сборки.",

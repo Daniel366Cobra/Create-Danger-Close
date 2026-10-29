@@ -27,8 +27,8 @@ import java.util.Map;
 /**
  * The tube on a {@link RangefinderBearingBlockEntity}; a {@link BearingContraption} for Create's
  * entity. Turns in yaw; the lenses pitch on their own, about the baseline. Two lenses facing the same
- * way, side by side, symmetric about the bearing axis (their spacing is the baseline); one eyepiece on
- * the axis.
+ * way, carried end-on by a bar in line with the bearing axis and symmetric about it (their spacing is
+ * the baseline); one eyepiece on the axis.
  */
 public class RangefinderContraption extends BearingContraption {
 
@@ -94,6 +94,14 @@ public class RangefinderContraption extends BearingContraption {
         int shoulderB = along(b, lateral);
         if (shoulderA + shoulderB != 0)
             throw fail("lens_asymmetric", Math.abs(shoulderA), Math.abs(shoulderB));
+
+        // They pitch about the bar, so it must carry them end-on, in line with the bearing axis.
+        int offset = along(a, facingA);
+        if (offset != 0)
+            throw fail("lens_offset", Math.abs(offset));
+        for (BlockPos lens : lenses)
+            if (!getBlocks().containsKey(lens.relative(lateral, along(lens, lateral) > 0 ? -1 : 1)))
+                throw fail("lens_unmounted");
 
         // The sight trace ignores the tube's own blocks, so they must not stand in front of a lens.
         for (BlockPos lens : lenses)

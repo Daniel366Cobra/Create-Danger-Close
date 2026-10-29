@@ -521,6 +521,8 @@
   "createdangerclose.rangefinder_bearing.lens_count": "A rangefinder needs exactly two Rangefinder Lenses (found %s).",
   "createdangerclose.rangefinder_bearing.lens_facing": "Both Rangefinder Lenses must face the same way.",
   "createdangerclose.rangefinder_bearing.lens_obstructed": "Nothing on the tube may stand in front of a Rangefinder Lens (found a block %s ahead).",
+  "createdangerclose.rangefinder_bearing.lens_offset": "The Rangefinder Lenses must be in line with the bearing axis, not ahead of or behind it (%s blocks off).",
+  "createdangerclose.rangefinder_bearing.lens_unmounted": "Each Rangefinder Lens must sit on the end of the bar: the block beside it, toward the bearing, must be part of the tube.",
   "createdangerclose.rangefinder_bearing.must_be_vertical": "The Rangefinder Bearing must face up or down.",
   "createdangerclose.rangefinder_bearing.no_operator": "No operator",
   "createdangerclose.rangefinder_bearing.not_assembled": "Not assembled. Right-click to assemble.",
