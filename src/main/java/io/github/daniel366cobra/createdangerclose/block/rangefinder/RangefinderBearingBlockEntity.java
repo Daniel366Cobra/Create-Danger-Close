@@ -54,9 +54,9 @@ import java.util.List;
 import java.util.function.UnaryOperator;
 
 /**
- * Trains a rangefinder tube in yaw. A stress consumer: the tube does not spin with the shaft but
- * eases toward the seated operator's heading (held after they leave), at most
- * {@link #DEG_PER_TICK_PER_RPM} per RPM. Unpowered, it parks at the assembled heading, to which angles
+ * Trains a rangefinder tube in yaw and pitches its lenses. A stress consumer: neither spins with the
+ * shaft, but each eases toward the seated operator's look (held after they leave), at most
+ * {@link #DEG_PER_TICK_PER_RPM} per RPM. Unpowered, both park at the assembled pose, to which angles
  * are relative.
  */
 public class RangefinderBearingBlockEntity extends KineticBlockEntity
@@ -76,10 +76,15 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     protected float prevAngle;
     // °/tick.
     protected float angularVelocity;
+    // Lens elevation in the tube's frame, degrees up.
+    protected float lensPitch;
+    protected float prevLensPitch;
+    protected float pitchVelocity;
     protected boolean running;
     @Nullable protected AssemblyException lastException;
     // Held after the operator dismounts, until disassembly.
     @Nullable protected Float operatorTarget;
+    @Nullable protected Float operatorPitch;
     // Strongest redstone signal into the bearing (0 = unlit).
     protected int illumination;
 
@@ -191,6 +196,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         running = true;
         angle = prevAngle = 0;
         angularVelocity = 0;
+        lensPitch = prevLensPitch = 0;
+        pitchVelocity = 0;
         sendData();
         CDCTriggers.RANGEFINDER_ASSEMBLED.get().trigger(player);
     }
@@ -206,7 +213,9 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         running = false;
         angle = prevAngle = 0;
         angularVelocity = 0;
-        operatorTarget = null;
+        lensPitch = prevLensPitch = 0;
+        pitchVelocity = 0;
+        operatorTarget = operatorPitch = null;
         clearRanging();
         sendData();
     }
@@ -225,6 +234,13 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         if (getSpeed() == 0)
             return 0;
         return operatorTarget != null ? operatorTarget : angle;
+    }
+
+    /** As {@link #getTargetAngle()}, for the lenses. */
+    public float getTargetPitch() {
+        if (getSpeed() == 0)
+            return 0;
+        return operatorPitch != null ? operatorPitch : lensPitch;
     }
 
     @Nullable
@@ -251,6 +267,19 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         return Mth.wrapDegrees(localYaw - operator.getYRot());
     }
 
+    /** The operator yaw the tube looks along now: the inverse of {@link #angleForOperator}. */
+    public float getTubeYaw(float partialTicks) {
+        if (movedContraption == null || !(movedContraption.getContraption() instanceof RangefinderContraption rc))
+            return 0;
+        Direction lensFacing = rc.getLensFacing();
+        return (lensFacing != null ? lensFacing.toYRot() : 0) - getInterpolatedAngle(partialTicks - 1);
+    }
+
+    /** Degrees up, in the tube's frame. */
+    public float getLensPitch(float partialTicks) {
+        return Mth.lerp(partialTicks, prevLensPitch, lensPitch);
+    }
+
     /** 0 (unlit) to 15. */
     public int getIllumination() {
         return illumination;
@@ -260,6 +289,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     public void tick() {
         super.tick();
         prevAngle = angle;
+        prevLensPitch = lensPitch;
 
         if (level.isClientSide)
             emitDust();
@@ -287,10 +317,12 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
         Player operator = getOperator();
         // Parked, it waits at the assembled heading for the next operator rather than the last one.
-        if (getSpeed() == 0)
-            operatorTarget = null;
-        else if (operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc)
+        if (getSpeed() == 0) {
+            operatorTarget = operatorPitch = null;
+        } else if (operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc) {
             operatorTarget = angleForOperator(rc, operator);
+            operatorPitch = -operator.getXRot();
+        }
         if (!level.isClientSide && operator != lastOperator) {
             lastOperator = operator;
             creditCondition(operator);
@@ -299,7 +331,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         if (movedContraption == null || !movedContraption.isStalled()) {
             stepTraining();
         } else {
-            angularVelocity = 0;
+            angularVelocity = pitchVelocity = 0;
         }
 
         applyRotation();
@@ -472,7 +504,9 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         Player operator = getOperator();
         float wanted = operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc
                 ? angleForOperator(rc, operator) : getTargetAngle();
-        return Math.abs(AngleHelper.getShortestAngleDiff(angle, wanted)) < ON_TARGET_DEG;
+        float wantedPitch = operator != null ? -operator.getXRot() : getTargetPitch();
+        return Math.abs(AngleHelper.getShortestAngleDiff(angle, wanted)) < ON_TARGET_DEG
+                && Math.abs(lensPitch - wantedPitch) < ON_TARGET_DEG;
     }
 
     // --- Ranging ---
@@ -676,29 +710,37 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     @Nullable
     public Vec3 getTargetPosition() { return targetPosition; }
 
-    /** Trapezoidal motion: accelerate up to top speed, never faster than it can brake to the target. Both scale with RPM. */
+    /** Yaw and lens pitch at the same pace, from the same drive. */
     private void stepTraining() {
         float maxSpeed = (getSpeed() != 0 ? Math.abs(getSpeed()) : PARKING_RPM) * DEG_PER_TICK_PER_RPM;
         if (level.isClientSide)
             maxSpeed *= ServerSpeedProvider.get();
         if (maxSpeed <= 0) {
-            angularVelocity = 0;
+            angularVelocity = pitchVelocity = 0;
             return;
         }
-        float acceleration = maxSpeed / ACCELERATION_TICKS;
+        float[] yaw = slew(angle, angularVelocity, AngleHelper.getShortestAngleDiff(angle, getTargetAngle()), maxSpeed);
+        angle = Mth.wrapDegrees(yaw[0]);
+        angularVelocity = yaw[1];
+        float[] pitch = slew(lensPitch, pitchVelocity, getTargetPitch() - lensPitch, maxSpeed);
+        lensPitch = pitch[0];
+        pitchVelocity = pitch[1];
+    }
 
-        float remaining = AngleHelper.getShortestAngleDiff(angle, getTargetAngle());
+    /**
+     * Trapezoidal motion: accelerate up to top speed, never faster than it can brake to the target.
+     * Both scale with RPM. Returns position and velocity.
+     */
+    private static float[] slew(float position, float velocity, float remaining, float maxSpeed) {
+        float acceleration = maxSpeed / ACCELERATION_TICKS;
         float brakingSpeed = (float) Math.sqrt(2 * acceleration * Math.abs(remaining));
         float desired = Math.copySign(Math.min(maxSpeed, brakingSpeed), remaining);
-        angularVelocity += Mth.clamp(desired - angularVelocity, -acceleration, acceleration);
+        velocity += Mth.clamp(desired - velocity, -acceleration, acceleration);
 
-        boolean towardTarget = Math.signum(angularVelocity) == Math.signum(remaining);
-        if (towardTarget && Math.abs(angularVelocity) >= Math.abs(remaining)) {
-            angle = Mth.wrapDegrees(angle + remaining);
-            angularVelocity = 0;
-            return;
-        }
-        angle = Mth.wrapDegrees(angle + angularVelocity);
+        boolean towardTarget = Math.signum(velocity) == Math.signum(remaining);
+        if (towardTarget && Math.abs(velocity) >= Math.abs(remaining))
+            return new float[] {position + remaining, 0};
+        return new float[] {position + velocity, velocity};
     }
 
     @Override
@@ -709,8 +751,11 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
     }
 
     protected void applyRotation() {
-        if (movedContraption != null)
-            movedContraption.setAngle(angle);
+        if (movedContraption == null)
+            return;
+        movedContraption.setAngle(angle);
+        if (movedContraption.getContraption() instanceof RangefinderContraption rc)
+            rc.setLensPitch(prevLensPitch, lensPitch);
     }
 
     // --- IBearingBlockEntity / IControlContraption ---
@@ -785,6 +830,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         compound.putBoolean("Running", running);
         compound.putFloat("Angle", angle);
         compound.putFloat("AngularVelocity", angularVelocity);
+        compound.putFloat("LensPitch", lensPitch);
+        compound.putFloat("PitchVelocity", pitchVelocity);
         compound.putInt("Illumination", illumination);
         compound.putFloat("LensDust0", lensDust[0]);
         compound.putFloat("LensDust1", lensDust[1]);
@@ -800,6 +847,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
             compound.putInt("Bow", bow.get3DDataValue());
         if (operatorTarget != null)
             compound.putFloat("OperatorTarget", operatorTarget);
+        if (operatorPitch != null)
+            compound.putFloat("OperatorPitch", operatorPitch);
         AssemblyException.write(compound, registries, lastException);
         super.write(compound, registries, clientPacket);
     }
@@ -813,9 +862,13 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
 
         float clientAngle = angle;
         float clientVelocity = angularVelocity;
+        float clientPitch = lensPitch;
+        float clientPitchVelocity = pitchVelocity;
         running = compound.getBoolean("Running");
         angle = compound.getFloat("Angle");
         angularVelocity = compound.getFloat("AngularVelocity");
+        lensPitch = compound.getFloat("LensPitch");
+        pitchVelocity = compound.getFloat("PitchVelocity");
         illumination = compound.getInt("Illumination");
         lensDust[0] = compound.getFloat("LensDust0");
         lensDust[1] = compound.getFloat("LensDust1");
@@ -832,6 +885,7 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         stabilizedYaw = compound.getBoolean("StabilizedYaw");
         bow = compound.contains("Bow") ? Direction.from3DDataValue(compound.getInt("Bow")) : null;
         operatorTarget = compound.contains("OperatorTarget") ? compound.getFloat("OperatorTarget") : null;
+        operatorPitch = compound.contains("OperatorPitch") ? compound.getFloat("OperatorPitch") : null;
         lastException = AssemblyException.read(compound, registries);
         super.read(compound, registries, clientPacket);
 
@@ -845,6 +899,10 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
         if (Math.abs(AngleHelper.getShortestAngleDiff(clientAngle, angle)) < CLIENT_RESYNC_THRESHOLD_DEG) {
             angle = clientAngle;
             angularVelocity = clientVelocity;
+        }
+        if (Math.abs(clientPitch - lensPitch) < CLIENT_RESYNC_THRESHOLD_DEG) {
+            lensPitch = clientPitch;
+            pitchVelocity = clientPitchVelocity;
         }
     }
 

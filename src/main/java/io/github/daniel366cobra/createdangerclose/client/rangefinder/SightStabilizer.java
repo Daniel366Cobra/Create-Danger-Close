@@ -59,11 +59,11 @@ final class SightStabilizer {
         undo.transform(world);
         Vector3d local = orientation.transformInverse(world).normalize();
 
-        // Back to the player's rotation, yaw continuous, pitch within the optics' travel.
+        // Back to the player's rotation, yaw continuous, both no further off than the tube allows.
         float newPitch = (float) Math.toDegrees(Math.asin(Mth.clamp(-local.y, -1, 1)));
         float newYaw = (float) Math.toDegrees(Math.atan2(-local.x, local.z));
         float yawStep = Mth.wrapDegrees(newYaw - player.getYRot());
-        player.setYRot(player.getYRot() + yawStep);
-        player.setXRot(Mth.clamp(newPitch, -RangefinderSight.MAX_ELEVATION_DEG, RangefinderSight.MAX_DEPRESSION_DEG));
+        player.setYRot(RangefinderSight.clampYaw(player.getYRot() + yawStep, player.getYRot(), 1));
+        player.setXRot(RangefinderSight.clampPitch(newPitch, player.getXRot(), 1));
     }
 }

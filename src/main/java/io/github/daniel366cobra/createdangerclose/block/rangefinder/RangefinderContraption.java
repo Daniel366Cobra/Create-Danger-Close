@@ -2,18 +2,22 @@ package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 
 import com.simibubi.create.api.contraption.ContraptionType;
 import com.simibubi.create.content.contraptions.AssemblyException;
+import com.simibubi.create.content.contraptions.behaviour.MovementContext;
 import com.simibubi.create.content.contraptions.bearing.BearingContraption;
+import com.simibubi.create.content.contraptions.render.ClientContraption;
 import io.github.daniel366cobra.createdangerclose.registries.CDCContraptionTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
 import net.minecraft.world.phys.Vec3;
+import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,8 +26,9 @@ import java.util.Map;
 
 /**
  * The tube on a {@link RangefinderBearingBlockEntity}; a {@link BearingContraption} for Create's
- * entity. Yaw only: elevation is assumed done by prisms. Two lenses facing the same way, side by side,
- * symmetric about the bearing axis (their spacing is the baseline); one eyepiece on the axis.
+ * entity. Turns in yaw; the lenses pitch on their own, about the baseline. Two lenses facing the same
+ * way, side by side, symmetric about the bearing axis (their spacing is the baseline); one eyepiece on
+ * the axis.
  */
 public class RangefinderContraption extends BearingContraption {
 
@@ -35,6 +40,8 @@ public class RangefinderContraption extends BearingContraption {
     @Nullable private BlockPos lensA;
     @Nullable private BlockPos lensB;
     @Nullable private BlockPos eyepiecePos;
+    // From the bearing each tick, for the lens renderers; degrees up.
+    private float lensPitch, prevLensPitch;
 
     public RangefinderContraption() {}
 
@@ -163,6 +170,33 @@ public class RangefinderContraption extends BearingContraption {
         return lensFacing;
     }
 
+    public void setLensPitch(float previous, float current) {
+        prevLensPitch = previous;
+        lensPitch = current;
+    }
+
+    /** Degrees up. */
+    public float getLensPitch(float partialTicks) {
+        return Mth.lerp(partialTicks, prevLensPitch, lensPitch);
+    }
+
+    /**
+     * Lenses are drawn pitched by their actors, so they leave the static mesh. Neighbours still see
+     * them: girders fit their plates to the lens.
+     */
+    @Override
+    protected ClientContraption createClientContraption() {
+        return new ClientContraption(this) {
+            @Override
+            public RenderedBlocks getRenderedBlocks() {
+                RenderedBlocks all = super.getRenderedBlocks();
+                List<BlockPos> lenses = getLenses();
+                return new RenderedBlocks(all.lookup(),
+                        getBlocks().keySet().stream().filter(pos -> !lenses.contains(pos)).toList());
+            }
+        };
+    }
+
     /** Also the operator's seat. */
     @Nullable
     public BlockPos getEyepiecePos() {
@@ -216,5 +250,12 @@ public class RangefinderContraption extends BearingContraption {
         lensB = tag.contains("LensB") ? BlockPos.of(tag.getLong("LensB")) : null;
         eyepiecePos = tag.contains("Eyepiece") ? BlockPos.of(tag.getLong("Eyepiece")) : null;
         super.readNBT(world, tag, spawnData);
+
+        // Tubes assembled before 1.1 have no lens actors.
+        for (BlockPos lens : getLenses()) {
+            StructureBlockInfo info = getBlocks().get(lens);
+            if (info != null && getActors().stream().noneMatch(actor -> actor.left.pos().equals(lens)))
+                getActors().add(MutablePair.of(info, new MovementContext(world, info, this)));
+        }
     }
 }

@@ -30,6 +30,7 @@ import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderE
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensInteraction;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensItem;
+import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensMovementBehaviour;
 import net.minecraft.advancements.critereon.StatePropertiesPredicate;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
@@ -43,6 +44,7 @@ import net.neoforged.neoforge.client.model.generators.ModelFile;
 
 
 import static com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour.interactionBehaviour;
+import static com.simibubi.create.api.behaviour.movement.MovementBehaviour.movementBehaviour;
 import static com.simibubi.create.foundation.data.CreateRegistrate.connectedTextures;
 import static com.simibubi.create.foundation.data.ModelGen.customItemModel;
 import static com.simibubi.create.foundation.data.TagGen.axeOrPickaxe;
@@ -337,6 +339,7 @@ public class CDCBlocks {
                             .texture("5", p.modLoc("block/rangefinder_lens/lens_cracked"))
                     : p.models().getExistingFile(p.modLoc("block/rangefinder_lens/block"))))
             .onRegister(interactionBehaviour(new RangefinderLensInteraction()))
+            .onRegister(movementBehaviour(new RangefinderLensMovementBehaviour()))
             // The cracked state rides on the stack.
             .loot((lt, block) -> lt.add(block, lt.createSingleItemTable(block)
                     .apply(CopyBlockState.copyState(block).copy(RangefinderLensBlock.CRACKED)
