@@ -70,7 +70,7 @@ public final class MapTableScenes {
                 List.of(new BattlePlot.RangefinderFix(westX + FIX_U * SHEET_BLOCKS, 64,
                         northZ + FIX_V * SHEET_BLOCKS, FIX_SIGMA, middle.x, middle.z, false)),
                 List.of(new BattlePlot.GunRange(middle.x, middle.z, GUN_RANGE,
-                        aimX / aimLength, aimZ / aimLength, GUN_MIN_RANGE, 0, 360, "")),
+                        aimX / aimLength, aimZ / aimLength, GUN_MIN_RANGE, 0, 360, "", true)),
                 null);
         // Marker yaw 0 points south.
         float spotterYaw = (float) Math.toDegrees(Math.atan2(-(TARGET_U - SPOTTER_U), TARGET_V - SPOTTER_V));
@@ -223,6 +223,19 @@ public final class MapTableScenes {
                 .pointAt(zoneMiddle)
                 .placeNearTarget()
                 .text("While connected, a shot that would land near one waits for a second press to confirm, as danger close does");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(zoneMiddle)
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("In the GUI's Multi target mode, right-click marks up to 4 targets; scroll over a mark to set its rounds per gun");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(zoneMiddle)
+                .placeNearTarget()
+                .text("A Fire Mission Console's button starts the mission: the guns engage each mark in turn, firing as they are ready");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
     }
 

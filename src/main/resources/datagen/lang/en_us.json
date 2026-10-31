@@ -62,6 +62,18 @@
         "direct": "Trajectory: Direct fire",
         "plunging": "Trajectory: Plunging fire"
       },
+      "mission": {
+        "under_way": "Fire mission under way",
+        "planned": "Mission planned (marks: %s, rounds: %s). Press fire to start",
+        "progress": "Mission: mark %s of %s, %s of %s rounds fired",
+        "complete": "Mission complete: %s of %s rounds fired",
+        "ceased": "Cease fire: %s of %s rounds fired",
+        "confirm": "Danger close: press fire to confirm this mark",
+        "confirm_safe_zone": "Safe zone: press fire to confirm this mark",
+        "skipped": "%s: mark %s, rounds unfired: %s (%s)",
+        "no_shot": "shot timed out",
+        "unnamed": "Gun"
+      },
       "no_guns": "No guns on the network",
       "salvo": "Salvo: %s fired, %s held",
       "salvo_named": "Salvo: %s fired, %s held (%s)",
@@ -175,6 +187,7 @@
       },
       "map_table": {
         "title": "Map Table",
+        "marks": "%s of %s marks",
         "occupied": "A map is already present on this part of the table.",
         "does_not_fit": "This map does not fit the others (needs same zoom and dimension, laid north up).",
         "connected": "Connected to the battle network",
@@ -185,6 +198,7 @@
         "safe_zone_limit": "This table already holds %s safe zones",
         "mode": {
           "target": "Target",
+          "multi_target": "Multi target",
           "safe_zone": "Safe zones",
           "tooltip": "Right click function"
         },
@@ -205,8 +219,10 @@
         },
         "hint": {
           "target": "Right-click: mark, Shift + Right-Click: clear",
+          "multi_target": "Right-click: add mark, Shift + Right-Click: remove",
+          "view_multi_target": "Scroll: zoom, or rounds per gun over a mark. Drag: move",
           "safe_zone": "Right-drag: draw, Shift + Right-Click: remove",
-          "view": "Scroll: zoom, Drag: move"
+          "view": "Scroll: zoom, or rounds per gun over the X. Drag: move"
         }
       },
       "rangefinder": {
@@ -328,7 +344,7 @@
         "condition3": "When the middle lever is right-clicked:",
         "behaviour3": "Switches between _direct_ and _plunging_ fire.",
         "condition4": "When the right button is right-clicked:",
-        "behaviour4": "_Fires_ every gun that has a solution and is _on target_. The others hold fire."
+        "behaviour4": "_Fires_ every gun that has a solution and is _on target_. The others hold fire. With _marks_ on a Map Table, _starts_ a mission on them."
       },
       "autocannon_control_console.tooltip": {
         "summary": "The anti-aircraft gunner's station: gives the _autocannons_ their orders.",
@@ -399,7 +415,7 @@
         "condition2": "When right-clicked with an empty hand:",
         "behaviour2": "_Opens_ the table, showing all its maps stitched together.",
         "condition3": "When a Battle Network Interface faces it:",
-        "behaviour3": "_Shows_ the ship's position and _sends_ the marked target to the _Ballistic Computer_."
+        "behaviour3": "_Shows_ the ship's position and _sends_ the marked target, or up to _4 marks_ in Multi target mode, to the _Ballistic Computer_."
       },
       "rangefinder_eyepiece.tooltip": {
         "summary": "The operator's station on a _rangefinder_ tube. _Bolts_ onto the back of the tube, _centered_ between the lenses.",

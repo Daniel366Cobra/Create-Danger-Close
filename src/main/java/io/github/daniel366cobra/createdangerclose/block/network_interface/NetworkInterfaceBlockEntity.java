@@ -261,7 +261,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         // Placed on a pixel: sigma of a pixel over √12.
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         double sigma = sheet != null ? sheet.blocksPerPixel() / Math.sqrt(12) : 0;
-        return new SensorReading.MapTarget(controller.getTarget(), controller.getTargetTick(), sigma);
+        return new SensorReading.MapTarget(controller.getAimPoint(), controller.getTargetTick(), sigma, controller.getMissionMarks());
     }
 
     private SensorReading buildGimbalReading(GimbalSensorBlockEntity gimbal) {

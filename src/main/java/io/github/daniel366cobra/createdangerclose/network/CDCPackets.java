@@ -20,6 +20,8 @@ public final class CDCPackets {
                         RangefinderRangingPayload::handle)
                 .playToServer(MapTableTargetPayload.TYPE, MapTableTargetPayload.STREAM_CODEC,
                         MapTableTargetPayload::handle)
+                .playToServer(MapTableMarkPayload.TYPE, MapTableMarkPayload.STREAM_CODEC,
+                        MapTableMarkPayload::handle)
                 .playToServer(MapTableSafeZonePayload.TYPE, MapTableSafeZonePayload.STREAM_CODEC,
                         MapTableSafeZonePayload::handle)
                 .playToServer(FireMissionKnobPayload.TYPE, FireMissionKnobPayload.STREAM_CODEC,

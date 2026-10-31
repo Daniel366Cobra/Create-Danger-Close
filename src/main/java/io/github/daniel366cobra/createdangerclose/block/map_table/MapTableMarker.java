@@ -6,6 +6,7 @@ import com.mojang.math.Axis;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -96,7 +97,12 @@ public final class MapTableMarker {
     /** Null if none, or off the sheet. Shown without a network too, as a memo. */
     @Nullable
     public static Marker computeTarget(MapTableBlockEntity controller) {
-        Vec3 target = controller.getTarget();
+        return markAt(controller, controller.getTarget());
+    }
+
+    /** A red X; null if off the sheet. */
+    @Nullable
+    private static Marker markAt(MapTableBlockEntity controller, @Nullable Vec3 target) {
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         if (target == null || sheet == null)
             return null;
@@ -159,6 +165,11 @@ public final class MapTableMarker {
         Marker target = computeTarget(controller);
         if (target != null)
             markers.add(target);
+        for (SensorReading.Mark mark : controller.getMarks()) {
+            Marker marker = markAt(controller, mark.pos());
+            if (marker != null)
+                markers.add(marker);
+        }
         markers.addAll(computeSpotters(controller));
         Marker own = computeOwn(controller);
         if (own != null)

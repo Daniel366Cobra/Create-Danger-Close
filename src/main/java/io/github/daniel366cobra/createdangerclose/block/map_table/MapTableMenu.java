@@ -30,7 +30,7 @@ public class MapTableMenu extends AbstractContainerMenu {
     // Below a 5×5 slot grid and its target readout.
     public static final int PLAYER_INV_X = SLOT_GRID_X, PLAYER_INV_Y = 145;
     public static final int IMAGE_WIDTH = PLAYER_INV_X + 162 + 8, IMAGE_HEIGHT = 230;
-    public static final int CLEAR_BUTTON = 0, LABELS_BUTTON = 1;
+    public static final int CLEAR_BUTTON = 0, LABELS_BUTTON = 1, MODE_BUTTON = 2;
 
     @Nullable private final MapTableBlockEntity controller;
     private final int tableWidth;
@@ -137,6 +137,10 @@ public class MapTableMenu extends AbstractContainerMenu {
     public boolean clickMenuButton(Player player, int id) {
         if (controller == null)
             return false;
+        if (id == MODE_BUTTON) {
+            controller.cycleMode();
+            return true;
+        }
         if (id == LABELS_BUTTON) {
             controller.toggleGunLabels();
             return true;

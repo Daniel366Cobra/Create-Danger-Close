@@ -69,18 +69,21 @@ public final class MapTablePlot {
             // A pie slice if the arc is limited. A bearing lies a quarter turn on from east on the sheet.
             double from = gun.limitsTraverse() ? Math.toRadians(gun.arcFrom() + 90) : 0;
             double sweep = gun.limitsTraverse() ? Math.toRadians(gun.arcLength()) : 2 * Math.PI;
-            pen.arc(x, y, radius, from, sweep, pixel * DASH, pixel * DASH_GAP);
+            if (gun.ring())
+                pen.arc(x, y, radius, from, sweep, pixel * DASH, pixel * DASH_GAP);
             // Dead zone: too close for the steepest or lowest shot.
             if (gun.minRadius() > 0)
                 pen.arc(x, y, gun.minRadius() * scale, from, sweep, pixel * AIM_DASH, pixel * AIM_GAP);
+            // Reach unknown (never yet loaded): the lines run off the sheet, showing where it points and can turn.
+            double length = radius > 0 ? radius : Math.hypot(x - sheetSize / 2, y - sheetSize / 2) + sheetSize;
             if (gun.limitsTraverse()) {
                 for (double edge : new double[]{from, from + sweep})
-                    pen.line(x, y, x + Math.cos(edge) * radius, y + Math.sin(edge) * radius,
+                    pen.line(x, y, x + Math.cos(edge) * length, y + Math.sin(edge) * length,
                             pixel * DASH, pixel * DASH_GAP);
             }
             if (gun.hasAim()) {
                 pen.color = gunAimColor;
-                pen.line(x, y, x + gun.aimX() * radius, y + gun.aimZ() * radius,
+                pen.line(x, y, x + gun.aimX() * length, y + gun.aimZ() * length,
                         pixel * AIM_DASH, pixel * AIM_GAP);
             }
         }

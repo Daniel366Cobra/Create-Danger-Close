@@ -10,6 +10,7 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
 import io.github.daniel366cobra.createdangerclose.mixin.MapItemSavedDataAccessor;
 import io.github.daniel366cobra.createdangerclose.registries.CDCTriggers;
 import net.createmod.catnip.nbt.NBTHelper;
@@ -91,11 +92,21 @@ public class MapTableBlockEntity extends SmartBlockEntity
     // The controller's counts. Set or cleared at targetTick; wherever blocks join or split, the newest wins.
     @Nullable protected Vec3 target;
     protected long targetTick;
+    // TODO: the single target (target, targetRounds) could become one mark in a general fire mission, dropping
+    // getShownMarks and getMissionMarks; old saves' "Target" would then need migrating.
+    // Rounds per gun on the single target; more than one makes a one-mark mission.
+    protected int targetRounds = 1;
+    // Instead of a target: a multi-target mission, in click order. Dated with it.
+    public static final int MAX_MARKS = 4, MAX_MARK_ROUNDS = 8;
+    protected List<SensorReading.Mark> marks = List.of();
     // Likewise, as a whole.
     protected List<SafeZone> safeZones = List.of();
     protected long safeZonesTick;
     // Controller only: whether its screen labels named guns, for whoever mans it.
     protected boolean gunLabels = true;
+    // Controller only: what right-click does on its screen, for whoever mans it next.
+    public enum Mode { TARGET, MULTI_TARGET, SAFE_ZONES }
+    protected Mode mode = Mode.TARGET;
     protected boolean linked;
     protected long lastLinkTick;
     // Controller only: as last carried over by an interface.
@@ -279,30 +290,112 @@ public class MapTableBlockEntity extends SmartBlockEntity
         return targetTick;
     }
 
-    /** At sheet fractions; the height is the ground (or water) if loaded, else sea level. */
+    /** At sheet fractions; replaces any multi-target marks. */
     public void designateTarget(double u, double v) {
+        Vec3 point = groundAt(u, v);
+        if (point == null)
+            return;
+        target = point;
+        marks = List.of();
+        targetRounds = 1;
+        targetChanged();
+    }
+
+    /** The height is the ground (or water) if loaded, else sea level. Null without a sheet here. */
+    @Nullable
+    private Vec3 groundAt(double u, double v) {
         Sheet sheet = getSheet();
         if (level == null || sheet == null || !sheet.dimension().equals(level.dimension()))
-            return;
+            return null;
         int x = Mth.floor(sheet.worldX(Mth.clamp(u, 0, 1)));
         int z = Mth.floor(sheet.worldZ(Mth.clamp(v, 0, 1)));
         int y = level.hasChunk(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z))
                 ? level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z)
                 : level.getSeaLevel();
-        target = new Vec3(x + 0.5, y, z + 0.5);
+        return new Vec3(x + 0.5, y, z + 0.5);
+    }
+
+    /** The target and any marks. */
+    public void clearTarget() {
+        if (target == null && marks.isEmpty() || level == null)
+            return;
+        target = null;
+        marks = List.of();
+        targetRounds = 1;
+        // Dated too, so an older target on a block that joins later stays cleared.
+        targetChanged();
+    }
+
+    private void targetChanged() {
         targetTick = level.getGameTime();
         setChanged();
         sendData();
     }
 
-    public void clearTarget() {
-        if (target == null || level == null)
+    // --- Multi-target marks (controller only) ---
+
+    public List<SensorReading.Mark> getMarks() {
+        return marks;
+    }
+
+    /** What the guns lay on: the single target, or the first mark. */
+    @Nullable
+    public Vec3 getAimPoint() {
+        return marks.isEmpty() ? target : marks.get(0).pos();
+    }
+
+    /** At sheet fractions; replaces a single target. New marks start at one round per gun. */
+    public void addMark(double u, double v) {
+        Vec3 point = groundAt(u, v);
+        if (point == null || marks.size() >= MAX_MARKS)
             return;
+        int id = marks.isEmpty() ? 0 : marks.get(marks.size() - 1).id() + 1;
+        List<SensorReading.Mark> changed = new ArrayList<>(marks);
+        changed.add(new SensorReading.Mark(id, point, 1));
+        marks = List.copyOf(changed);
         target = null;
-        // Dated too, so an older target on a block that joins later stays cleared.
-        targetTick = level.getGameTime();
-        setChanged();
-        sendData();
+        targetChanged();
+    }
+
+    public void removeMark(int id) {
+        List<SensorReading.Mark> changed = new ArrayList<>(marks);
+        if (changed.removeIf(mark -> mark.id() == id)) {
+            marks = List.copyOf(changed);
+            targetChanged();
+        }
+    }
+
+    /** The single target as a mark, or the marks: what the screen labels and scrolling work on. */
+    public List<SensorReading.Mark> getShownMarks() {
+        return marks.isEmpty() && target != null ? List.of(new SensorReading.Mark(0, target, targetRounds)) : marks;
+    }
+
+    /** What the fire button runs as a mission: the marks, or a single target of several rounds. One round is a plain salvo. */
+    public List<SensorReading.Mark> getMissionMarks() {
+        return marks.isEmpty() && targetRounds <= 1 ? List.of() : getShownMarks();
+    }
+
+    /** Rounds per gun, within 1 to {@link #MAX_MARK_ROUNDS}. */
+    public void adjustMarkRounds(int id, int delta) {
+        if (marks.isEmpty() && target != null) {
+            int rounds = Mth.clamp(targetRounds + delta, 1, MAX_MARK_ROUNDS);
+            if (rounds != targetRounds) {
+                targetRounds = rounds;
+                targetChanged();
+            }
+            return;
+        }
+        List<SensorReading.Mark> changed = new ArrayList<>(marks);
+        for (int i = 0; i < changed.size(); i++) {
+            SensorReading.Mark mark = changed.get(i);
+            int rounds = Mth.clamp(mark.rounds() + delta, 1, MAX_MARK_ROUNDS);
+            if (mark.id() == id && rounds != mark.rounds()) {
+                changed.set(i, new SensorReading.Mark(id, mark.pos(), rounds));
+                marks = List.copyOf(changed);
+                targetChanged();
+                return;
+            }
+        }
     }
 
     // --- Safe zones (controller only) ---
@@ -358,6 +451,16 @@ public class MapTableBlockEntity extends SmartBlockEntity
         }
     }
 
+    public Mode getMode() {
+        return mode;
+    }
+
+    public void cycleMode() {
+        mode = Mode.values()[(mode.ordinal() + 1) % Mode.values().length];
+        setChanged();
+        sendData();
+    }
+
     public boolean showsGunLabels() {
         return gunLabels;
     }
@@ -381,12 +484,15 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     /** What a table keeps across joins and splits, each part dated by its last change. */
-    private record TableMemo(@Nullable Vec3 target, long targetTick, List<SafeZone> safeZones, long safeZonesTick) {}
+    private record TableMemo(@Nullable Vec3 target, int targetRounds, List<SensorReading.Mark> marks, long targetTick,
+                             List<SafeZone> safeZones, long safeZonesTick) {}
 
     private void adopt(TableMemo memo) {
         boolean changed = false;
         if (memo.targetTick() > targetTick) {
             target = memo.target();
+            targetRounds = memo.targetRounds();
+            marks = memo.marks();
             targetTick = memo.targetTick();
             changed = true;
         }
@@ -402,7 +508,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     private TableMemo memo() {
-        return new TableMemo(target, targetTick, safeZones, safeZonesTick);
+        return new TableMemo(target, targetRounds, marks, targetTick, safeZones, safeZonesTick);
     }
 
     // --- Battle network link (controller only) ---
@@ -873,7 +979,12 @@ public class MapTableBlockEntity extends SmartBlockEntity
                         ? "createdangerclose.map_table.connected" : "createdangerclose.map_table.not_connected"))
                 .style(table.linked ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY)
                 .forGoggles(tooltip);
-        if (table.target != null) {
+        if (!table.marks.isEmpty()) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.map_table.marks", table.marks.size(), MAX_MARKS))
+                    .style(ChatFormatting.GOLD)
+                    .forGoggles(tooltip);
+        } else if (table.target != null) {
             CDCLang.builder()
                     .add(Component.translatable("createdangerclose.map_table.target"))
                     .add(Component.literal(" ").withStyle(ChatFormatting.RESET))
@@ -923,6 +1034,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
         inventory.deserializeNBT(registries, compound.getCompound("Inventory"));
         target = compound.contains("Target") ? readVec3(compound.getCompound("Target")) : null;
         targetTick = compound.getLong("TargetTick");
+        targetRounds = Mth.clamp(compound.getInt("TargetRounds"), 1, MAX_MARK_ROUNDS);
+        marks = SensorReading.Mark.readList(compound.getList("Marks", Tag.TAG_COMPOUND));
         List<SafeZone> zones = new ArrayList<>();
         for (Tag tag : compound.getList("SafeZones", Tag.TAG_INT_ARRAY)) {
             int[] box = ((IntArrayTag) tag).getAsIntArray();
@@ -932,6 +1045,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         safeZones = List.copyOf(zones);
         safeZonesTick = compound.getLong("SafeZonesTick");
         gunLabels = !compound.getBoolean("HideLabels");
+        mode = Mode.values()[Mth.clamp(compound.getInt("Mode"), 0, Mode.values().length - 1)];
         if (clientPacket) {
             linked = compound.getBoolean("Linked");
             Direction bow = compound.contains("Bow") ? Direction.from2DDataValue(compound.getInt("Bow")) : null;
@@ -978,6 +1092,13 @@ public class MapTableBlockEntity extends SmartBlockEntity
         }
         // Even without a target: when it was cleared.
         compound.putLong("TargetTick", targetTick);
+        compound.putInt("TargetRounds", targetRounds);
+        if (!marks.isEmpty()) {
+            ListTag markTags = new ListTag();
+            for (SensorReading.Mark mark : marks)
+                markTags.add(mark.write());
+            compound.put("Marks", markTags);
+        }
         if (!safeZones.isEmpty()) {
             ListTag zones = new ListTag();
             for (SafeZone zone : safeZones)
@@ -985,6 +1106,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
             compound.put("SafeZones", zones);
         }
         compound.putLong("SafeZonesTick", safeZonesTick);
+        compound.putInt("Mode", mode.ordinal());
         if (!gunLabels)
             compound.putBoolean("HideLabels", true);
         // Only clients need these: the link lapses on its own, and the map knows where it lies.

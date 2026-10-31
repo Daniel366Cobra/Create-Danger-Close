@@ -215,6 +215,35 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private final Set<BlockPos> autocannonReports = new HashSet<>();
     // Report (servo) to the mount it lays, for guns only.
     private final Map<BlockPos, BlockPos> mountOfReport = new HashMap<>();
+    // Each gun's reach when last loaded, for the plot (server). Between shots it keeps the ring this long.
+    private record HeldReach(double radius, double minRadius, long tick) {}
+    private static final long RING_HOLD_TICKS = 200;
+    private final Map<BlockPos, HeldReach> lastReach = new HashMap<>();
+    // A multi-target mission (server, and not saved: it ends with a reload; see orderMission).
+    private enum MissionOutcome { NONE, COMPLETE, CEASED }
+    private record MissionNote(String gun, int mark, int unfired, String reasonKey) {}
+    // A gun with no shot in this long gives up on the mark, so a dry gun cannot hold up the others. Hand-loading fits.
+    private static final long MISSION_STALL_TICKS = 1200;
+    // Out of reach for this long, not just while part loaded or as the ship swings.
+    private static final long MISSION_UNREACHABLE_TICKS = 100;
+    private static final long MISSION_POLL_GAP_TICKS = 40;
+    private static final int MAX_MISSION_NOTES = 6;
+    private List<SensorReading.Mark> missionMarks = List.of();
+    private boolean missionActive;
+    private int missionMarkId;
+    // This mark: rounds each gun has fired, and guns that gave up on it.
+    private final Map<BlockPos, Integer> missionRounds = new HashMap<>();
+    private final Set<BlockPos> missionDone = new HashSet<>();
+    private final Map<BlockPos, Long> missionUnreachableSince = new HashMap<>();
+    private int missionFired, missionOrdered;
+    private long missionProgressTick, missionLastPollTick;
+    private boolean missionAwaitingConfirmation;
+    private int missionConfirmedMark = -1, missionAlertedMark = -1, missionHoldAlerts;
+    private MissionOutcome missionOutcome = MissionOutcome.NONE;
+    private final List<MissionNote> missionNotes = new ArrayList<>();
+    @Nullable private Player missionOfficer;
+    // Client: as last synced.
+    @Nullable private CompoundTag clientMission;
     // The name each report's gun shows (set on a servo laying it); synced for the console tooltips.
     private final Map<BlockPos, String> reportNames = new HashMap<>();
     // The same by mount, for the salvo message (server).
@@ -312,6 +341,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             pollNetwork();
             forgetRatesOnNewTarget();
             pollAndPushServos();
+            tickMission();
         }
         updatePanel();
         notifyUpdate();
@@ -359,6 +389,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public SalvoResult fireSalvo(@Nullable Player orderedBy) {
         if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
             return new SalvoResult(0, 0);
+        if (!missionMarks.isEmpty())
+            return orderMission(orderedBy);
         // Danger close: the first press only warns; a second within the window fires.
         CServer.DangerClose dangerConfig = CDCConfig.server().dangerClose;
         boolean danger = false;
@@ -388,6 +420,278 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
         creditFire(orderedBy, fired);
         return new SalvoResult(fired.size(), held, false, listNames(heldNames));
+    }
+
+    // --- Multi-target mission ---
+
+    /**
+     * Starts a mission on the table's marks; pressed again during one, confirms a danger-close mark.
+     * The battery engages one mark at a time, every gun firing its rounds as it is ready, then shifts together.
+     */
+    private SalvoResult orderMission(@Nullable Player orderedBy) {
+        if (bigCannonCount() == 0)
+            return new SalvoResult(0, 0);
+        if (!missionActive) {
+            missionActive = true;
+            missionMarkId = missionMarks.get(0).id();
+            missionFired = missionOrdered = 0;
+            missionRounds.clear();
+            missionDone.clear();
+            missionUnreachableSince.clear();
+            missionNotes.clear();
+            missionOutcome = MissionOutcome.NONE;
+            missionConfirmedMark = missionAlertedMark = -1;
+            missionProgressTick = level.getGameTime();
+        } else if (missionAwaitingConfirmation) {
+            missionConfirmedMark = missionMarkId;
+        }
+        missionOfficer = orderedBy;
+        // The guns fire at the next poll: what the last one read may have fired since.
+        SensorReading.Mark mark = currentMark();
+        missionAwaitingConfirmation = mark != null && needsConfirmation(mark);
+        if (missionAwaitingConfirmation)
+            noteMissionHold(mark);
+        notifyUpdate();
+        return new SalvoResult(0, missionAwaitingConfirmation ? bigCannonCount() : 0, missionAwaitingConfirmation);
+    }
+
+    /** Once per mark: a barrel wavering at the edge of the tolerance holds again and again. */
+    private void noteMissionHold(SensorReading.Mark mark) {
+        if (missionAlertedMark != mark.id()) {
+            missionAlertedMark = mark.id();
+            missionHoldAlerts++;
+        }
+    }
+
+    /** Counts up each time a mission first holds on a mark; consoles sound their bell at a rise. */
+    public int getMissionHoldAlerts() {
+        return missionHoldAlerts;
+    }
+
+    /** Danger close, as for a salvo: held until the button is pressed for this mark. */
+    private boolean needsConfirmation(SensorReading.Mark mark) {
+        if (missionConfirmedMark == mark.id() || !CDCConfig.server().dangerClose.confirmDangerClose.get())
+            return false;
+        for (BlockPos mountPos : dangerCloseGuns.keySet())
+            if (!isAutocannon(mountPos) && isOnTarget(mountPos))
+                return true;
+        return false;
+    }
+
+    /** Each poll: the mark in hand, as the table's marks now stand. */
+    private void syncMission(List<SensorReading.Mark> marks) {
+        // Cleared: a finished mission's report goes too, a running one ceases and reports.
+        if (marks.isEmpty() && !missionMarks.isEmpty() && !missionActive)
+            missionOutcome = MissionOutcome.NONE;
+        missionMarks = marks;
+        if (!missionActive)
+            return;
+        if (marks.isEmpty()) {
+            endMission(MissionOutcome.CEASED);
+            return;
+        }
+        // Its mark was removed: on to the next.
+        if (currentMark() == null && !moveToMarkAfter(missionMarkId))
+            endMission(MissionOutcome.COMPLETE);
+    }
+
+    @Nullable
+    private SensorReading.Mark currentMark() {
+        if (!missionActive)
+            return null;
+        for (SensorReading.Mark mark : missionMarks)
+            if (mark.id() == missionMarkId)
+                return mark;
+        return null;
+    }
+
+    private boolean moveToMarkAfter(int id) {
+        for (SensorReading.Mark mark : missionMarks) {
+            if (mark.id() > id) {
+                missionMarkId = mark.id();
+                missionRounds.clear();
+                missionDone.clear();
+                missionUnreachableSince.clear();
+                missionProgressTick = level.getGameTime();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void endMission(MissionOutcome outcome) {
+        missionActive = false;
+        missionAwaitingConfirmation = false;
+        missionOutcome = outcome;
+        missionOfficer = null;
+    }
+
+    /** After each poll, as it read the guns. */
+    private void tickMission() {
+        SensorReading.Mark mark = currentMark();
+        if (mark == null || !(level instanceof ServerLevel serverLevel) || bigCannonCount() == 0)
+            return;
+        long now = level.getGameTime();
+        // Time without power is not the guns' delay.
+        if (now - missionLastPollTick > MISSION_POLL_GAP_TICKS)
+            missionProgressTick = now;
+        missionLastPollTick = now;
+
+        missionAwaitingConfirmation = needsConfirmation(mark);
+        if (missionAwaitingConfirmation) {
+            noteMissionHold(mark);
+            // The officer's decision, not the guns' delay.
+            missionProgressTick = now;
+            return;
+        }
+
+        boolean stalled = now - missionProgressTick > MISSION_STALL_TICKS;
+        boolean markDone = true;
+        List<BlockPos> fired = new ArrayList<>();
+        for (Map.Entry<BlockPos, BlockPos> entry : mountOfReport.entrySet()) {
+            BlockPos mountPos = entry.getValue();
+            if (isAutocannon(mountPos) || missionDone.contains(mountPos))
+                continue;
+            int shot = missionRounds.getOrDefault(mountPos, 0);
+            if (shot >= mark.rounds())
+                continue;
+            if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos)) {
+                missionRounds.put(mountPos, ++shot);
+                missionFired++;
+                missionProgressTick = now;
+                fired.add(mountPos);
+                markDone &= shot >= mark.rounds();
+                continue;
+            }
+            BallisticSolver.Result result = lastPitchResults.get(entry.getKey());
+            BallisticSolver.Result.Reason reason = result != null && !result.valid() ? result.reason() : null;
+            boolean unreachable = cannotReach(reason);
+            if (unreachable)
+                missionUnreachableSince.putIfAbsent(mountPos, now);
+            else
+                missionUnreachableSince.remove(mountPos);
+            if (stalled || unreachable && now - missionUnreachableSince.get(mountPos) >= MISSION_UNREACHABLE_TICKS) {
+                missionDone.add(mountPos);
+                addMissionNote(mountPos, mark, mark.rounds() - shot, reason);
+                continue;
+            }
+            markDone = false;
+        }
+        creditFire(missionOfficer, fired);
+        if (markDone) {
+            missionOrdered += mark.rounds() * bigCannonCount();
+            if (!moveToMarkAfter(mark.id()))
+                endMission(MissionOutcome.COMPLETE);
+        }
+    }
+
+    /** As loaded and placed, waiting will likely not help. Others mean a reload under way: a shell with no charge yet, for one. */
+    private static boolean cannotReach(@Nullable BallisticSolver.Result.Reason reason) {
+        return reason != null && switch (reason) {
+            case OUT_OF_RANGE, OUT_OF_ARC, TOO_CLOSE, NO_ALTITUDE, REDUNDANT_DRIVES, NO_CONVERGENCE, DEGENERATE -> true;
+            default -> false;
+        };
+    }
+
+    private void addMissionNote(BlockPos mountPos, SensorReading.Mark mark, int unfired,
+                                @Nullable BallisticSolver.Result.Reason reason) {
+        if (missionNotes.size() < MAX_MISSION_NOTES)
+            missionNotes.add(new MissionNote(mountNames.getOrDefault(mountPos, ""), missionMarks.indexOf(mark) + 1, unfired,
+                    reason != null ? "createdangerclose.ballistic_computer.reason." + reason.name().toLowerCase()
+                            : "createdangerclose.fire_mission_console.mission.no_shot"));
+    }
+
+    /** Fired and ordered rounds, marks not reached included. */
+    private int missionOrderedTotal() {
+        int total = missionOrdered;
+        if (missionActive)
+            for (SensorReading.Mark mark : missionMarks)
+                if (mark.id() >= missionMarkId)
+                    total += mark.rounds() * bigCannonCount();
+        return total;
+    }
+
+    public boolean isMissionActive() {
+        return missionActive;
+    }
+
+    private void writeMission(CompoundTag compound) {
+        if (!missionActive && missionOutcome == MissionOutcome.NONE && missionMarks.isEmpty())
+            return;
+        CompoundTag tag = new CompoundTag();
+        if (!missionActive && !missionMarks.isEmpty()) {
+            int rounds = 0;
+            for (SensorReading.Mark mark : missionMarks)
+                rounds += mark.rounds() * bigCannonCount();
+            tag.putInt("PlannedMarks", missionMarks.size());
+            tag.putInt("PlannedRounds", rounds);
+        }
+        tag.putBoolean("Active", missionActive);
+        tag.putInt("Outcome", missionOutcome.ordinal());
+        tag.putBoolean("Confirm", missionAwaitingConfirmation);
+        tag.putBoolean("SafeZone", missionAwaitingConfirmation && dangerOnTarget(false) == Danger.SAFE_ZONE);
+        int number = 1;
+        for (SensorReading.Mark mark : missionMarks)
+            if (mark.id() < missionMarkId)
+                number++;
+        tag.putInt("Mark", number);
+        tag.putInt("Marks", missionMarks.size());
+        tag.putInt("Fired", missionFired);
+        tag.putInt("Ordered", missionOrderedTotal());
+        ListTag notes = new ListTag();
+        for (MissionNote note : missionNotes) {
+            CompoundTag noteTag = new CompoundTag();
+            noteTag.putString("Gun", note.gun());
+            noteTag.putInt("Mark", note.mark());
+            noteTag.putInt("Unfired", note.unfired());
+            noteTag.putString("Reason", note.reasonKey());
+            notes.add(noteTag);
+        }
+        tag.put("Notes", notes);
+        compound.put("Mission", tag);
+    }
+
+    private void addMissionTooltip(List<Component> tooltip) {
+        CompoundTag mission = clientMission;
+        if (mission == null)
+            return;
+        int fired = mission.getInt("Fired"), ordered = mission.getInt("Ordered");
+        MissionOutcome[] outcomes = MissionOutcome.values();
+        MissionOutcome outcome = outcomes[Mth.clamp(mission.getInt("Outcome"), 0, outcomes.length - 1)];
+        if (mission.getBoolean("Active") || outcome != MissionOutcome.NONE) {
+            Component line = mission.getBoolean("Active")
+                    ? Component.translatable("createdangerclose.fire_mission_console.mission.progress",
+                            mission.getInt("Mark"), mission.getInt("Marks"), fired, ordered)
+                    : Component.translatable(outcome == MissionOutcome.CEASED
+                            ? "createdangerclose.fire_mission_console.mission.ceased"
+                            : "createdangerclose.fire_mission_console.mission.complete", fired, ordered);
+            CDCLang.builder().add(line).style(ChatFormatting.GOLD).forGoggles(tooltip);
+        }
+        if (mission.contains("PlannedMarks"))
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.fire_mission_console.mission.planned",
+                            mission.getInt("PlannedMarks"), mission.getInt("PlannedRounds")))
+                    .style(ChatFormatting.YELLOW)
+                    .forGoggles(tooltip);
+        if (mission.getBoolean("Confirm"))
+            CDCLang.builder()
+                    .add(Component.translatable(mission.getBoolean("SafeZone")
+                            ? "createdangerclose.fire_mission_console.mission.confirm_safe_zone"
+                            : "createdangerclose.fire_mission_console.mission.confirm"))
+                    .style(ChatFormatting.RED)
+                    .forGoggles(tooltip);
+        ListTag notes = mission.getList("Notes", Tag.TAG_COMPOUND);
+        for (int i = 0; i < notes.size(); i++) {
+            CompoundTag note = notes.getCompound(i);
+            String gun = note.getString("Gun");
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.fire_mission_console.mission.skipped",
+                            gun.isEmpty() ? Component.translatable("createdangerclose.fire_mission_console.mission.unnamed")
+                                    : Component.literal(gun),
+                            note.getInt("Mark"), note.getInt("Unfired"), Component.translatable(note.getString("Reason"))))
+                    .style(ChatFormatting.RED)
+                    .forGoggles(tooltip);
+        }
     }
 
     /** Music of Battle at once; what the shells land on, one time of flight later (the longest of those fired). */
@@ -871,17 +1175,24 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             }
         }
 
+        syncMission(mapTarget != null ? mapTarget.marks() : List.of());
+        SensorReading.Mark mark = currentMark();
+
         // A map table's target outranks navigation tables; rangefinders outrank both, below.
         if (mapTarget != null) {
-            targetX = mapTarget.worldPos().x;
-            targetY = mapTarget.worldPos().y;
-            targetZ = mapTarget.worldPos().z;
+            Vec3 aim = mark != null ? mark.pos() : mapTarget.worldPos();
+            targetX = aim.x;
+            targetY = aim.y;
+            targetZ = aim.z;
             hasTarget = true;
             targetSource = TargetSource.MAP_TABLE;
             targetSigma = mapTarget.sigma();
         }
 
-        Set<BlockPos> merged = useRangefinderTargets(rangefinderReadings);
+        // A mission under way outranks them in turn, until it ends or is cleared.
+        if (mark != null)
+            directingRangefinder = null;
+        Set<BlockPos> merged = mark != null ? Set.of() : useRangefinderTargets(rangefinderReadings);
         List<BattlePlot.RangefinderFix> fixes = new ArrayList<>();
         for (Map.Entry<BlockPos, SensorReading.Rangefinder> entry : rangefinderReadings.entrySet()) {
             Vector3d position = extrapolate(entry.getValue());
@@ -1146,6 +1457,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         barrels.clear();
         for (Gun gun : guns)
             barrels.put(gun.pos(), gun.mount());
+        lastReach.keySet().retainAll(barrels.keySet());
 
         nameGuns(guns, chains, yawServoOf, yawStatusOf, namedServos);
 
@@ -1602,11 +1914,38 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /**
      * Reach for the map table with the current shell and charge, down to the target's height (or the
      * ground). Same top pitch as the solver, so it matches "out of range". Ignores own-ship motion.
+     * Reloading, the ring stays a while and the aim line and sector stay at that length; a gun never
+     * yet loaded has no known reach, so radius 0.
      */
     @Nullable
     private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount, double maxElevation, double maxDepression,
                                          double[] arc, String name) {
-        if (level == null || !mount.hasShell())
+        if (level == null)
+            return null;
+        long now = level.getGameTime();
+        double[] live = liveReach(mount, maxElevation, maxDepression);
+        if (live != null)
+            lastReach.put(mount.mountPos(), new HeldReach(live[0], live[1], now));
+        HeldReach held = lastReach.get(mount.mountPos());
+        boolean ring = held != null && now - held.tick() <= RING_HOLD_TICKS;
+
+        // The barrel's bearing in the world, flattened onto the map.
+        double aimX = 0, aimZ = 0;
+        Vector3d barrel = barrelWorld(mount);
+        double horizontal = Math.sqrt(barrel.x * barrel.x + barrel.z * barrel.z);
+        if (horizontal > 1e-6) {
+            aimX = barrel.x / horizontal;
+            aimZ = barrel.z / horizontal;
+        }
+        Vector3d pivot = launchPivot(mount, subLevelOf(mount));
+        return new BattlePlot.GunRange(pivot.x, pivot.z, held != null ? held.radius() : 0, aimX, aimZ,
+                ring ? held.minRadius() : 0, arc[0], arc[1], name, ring);
+    }
+
+    /** Radius and dead zone with what is loaded; null if it cannot fire. */
+    @Nullable
+    private double[] liveReach(ServoStatus.MountSnapshot mount, double maxElevation, double maxDepression) {
+        if (!mount.hasShell())
             return null;
         double charge = mount.totalChargePower() + mount.addedChargePower();
         if (mount.minimumChargePower() > charge)
@@ -1632,14 +1971,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (radius <= 0)
             return null;
 
-        // The barrel's bearing in the world, flattened onto the map.
-        double aimX = 0, aimZ = 0;
-        Vector3d barrel = barrelWorld(mount);
-        double horizontal = Math.sqrt(barrel.x * barrel.x + barrel.z * barrel.z);
-        if (horizontal > 1e-6) {
-            aimX = barrel.x / horizontal;
-            aimZ = barrel.z / horizontal;
-        }
         // Dead zone for a level ship: plunging, where the steepest shot lands; direct with the
         // target below, where the lowest depression lands.
         double minRadius = 0;
@@ -1652,7 +1983,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             minRadius = BallisticSolver.maxRange(charge, mount.gravity(), mount.drag(), mount.isQuadraticDrag(),
                     maxDepression, relativeY);
         }
-        return new BattlePlot.GunRange(muzzleWorld.x, muzzleWorld.z, radius, aimX, aimZ, minRadius, arc[0], arc[1], name);
+        return new double[]{radius, minRadius};
     }
 
     /**
@@ -2104,6 +2435,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         this.targetAgeTicks = compound.getLong("TargetAge");
         this.targetSigma = compound.getDouble("TargetSigma");
         this.mergedRangefinders = compound.getInt("MergedRangefinders");
+        this.clientMission = clientPacket && compound.contains("Mission") ? compound.getCompound("Mission") : null;
 
         if (clientPacket) {
             this.lastPitchResults.clear();
@@ -2179,6 +2511,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         compound.putLong("TargetAge", targetAgeTicks);
         compound.putDouble("TargetSigma", targetSigma);
         compound.putInt("MergedRangefinders", mergedRangefinders);
+        if (clientPacket)
+            writeMission(compound);
 
         ListTag results = new ListTag();
         for (Map.Entry<BlockPos, BallisticSolver.Result> e : lastPitchResults.entrySet()) {
@@ -2280,6 +2614,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                             : "createdangerclose.fire_mission_console.mode.direct"))
                     .style(ChatFormatting.AQUA)
                     .forGoggles(tooltip);
+        if (!autocannons)
+            addMissionTooltip(tooltip);
 
         if (hasTarget) {
             CDCLang.builder()

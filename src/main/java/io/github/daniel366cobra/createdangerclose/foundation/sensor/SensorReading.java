@@ -3,9 +3,14 @@ package io.github.daniel366cobra.createdangerclose.foundation.sensor;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public sealed interface SensorReading {
     Kind kind();
@@ -175,8 +180,9 @@ public sealed interface SensorReading {
      * @param worldPos       null if none is designated
      * @param designatedTick so the newest of several tables wins
      * @param sigma          placement precision, blocks (half a map pixel)
+     * @param marks          a multi-target mission, in click order; worldPos is then the first
      */
-    record MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma) implements SensorReading {
+    record MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma, List<Mark> marks) implements SensorReading {
         @Override public Kind kind() { return Kind.MAP_TARGET; }
 
         @Override
@@ -189,6 +195,12 @@ public sealed interface SensorReading {
             }
             tag.putLong("tick", designatedTick);
             tag.putDouble("sigma", sigma);
+            if (!marks.isEmpty()) {
+                ListTag list = new ListTag();
+                for (Mark mark : marks)
+                    list.add(mark.write());
+                tag.put("marks", list);
+            }
             return tag;
         }
 
@@ -196,7 +208,35 @@ public sealed interface SensorReading {
             Vec3 pos = tag.contains("px")
                     ? new Vec3(tag.getDouble("px"), tag.getDouble("py"), tag.getDouble("pz"))
                     : null;
-            return new MapTarget(pos, tag.getLong("tick"), tag.getDouble("sigma"));
+            return new MapTarget(pos, tag.getLong("tick"), tag.getDouble("sigma"), Mark.readList(tag.getList("marks", Tag.TAG_COMPOUND)));
+        }
+    }
+
+    /**
+     * A target in a multi-target mission.
+     *
+     * @param id     rises in click order, so a mission can tell which remain after an edit
+     * @param rounds per gun
+     */
+    record Mark(int id, Vec3 pos, int rounds) {
+        public CompoundTag write() {
+            CompoundTag tag = new CompoundTag();
+            tag.putInt("id", id);
+            tag.putDouble("x", pos.x);
+            tag.putDouble("y", pos.y);
+            tag.putDouble("z", pos.z);
+            tag.putInt("rounds", rounds);
+            return tag;
+        }
+
+        public static List<Mark> readList(ListTag list) {
+            List<Mark> marks = new ArrayList<>();
+            for (int i = 0; i < list.size(); i++) {
+                CompoundTag tag = list.getCompound(i);
+                marks.add(new Mark(tag.getInt("id"),
+                        new Vec3(tag.getDouble("x"), tag.getDouble("y"), tag.getDouble("z")), tag.getInt("rounds")));
+            }
+            return List.copyOf(marks);
         }
     }
 

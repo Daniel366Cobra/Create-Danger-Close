@@ -104,11 +104,19 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
         if (salvo.awaitingConfirmation()) {
             level.playSound(null, pos, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
             boolean safeZone = computer.dangerOnTarget(false) == BallisticComputerBlockEntity.Danger.SAFE_ZONE;
-            player.displayClientMessage(Component.translatable(safeZone
+            // A mission waits for the press, however long.
+            if (computer.isMissionActive())
+                player.displayClientMessage(Component.translatable(safeZone
+                        ? "createdangerclose.fire_mission_console.mission.confirm_safe_zone"
+                        : "createdangerclose.fire_mission_console.mission.confirm").withStyle(ChatFormatting.RED), true);
+            else
+                player.displayClientMessage(Component.translatable(safeZone
                             ? "createdangerclose.fire_mission_console.safe_zone"
                             : "createdangerclose.fire_mission_console.danger_close",
                     Math.round(CDCConfig.server().dangerClose.confirmSeconds.get())).withStyle(ChatFormatting.RED), true);
-        } else if (salvo.fired() + salvo.held() == 0)
+        } else if (computer.isMissionActive())
+            status(player, "mission.under_way");
+        else if (salvo.fired() + salvo.held() == 0)
             status(player, "no_guns");
         else if (!salvo.heldNames().isEmpty())
             player.displayClientMessage(Component.translatable("createdangerclose.fire_mission_console.salvo_named",

@@ -5,6 +5,9 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
 import net.createmod.catnip.animation.AnimationTickHolder;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity.Mode;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
+import io.github.daniel366cobra.createdangerclose.network.MapTableMarkPayload;
 import io.github.daniel366cobra.createdangerclose.network.MapTableSafeZonePayload;
 import io.github.daniel366cobra.createdangerclose.network.MapTableTargetPayload;
 import net.minecraft.client.Minecraft;
@@ -70,15 +73,18 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     private static final int COMPASS_NORTH = 0xFFE03C31, COMPASS_SOUTH = 0xFFC6C6C6;
     private static final String[] COMPASS_POINTS = {"north", "east", "south", "west"};
 
+    // Multi-target marks, GUI pixels: from the mark to its label, and how near counts as over it.
+    private static final int MARK_LABEL_DROP = 5;
+    private static final double MARK_HOVER_RADIUS = 7;
+    private static final int MARK_HOVERED_COLOR = 0xFFFFD040;
+
     private float zoom = 1;
     // Fractions of the sheet.
     private float viewU = 0, viewV = 0;
     private boolean panning;
-    // Right-click marks the target, or (in this mode) draws safe zones.
-    private boolean safeZoneMode;
     // The zone being dragged out: sheet fractions u0, v0, u1, v1.
     @Nullable private float[] drawing;
-    private Button labelsButton;
+    private Button modeButton, labelsButton;
     // Gun labels: last frame's spot for each, by name and turn among same-named ones.
     private Map<String, Integer> lastLabelSpots = Map.of();
 
@@ -95,11 +101,9 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         super.init();
         // Top right, stacked beside the slot grid (5 wide at most), above the target readout.
         int buttonX = leftPos + IMAGE_WIDTH - 8 - BUTTON_WIDTH;
-        addRenderableWidget(Button.builder(modeLabel(), button -> {
-                    safeZoneMode = !safeZoneMode;
-                    drawing = null;
-                    button.setMessage(modeLabel());
-                })
+        // Like the labels, the table's own setting.
+        modeButton = addRenderableWidget(Button.builder(modeLabel(),
+                        button -> pressMenuButton(MODE_BUTTON, SoundEvents.UI_BUTTON_CLICK.value()))
                 .bounds(buttonX, topPos + PREVIEW_Y, BUTTON_WIDTH, 20)
                 .tooltip(Tooltip.create(Component.translatable("createdangerclose.map_table.mode.tooltip")))
                 .build());
@@ -128,6 +132,15 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     protected void containerTick() {
         super.containerTick();
         labelsButton.setMessage(labelsLabel());
+        modeButton.setMessage(modeLabel());
+        // Someone else at the table may have changed it.
+        if (mode() != Mode.SAFE_ZONES)
+            drawing = null;
+    }
+
+    private Mode mode() {
+        MapTableBlockEntity controller = menu.getController();
+        return controller != null ? controller.getMode() : Mode.TARGET;
     }
 
     private boolean showsGunLabels() {
@@ -141,8 +154,11 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     }
 
     private Component modeLabel() {
-        return Component.translatable(safeZoneMode
-                ? "createdangerclose.map_table.mode.safe_zone" : "createdangerclose.map_table.mode.target");
+        return Component.translatable("createdangerclose.map_table.mode." + switch (mode()) {
+            case TARGET -> "target";
+            case MULTI_TARGET -> "multi_target";
+            case SAFE_ZONES -> "safe_zone";
+        });
     }
 
     @Override
@@ -161,7 +177,7 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         graphics.fill(x + 1, y + imageHeight - 1, x + imageWidth, y + imageHeight, PANEL_DARK);
         graphics.fill(x + imageWidth - 1, y + 1, x + imageWidth, y + imageHeight, PANEL_DARK);
 
-        renderSheet(graphics, x + PREVIEW_X, y + PREVIEW_Y);
+        renderSheet(graphics, x + PREVIEW_X, y + PREVIEW_Y, mouseX, mouseY);
 
         int tableWidth = menu.getTableWidth();
         for (int dz = 0; dz < tableWidth; dz++)
@@ -175,7 +191,7 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     }
 
     /** North up, through the zoomed view window, clipped to the frame. */
-    private void renderSheet(GuiGraphics graphics, int sheetX, int sheetY) {
+    private void renderSheet(GuiGraphics graphics, int sheetX, int sheetY, int mouseX, int mouseY) {
         int size = sheetSize();
         graphics.fill(sheetX - 1, sheetY - 1, sheetX + size + 1, sheetY + size + 1, SHEET_FRAME);
 
@@ -250,6 +266,13 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             pose.popPose();
         }
 
+        if (controller != null) {
+            pose.pushPose();
+            pose.translate(0, 0, 4 + markers.size());
+            renderMarkLabels(graphics, controller, mouseX, mouseY);
+            pose.popPose();
+        }
+
         graphics.disableScissor();
 
         pose.pushPose();
@@ -258,6 +281,58 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             graphics.drawString(font, "×" + (int) zoom, sheetX + 2, sheetY + size - 9, 0xFFFFFFFF, true);
         renderCompass(graphics, compassBox(sheetX, sheetY, size));
         pose.popPose();
+    }
+
+    /** Under each mark: its place in the order (several) and rounds per gun; the one under the mouse brighter. */
+    private void renderMarkLabels(GuiGraphics graphics, MapTableBlockEntity controller, int mouseX, int mouseY) {
+        List<SensorReading.Mark> marks = controller.getShownMarks();
+        boolean ordered = marks.size() > 1 || !controller.getMarks().isEmpty();
+        SensorReading.Mark hovered = hoveredMark(mouseX, mouseY);
+        for (int i = 0; i < marks.size(); i++) {
+            SensorReading.Mark mark = marks.get(i);
+            double[] at = markOnScreen(controller, mark);
+            if (at == null)
+                continue;
+            String text = (ordered ? (i + 1) + ": " : "") + "×" + mark.rounds();
+            int x = (int) Math.round(at[0]) - font.width(text) / 2, y = (int) Math.round(at[1]) + MARK_LABEL_DROP;
+            graphics.fill(x - 1, y - 1, x + font.width(text), y + font.lineHeight - 1, GUN_LABEL_BACKDROP);
+            graphics.drawString(font, text, x, y, mark == hovered ? MARK_HOVERED_COLOR : GUN_LABEL_COLOR, false);
+        }
+    }
+
+    /** GUI pixels; null without a sheet. */
+    @Nullable
+    private double[] markOnScreen(MapTableBlockEntity controller, SensorReading.Mark mark) {
+        MapTableBlockEntity.Sheet sheet = controller.getSheet();
+        if (sheet == null)
+            return null;
+        double zoomedSize = sheetSize() * zoom;
+        return new double[]{
+                leftPos + PREVIEW_X + (sheet.pixelX(mark.pos().x) / sheet.sizeInPixels() - viewU) * zoomedSize,
+                topPos + PREVIEW_Y + (sheet.pixelY(mark.pos().z) / sheet.sizeInPixels() - viewV) * zoomedSize};
+    }
+
+    /** The nearest under the mouse, outside safe zone mode. */
+    @Nullable
+    private SensorReading.Mark hoveredMark(double mouseX, double mouseY) {
+        MapTableBlockEntity controller = menu.getController();
+        if (controller == null || mode() == Mode.SAFE_ZONES || !isOverSheet(mouseX, mouseY))
+            return null;
+        SensorReading.Mark nearest = null;
+        double best = MARK_HOVER_RADIUS;
+        for (SensorReading.Mark mark : controller.getShownMarks()) {
+            double[] at = markOnScreen(controller, mark);
+            double distance = at != null ? Math.hypot(at[0] - mouseX, at[1] - mouseY) : Double.MAX_VALUE;
+            if (distance <= best) {
+                best = distance;
+                nearest = mark;
+            }
+        }
+        return nearest;
+    }
+
+    private void sendMark(MapTableBlockEntity controller, int action, float u, float v, int id) {
+        PacketDistributor.sendToServer(new MapTableMarkPayload(controller.getBlockPos(), action, u, v, id));
     }
 
     /** The widest of the four letters, less the font's trailing pixel. */
@@ -455,6 +530,14 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY == 0 || !isOverSheet(mouseX, mouseY))
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        // Over a mark: its rounds rather than the zoom. Shift is kept for its shell.
+        SensorReading.Mark mark = hoveredMark(mouseX, mouseY);
+        if (mark != null) {
+            if (!hasShiftDown())
+                sendMark(menu.getController(), scrollY > 0 ? MapTableMarkPayload.MORE_ROUNDS : MapTableMarkPayload.FEWER_ROUNDS,
+                        0, 0, mark.id());
+            return true;
+        }
         double u = sheetU(mouseX), v = sheetV(mouseY);
         float newZoom = Mth.clamp(scrollY > 0 ? zoom * 2 : zoom / 2, 1, MAX_ZOOM);
         if (newZoom != zoom) {
@@ -468,7 +551,8 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
 
     /**
      * Right-click marks the target, Shift + right-click clears it, left-click drags the view. In safe
-     * zone mode, right-drag draws a zone and Shift + right-click removes the one under the mouse.
+     * zone mode, right-drag draws a zone and Shift + right-click removes the one under the mouse. In
+     * Multi target mode, right-click adds a mark and Shift + right-click removes the one under the mouse.
      */
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -478,7 +562,25 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
                 panning = true;
                 return true;
             }
-            if (button == 1 && safeZoneMode) {
+            // Shift + right-click removes what is marked, whichever mode marked it: a mark under the mouse, or the target.
+            if (button == 1 && mode() != Mode.SAFE_ZONES && hasShiftDown() && !controller.getMarks().isEmpty()) {
+                SensorReading.Mark mark = hoveredMark(mouseX, mouseY);
+                if (mark != null) {
+                    sendMark(controller, MapTableMarkPayload.REMOVE, 0, 0, mark.id());
+                    Minecraft.getInstance().getSoundManager().play(
+                            SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1f));
+                }
+                return true;
+            }
+            if (button == 1 && mode() == Mode.MULTI_TARGET && !hasShiftDown()) {
+                if (controller.getSheet() != null && controller.getMarks().size() < MapTableBlockEntity.MAX_MARKS) {
+                    sendMark(controller, MapTableMarkPayload.ADD, (float) sheetU(mouseX), (float) sheetV(mouseY), 0);
+                    Minecraft.getInstance().getSoundManager().play(
+                            SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1f));
+                }
+                return true;
+            }
+            if (button == 1 && mode() == Mode.SAFE_ZONES) {
                 if (controller.getSheet() == null)
                     return true;
                 float u = (float) sheetU(mouseX), v = (float) sheetV(mouseY);
@@ -493,6 +595,9 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             }
             if (button == 1) {
                 boolean clear = hasShiftDown();
+                // A single target would replace the plan: clear several marks first.
+                if (!clear && controller.getMarks().size() > 1)
+                    return true;
                 if (clear || controller.getSheet() != null) {
                     float u = (float) sheetU(mouseX), v = (float) sheetV(mouseY);
                     PacketDistributor.sendToServer(new MapTableTargetPayload(controller.getBlockPos(), clear, u, v));
@@ -555,17 +660,22 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
         Vec3 target = controller != null ? controller.getTarget() : null;
         drawFitted(graphics, Component.translatable("createdangerclose.map_table.target"),
                 SLOT_GRID_X, readoutY, readoutWidth, LABEL_COLOR);
-        drawFitted(graphics, Component.literal(target != null
-                        ? BlockPos.containing(target).toShortString()
-                        : "—"),
+        int markCount = controller != null ? controller.getMarks().size() : 0;
+        drawFitted(graphics, markCount > 0
+                        ? Component.translatable("createdangerclose.map_table.marks", markCount, MapTableBlockEntity.MAX_MARKS)
+                        : Component.literal(target != null ? BlockPos.containing(target).toShortString() : "—"),
                 SLOT_GRID_X, readoutY + 10, readoutWidth, TARGET_COLOR);
 
         // Under the sheet, clear of the inventory.
         int hintWidth = PREVIEW_SIZE;
-        drawFitted(graphics, Component.translatable(safeZoneMode
-                        ? "createdangerclose.map_table.hint.safe_zone" : "createdangerclose.map_table.hint.target"),
+        drawFitted(graphics, Component.translatable("createdangerclose.map_table.hint." + switch (mode()) {
+                    case TARGET -> "target";
+                    case MULTI_TARGET -> "multi_target";
+                    case SAFE_ZONES -> "safe_zone";
+                }),
                 PREVIEW_X, HINTS_Y, hintWidth, HINT_COLOR);
-        drawFitted(graphics, Component.translatable("createdangerclose.map_table.hint.view"),
+        drawFitted(graphics, Component.translatable(mode() == Mode.MULTI_TARGET
+                        ? "createdangerclose.map_table.hint.view_multi_target" : "createdangerclose.map_table.hint.view"),
                 PREVIEW_X, HINTS_Y + 10, hintWidth, HINT_COLOR);
     }
 

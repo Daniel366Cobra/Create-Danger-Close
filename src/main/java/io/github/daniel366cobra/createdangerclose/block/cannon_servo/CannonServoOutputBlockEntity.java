@@ -675,7 +675,11 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         this.limits = compound.contains("Limits") ? ServoLimits.read(compound.getCompound("Limits"), null) : null;
         this.swivelSense = compound.getInt("SwivelSense") < 0 ? -1 : 1;
 
-        if (!clientPacket) return;
+        if (!clientPacket) {
+            // Resumes as saved: stopping at load, while the network behind still holds its saved speeds, breaks gearboxes.
+            desiredGeneratedSpeed = hasSource() ? 0 : getTheoreticalSpeed();
+            return;
+        }
 
         this.shownSwivelAngle = compound.getFloat("SwivelAngle");
         this.shownSwivelTarget = compound.getFloat("SwivelTarget");

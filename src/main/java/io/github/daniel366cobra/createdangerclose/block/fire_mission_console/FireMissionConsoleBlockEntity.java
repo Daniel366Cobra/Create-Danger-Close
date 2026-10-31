@@ -13,6 +13,8 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -51,6 +53,8 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     // The most recently set console wins.
     private int fuzeOffsetTicks;
     private long fuzeOffsetSetTick = Long.MIN_VALUE;
+    // Server: the computer's count of mission holds this console has sounded.
+    private int missionAlertsHeard;
 
     // Synced.
     private boolean plunging;
@@ -84,12 +88,17 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         computerPos = found;
         if (computer != null)
             computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick, ordersAutocannons());
+        // The guns have trained on a mark that needs confirming. A press hears its own bell, in readComputer.
+        if (computer != null && !ordersAutocannons() && computer.getMissionHoldAlerts() > missionAlertsHeard)
+            level.playSound(null, worldPosition, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
         if (readComputer(computer) || changed)
             sendData();
     }
 
     /** Returns whether they changed. */
     protected boolean readComputer(@Nullable BallisticComputerBlockEntity computer) {
+        if (computer != null)
+            missionAlertsHeard = computer.getMissionHoldAlerts();
         boolean newPlunging = computer != null && computer.isPlungingFire();
         BallisticComputerBlockEntity.SalvoResult guns = computer != null
                 ? gunsOnTarget(computer) : new BallisticComputerBlockEntity.SalvoResult(0, 0);
