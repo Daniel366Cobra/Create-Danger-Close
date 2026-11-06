@@ -1,0 +1,11 @@
+{
+  "variants": {
+    "axis=x": {
+      "model": "createdangerclose:block/munitions_chute/block",
+      "y": 90
+    },
+    "axis=z": {
+      "model": "createdangerclose:block/munitions_chute/block"
+    }
+  }
+}

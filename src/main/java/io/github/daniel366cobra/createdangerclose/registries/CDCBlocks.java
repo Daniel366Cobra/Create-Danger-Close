@@ -23,6 +23,7 @@ import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.Fir
 import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairBlockItem;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlock;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableCTBehaviour;
+import io.github.daniel366cobra.createdangerclose.block.munitions_chute.MunitionsChuteBlock;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlock;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlock;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderBearingBlock;
@@ -31,7 +32,10 @@ import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderL
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensInteraction;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensItem;
 import io.github.daniel366cobra.createdangerclose.block.rangefinder.RangefinderLensMovementBehaviour;
+import com.simibubi.create.content.kinetics.base.HorizontalAxisKineticBlock;
 import net.minecraft.advancements.critereon.StatePropertiesPredicate;
+import net.minecraft.core.Direction;
+import net.neoforged.neoforge.client.model.generators.ConfiguredModel;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.ShapedRecipeBuilder;
 import net.minecraft.data.recipes.ShapelessRecipeBuilder;
@@ -417,6 +421,27 @@ public class CDCBlocks {
                     .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(Items.CARTOGRAPHY_TABLE))
                     .save(p))
             .lang("Map Table")
+            .register();
+
+    public static final BlockEntry<MunitionsChuteBlock> MUNITIONS_CHUTE = REGISTRATE.block("munitions_chute", MunitionsChuteBlock::new)
+            .initialProperties(SharedProperties::softMetal)
+            // Not a full cube.
+            .properties(p -> p.mapColor(MapColor.PODZOL).noOcclusion())
+            .transform(axeOrPickaxe())
+            .onRegister(block -> BlockStressValues.IMPACTS.register(block, () -> 1.0))
+            // Modeled with the shaft running north-south.
+            .blockstate((c, p) -> p.getVariantBuilder(c.get()).forAllStates(state -> ConfiguredModel.builder()
+                    .modelFile(p.models().getExistingFile(p.modLoc("block/munitions_chute/block")))
+                    .rotationY(state.getValue(HorizontalAxisKineticBlock.HORIZONTAL_AXIS) == Direction.Axis.X ? 90 : 0)
+                    .build()))
+            .item()
+            .transform(customItemModel())
+            .recipe((c, p) -> ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, c.get(), 1)
+                    .requires(AllBlocks.SMART_CHUTE)
+                    .requires(AllItems.PRECISION_MECHANISM)
+                    .unlockedBy("has_ingredient", RegistrateRecipeProvider.has(AllItems.PRECISION_MECHANISM))
+                    .save(p))
+            .lang("Munitions Chute")
             .register();
 
     public static void register() {}

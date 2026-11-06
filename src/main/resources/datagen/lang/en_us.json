@@ -19,6 +19,28 @@
       "power_balance": "Drawing %s su, providing up to %s su"
     },
 
+    "munitions_chute": {
+      "title": "Munitions Chute",
+      "control": "Control: %s",
+      "standalone": "Standalone",
+      "output": "Output: %s",
+      "output_arm": "Mechanical Arm",
+      "output_belt": "Belt or depot below",
+      "shell": "Shell: %s",
+      "charge": "Charge: %s",
+      "cartridge": "%s (%s)",
+      "none": "None",
+      "state": {
+        "not_rotating": "Not rotating",
+        "no_storage": "No storage",
+        "no_shell": "No shell in storage",
+        "no_charge": "No charge in storage",
+        "indexing": "Indexing...",
+        "ready": "Ready",
+        "output_blocked": "Output blocked"
+      }
+    },
+
     "network_interface": {
       "title": "Battle Network Interface",
       "attached_sensor": "Attached Sensor Data:",
@@ -304,6 +326,15 @@
     },
 
     "block.createdangerclose": {
+      "munitions_chute.tooltip": {
+        "summary": "_Dispenses_ shells and cartridges for _QF_ cannon loaders.",
+        "condition1": "When rotating:",
+        "behaviour1": "_Stages_ one shell and one filled cartridge from storage on top and its open sides.",
+        "condition2": "When a Mechanical Arm targets it:",
+        "behaviour2": "_Hands over_ the staged round, shell first.",
+        "condition3": "When above a belt or depot:",
+        "behaviour3": "_Drops_ the shell, then the cartridge."
+      },
       "network_interface.tooltip": {
         "summary": "Interfaces Simulated Sensors to kinetic Battle Networks.",
         "condition1": "When facing a Gimbal, Altitude or Velocity Sensor, or a Navigation Table:",

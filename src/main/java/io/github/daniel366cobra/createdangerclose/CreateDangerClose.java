@@ -13,6 +13,7 @@ import com.tterrag.registrate.util.nullness.NonNullSupplier;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import io.github.daniel366cobra.createdangerclose.foundation.advancement.CDCAdvancements;
+import io.github.daniel366cobra.createdangerclose.registries.CDCArmInteractionPointTypes;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlockEntities;
 import io.github.daniel366cobra.createdangerclose.registries.CDCBlocks;
 import io.github.daniel366cobra.createdangerclose.registries.CDCContraptionTypes;
@@ -62,6 +63,8 @@ public class CreateDangerClose {
         eventBus.addListener(RegisterEvent.class, event -> {
             if (event.getRegistryKey().equals(CreateRegistries.CONTRAPTION_TYPE))
                 CDCContraptionTypes.init();
+            if (event.getRegistryKey().equals(CreateRegistries.ARM_INTERACTION_POINT_TYPE))
+                CDCArmInteractionPointTypes.init();
         });
 
         // Things Registrate does not handle.

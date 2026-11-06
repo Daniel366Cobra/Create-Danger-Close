@@ -2,6 +2,8 @@ package io.github.daniel366cobra.createdangerclose.registries;
 
 import com.simibubi.create.content.contraptions.bearing.BearingRenderer;
 import com.simibubi.create.content.contraptions.bearing.BearingVisual;
+import com.simibubi.create.content.kinetics.base.ShaftRenderer;
+import com.simibubi.create.content.kinetics.base.SingleAxisRotatingVisual;
 import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.tterrag.registrate.util.entry.BlockEntityEntry;
 import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
@@ -17,6 +19,7 @@ import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.Fir
 import io.github.daniel366cobra.createdangerclose.block.fire_mission_console.FireMissionConsoleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
+import io.github.daniel366cobra.createdangerclose.block.munitions_chute.MunitionsChuteBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.navigation_console.NavigationConsoleRenderer;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
@@ -108,6 +111,13 @@ public class CDCBlockEntities {
             .blockEntity("autocannon_control_console", AutocannonControlConsoleBlockEntity::new)
             .validBlocks(CDCBlocks.AUTOCANNON_CONTROL_CONSOLE)
             .renderer(() -> FireMissionConsoleRenderer::autocannon)
+            .register();
+
+    public static final BlockEntityEntry<MunitionsChuteBlockEntity> MUNITIONS_CHUTE = REGISTRATE
+            .blockEntity("munitions_chute", MunitionsChuteBlockEntity::new)
+            .visual(() -> SingleAxisRotatingVisual::shaft, false)
+            .validBlocks(CDCBlocks.MUNITIONS_CHUTE)
+            .renderer(() -> ShaftRenderer::new)
             .register();
 
     /** Loads this class, which registers its entries. */
