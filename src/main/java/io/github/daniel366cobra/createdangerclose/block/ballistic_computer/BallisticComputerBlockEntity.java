@@ -588,7 +588,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /** As loaded and placed, waiting will likely not help. Others mean a reload under way: a shell with no charge yet, for one. */
     private static boolean cannotReach(@Nullable BallisticSolver.Result.Reason reason) {
         return reason != null && switch (reason) {
-            case OUT_OF_RANGE, OUT_OF_ARC, TOO_CLOSE, NO_ALTITUDE, REDUNDANT_DRIVES, NO_CONVERGENCE, DEGENERATE -> true;
+            case TOO_FAR, OUT_OF_ARC, TOO_CLOSE, NO_ALTITUDE, REDUNDANT_DRIVES, NO_CONVERGENCE, DEGENERATE -> true;
             default -> false;
         };
     }
@@ -2221,7 +2221,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         boolean plunging = plungingFire && !mount.autocannon();
         if (ownPitchDrive && shipPitchDeg > mount.maxElevation() && (!plunging || mount.maxElevation() > 45)) {
             lastPitchResults.put(servoPos, BallisticSolver.Result.invalid(plunging
-                    ? BallisticSolver.Result.Reason.TOO_CLOSE : BallisticSolver.Result.Reason.OUT_OF_RANGE));
+                    ? BallisticSolver.Result.Reason.TOO_CLOSE : BallisticSolver.Result.Reason.TOO_FAR));
+            return null;
+        }
+        // Past the barrel's lowest depression: a target farther off needs less.
+        if (ownPitchDrive && !plunging && shipPitchDeg < mount.maxDepression()) {
+            lastPitchResults.put(servoPos, BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.TOO_CLOSE));
             return null;
         }
         boolean outOfArc = ownPitchDrive && (shipPitchDeg > mount.maxElevation() || shipPitchDeg < mount.maxDepression()

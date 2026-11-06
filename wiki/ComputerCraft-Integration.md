@@ -93,9 +93,9 @@ Positions of servos and mounts on a ship are the ship's own block coordinates, a
 | `no_target` | No target designated |
 | `no_shell` | No shell loaded |
 | `not_assembled` | Mount not assembled, as while a big cannon reloads |
-| `out_of_range` | Too far |
-| `too_close` | Plunging fire: even the steepest shot lands beyond the target |
-| `out_of_arc` | Target outside the gun's arc |
+| `too_far` | Too far, or too high to reach |
+| `too_close` | Inside the minimum range: needs more depression, or in plunging fire more elevation, than the mount has |
+| `out_of_arc` | Servo limits or a swivel bearing block the shot, or the mount cannot elevate past 45° for plunging fire |
 | `round_expires` | The round expires before impact |
 | `insufficient_charge` | Not enough propellant |
 | `no_orientation` | Ship gun without orientation sensors |

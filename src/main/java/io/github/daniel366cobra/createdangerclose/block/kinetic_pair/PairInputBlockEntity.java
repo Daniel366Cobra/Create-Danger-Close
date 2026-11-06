@@ -1,5 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.block.kinetic_pair;
 
+import com.simibubi.create.content.kinetics.KineticNetwork;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -37,6 +38,35 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
         lastStressApplied = impact;
         if (hasNetwork())
             getOrCreateNetwork().updateStressFor(this, impact);
+    }
+
+    // Joined its saved network (Create's initialize, or ours in removeSource).
+    private boolean joinedSavedNetwork;
+    // Create keeps its own copy private.
+    private int savedNetworkSize;
+
+    @Override
+    public void initialize() {
+        super.initialize();
+        joinedSavedNetwork = true;
+    }
+
+    /**
+     * A clutch toggled while the world loads (as by a Redstone Link) cuts this off before it has joined:
+     * Create would never subtract its saved draw from the network's stress, and that phantom stress is
+     * saved again with every reload. So it joins first, as Create's initialize would, while its speed is
+     * still the saved one, and then leaves properly.
+     */
+    @Override
+    public void removeSource() {
+        if (!joinedSavedNetwork && hasNetwork() && level != null && !level.isClientSide) {
+            joinedSavedNetwork = true;
+            KineticNetwork network = getOrCreateNetwork();
+            if (!network.initialized)
+                network.initFromTE(capacity, stress, savedNetworkSize);
+            network.addSilently(this, lastCapacityProvided, lastStressApplied);
+        }
+        super.removeSource();
     }
 
     /** Not on a network, or already counted in it. */
@@ -89,5 +119,7 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(compound, registries, clientPacket);
         drawImpact = compound.getFloat("DrawImpact");
+        if (!clientPacket)
+            savedNetworkSize = compound.getCompound("Network").getInt("Size");
     }
 }

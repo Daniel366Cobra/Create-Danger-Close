@@ -1,6 +1,7 @@
 package io.github.daniel366cobra.createdangerclose.block.rangefinder;
 
 import com.simibubi.create.api.contraption.ContraptionType;
+import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.AssemblyException;
 import com.simibubi.create.content.contraptions.behaviour.MovementContext;
 import com.simibubi.create.content.contraptions.bearing.BearingContraption;
@@ -12,11 +13,16 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.vehicle.DismountHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nullable;
@@ -222,6 +228,57 @@ public class RangefinderContraption extends BearingContraption {
         Vec3 back = Vec3.atLowerCornerOf(lensFacing.getOpposite().getNormal());
         return back.scale(OPERATOR_SEAT_BACK_PX / 16)
                 .add(0, -OPERATOR_SEAT_DOWN_PX / 16, 0);
+    }
+
+    // How far below the eyepiece the operator may be set down, blocks: an eyepiece is often raised.
+    private static final int OPERATOR_DISMOUNT_DROP = 4;
+
+    /**
+     * Where the operator steps off: standing on the first floor beside the eyepiece, to their right, else
+     * their left. Null if neither has room to stand, clear of the tube too.
+     */
+    @Nullable
+    public Vec3 findOperatorDismount(AbstractContraptionEntity entity, LivingEntity operator) {
+        if (eyepiecePos == null || lensFacing == null)
+            return null;
+        Level level = entity.level();
+        for (Direction side : new Direction[] {lensFacing.getClockWise(), lensFacing.getCounterClockWise()}) {
+            BlockPos spot = BlockPos.containing(entity.toGlobalVector(Vec3.atCenterOf(eyepiecePos.relative(side)), 1));
+            for (int drop = 0; drop <= OPERATOR_DISMOUNT_DROP; drop++) {
+                BlockPos pos = spot.below(drop);
+                double floor = level.getBlockFloorHeight(pos);
+                if (!DismountHelper.isBlockFloorValid(floor))
+                    continue;
+                Vec3 feet = Vec3.upFromBottomCenterOf(pos, floor);
+                AABB box = operator.getLocalBoundsForPose(Pose.STANDING).move(feet);
+                if (clearOfBlocks(level, operator, box) && clearOfTube(entity, box))
+                    return feet;
+                // The first floor down is where they would land.
+                break;
+            }
+        }
+        return null;
+    }
+
+    private static boolean clearOfBlocks(Level level, LivingEntity operator, AABB box) {
+        for (VoxelShape shape : level.getBlockCollisions(operator, box))
+            if (!shape.isEmpty())
+                return false;
+        return true;
+    }
+
+    /** No block of the tube where the box's corners, edge midpoints and center are. */
+    private boolean clearOfTube(AbstractContraptionEntity entity, AABB box) {
+        AABB inset = box.deflate(0.05);
+        double[] xs = {inset.minX, (inset.minX + inset.maxX) / 2, inset.maxX};
+        double[] ys = {inset.minY, (inset.minY + inset.maxY) / 2, inset.maxY};
+        double[] zs = {inset.minZ, (inset.minZ + inset.maxZ) / 2, inset.maxZ};
+        for (double x : xs)
+            for (double y : ys)
+                for (double z : zs)
+                    if (getBlocks().containsKey(BlockPos.containing(entity.toLocalVector(new Vec3(x, y, z), 1))))
+                        return false;
+        return true;
     }
 
     private static final double OPERATOR_VIEW_FORWARD = 0.5;

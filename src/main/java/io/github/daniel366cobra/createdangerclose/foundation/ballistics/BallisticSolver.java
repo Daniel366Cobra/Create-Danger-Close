@@ -40,7 +40,7 @@ public final class BallisticSolver {
     ) {
         public enum Reason {
             OK,
-            OUT_OF_RANGE,
+            TOO_FAR,
             OUT_OF_ARC,
             NO_CONVERGENCE,
             NO_TARGET,
@@ -179,7 +179,7 @@ public final class BallisticSolver {
             Impact impact = integrateToRange(launchVelocity, gravity, drag, isQuadraticDrag,
                     alongTrack, horizontalRange, toTarget.y);
             if (impact == null) {
-                return Result.invalid(Result.Reason.OUT_OF_RANGE);
+                return Result.invalid(Result.Reason.TOO_FAR);
             }
 
             Vector3d miss = impact.relativePos().sub(toTarget, new Vector3d());
@@ -245,7 +245,7 @@ public final class BallisticSolver {
                 horizontalRange, dy);
 
         if (highTraj == null || highTraj.vertical() < dy - HIT_TOLERANCE) {
-            return Result.invalid(Result.Reason.OUT_OF_RANGE);
+            return Result.invalid(Result.Reason.TOO_FAR);
         }
 
         // Direct: the flat arc (lowest pitch to 45°). Plunging: the steep arc (45° to the steepest).
@@ -312,7 +312,7 @@ public final class BallisticSolver {
 
     /**
      * Horizontal range at which a shell fired at {@code pitchDeg} comes down to {@code relativeY}.
-     * At {@link #solveStatic}'s top pitch, the {@link Result.Reason#OUT_OF_RANGE} boundary.
+     * At {@link #solveStatic}'s top pitch, the {@link Result.Reason#TOO_FAR} boundary.
      *
      * @return 0 if the shell never reaches that height
      */

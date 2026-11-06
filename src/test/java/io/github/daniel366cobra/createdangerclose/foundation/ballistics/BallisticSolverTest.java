@@ -99,9 +99,9 @@ class BallisticSolverTest {
     }
 
     @Test
-    void outOfRange() {
+    void tooFar() {
         // In vacuum the reach is v² / |g| = 180.
-        assertEquals(Reason.OUT_OF_RANGE, direct(new Vector3d(0, 0, 400), 0).reason());
+        assertEquals(Reason.TOO_FAR, direct(new Vector3d(0, 0, 400), 0).reason());
     }
 
     @Test

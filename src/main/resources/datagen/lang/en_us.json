@@ -130,8 +130,8 @@
       "unnamed_guns": "%s unnamed",
       "time_of_flight": "Time of flight: %s",
       "reason": {
-        "out_of_range": "Out of range: too far",
-        "out_of_arc": "Target out of arc",
+        "too_far": "Out of range: too far",
+        "out_of_arc": "Outside angle limits",
         "no_convergence": "Calculation did not converge",
         "no_target": "No target designated",
         "no_shell": "No shell loaded",
