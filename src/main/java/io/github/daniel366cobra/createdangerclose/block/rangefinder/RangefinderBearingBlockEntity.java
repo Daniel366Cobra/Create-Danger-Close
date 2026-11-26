@@ -321,6 +321,8 @@ public class RangefinderBearingBlockEntity extends KineticBlockEntity
             operatorTarget = operatorPitch = null;
         } else if (operator != null && movedContraption.getContraption() instanceof RangefinderContraption rc) {
             operatorTarget = angleForOperator(rc, operator);
+            // A tube's frame is rigid (Create contraptions are never mirrored): world elevation reads the
+            // same standing or hanging, so no flip.
             operatorPitch = -operator.getXRot();
         }
         if (!level.isClientSide && operator != lastOperator) {

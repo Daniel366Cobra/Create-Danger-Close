@@ -300,6 +300,10 @@ public final class CannonReading {
         sm.currentAngle = (sm.axis == PITCH) ? sm.elevationSign * entity.pitch : entity.yaw;
         sm.mountYaw = entity.yaw;
         sm.facingYaw = entity.getInitialOrientation().toYRot();
+        // Cannon pitch is world elevation on both standing and hanging mounts (verified in-game), so the
+        // cannon's limits read as-is. A drop mortar's rest direction is vertical: not accounted for.
+        sm.maxElevation = entity.maximumElevation();
+        sm.maxDepression = -entity.maximumDepression();
         readMuzzle(sm, entity);
         sm.barrel = barrel(entity);
         sm.autocannon = entity.getContraption() instanceof MountedAutocannonContraption;

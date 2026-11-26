@@ -38,6 +38,8 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
     private static final ResourceLocation RING_LIT = texture("ring_lit");
     private static final ResourceLocation ELEVATION = texture("elevation");
     private static final ResourceLocation ELEVATION_LIT = texture("elevation_lit");
+    // Like elevation_lit, but drawn over the dial outside the driven mount's pitch range.
+    private static final ResourceLocation ELEVATION_GRAYED = texture("elevation_grayed");
     // 16 x 32: normal above, held or hovered below.
     private static final ResourceLocation GRABBER = texture("grabber");
     // 16 x 64 pointing up, pivot at bottom center; the 16 x 16 hub over its root.
@@ -144,7 +146,8 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
 
     private boolean full() {
         ServoLimits limits = snapped();
-        return elevation ? limits.start() <= -90 && limits.end() >= 90 : !limits.limitsTurn();
+        return elevation ? limits.start() <= servo.pitchLimitLow() && limits.end() >= servo.pitchLimitHigh()
+                : !limits.limitsTurn();
     }
 
     // --- Rendering ---
@@ -161,6 +164,7 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
         ServoLimits limits = snapped();
 
         graphics.blit(elevation ? ELEVATION : RING, cx - HALF, cy - HALF, 0, 0, DIAL, DIAL, DIAL, DIAL);
+        renderGrayedSector(graphics, cx, cy);
         renderLitSector(graphics, limits, cx, cy);
         renderNeedle(graphics, cx, cy, needle.getValue(partialTicks));
 
@@ -176,7 +180,9 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
 
         graphics.drawCenteredString(font, title, cx, cy - LABEL_RADIUS - 26, TEXT);
         Component state = full()
-                ? Component.translatable("createdangerclose.gui.servo_limits.no_limit")
+                ? Component.translatable(elevation
+                        ? "createdangerclose.gui.servo_limits.mount_limit"
+                        : "createdangerclose.gui.servo_limits.no_limit")
                 : Component.translatable("createdangerclose.gui.servo_limits.arc", Math.round(limits.length()));
         graphics.drawCenteredString(font, state, cx, cy - LABEL_RADIUS - 15, TEXT_DIM);
         graphics.drawCenteredString(font, Component.translatable("createdangerclose.gui.servo_limits.now",
@@ -187,17 +193,35 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
 
     /** A fan from the center over the allowed arc. */
     private void renderLitSector(GuiGraphics graphics, ServoLimits limits, int cx, int cy) {
-        RenderSystem.setShaderTexture(0, elevation ? ELEVATION_LIT : RING_LIT);
+        drawFan(graphics, elevation ? ELEVATION_LIT : RING_LIT, cx, cy, limits.start(), limits.length());
+    }
+
+    /** The elevation dial outside the driven mount's pitch range: reachable by no arc, so shaded. */
+    private void renderGrayedSector(GuiGraphics graphics, int cx, int cy) {
+        if (!elevation)
+            return;
+        float low = servo.pitchLimitLow(), high = servo.pitchLimitHigh();
+        if (low <= -90 && high >= 90)
+            return;
+        drawFan(graphics, ELEVATION_GRAYED, cx, cy, -90, low + 90);
+        drawFan(graphics, ELEVATION_GRAYED, cx, cy, high, 90 - high);
+    }
+
+    /** A textured fan from the center over {@code start}..{@code start + length} dial degrees. */
+    private void drawFan(GuiGraphics graphics, ResourceLocation texture, int cx, int cy, float start, float length) {
+        if (length <= 0)
+            return;
+        RenderSystem.setShaderTexture(0, texture);
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();
         Matrix4f pose = graphics.pose().last().pose();
         BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_TEX);
-        int segments = Math.max(1, Mth.ceil(limits.length() / SECTOR_STEP_DEG));
+        int segments = Math.max(1, Mth.ceil(length / SECTOR_STEP_DEG));
         for (int i = 0; i < segments; i++) {
-            float a1 = limits.start() + limits.length() * i / segments;
-            float a2 = limits.start() + limits.length() * (i + 1) / segments;
+            float a1 = start + length * i / segments;
+            float a2 = start + length * (i + 1) / segments;
             buffer.addVertex(pose, cx, cy, 0).setUv(0.5f, 0.5f);
             fanVertex(buffer, pose, cx, cy, a1);
             fanVertex(buffer, pose, cx, cy, a2);
@@ -248,10 +272,14 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 1) {
-            // Right-click: no limits.
-            ServoLimits full = elevation ? ServoLimits.FULL_ELEVATION : ServoLimits.FULL_TURN;
-            start = full.start();
-            length = full.length();
+            // Right-click: no limits beyond what the mount itself imposes.
+            if (elevation) {
+                start = servo.pitchLimitLow();
+                length = servo.pitchLimitHigh() - servo.pitchLimitLow();
+            } else {
+                start = ServoLimits.FULL_TURN.start();
+                length = ServoLimits.FULL_TURN.length();
+            }
             click(0.5f);
             return true;
         }
@@ -306,12 +334,13 @@ public class ServoLimitsScreen extends AbstractSimiScreen {
     }
 
     private void dragElevation(float delta) {
+        float low = servo.pitchLimitLow(), high = servo.pitchLimitHigh();
         float end = start + length;
         switch (drag) {
-            case START -> start = Mth.clamp(start + delta, -90, end - 1);
-            case END -> end = Mth.clamp(end + delta, start + 1, 90);
+            case START -> start = Mth.clamp(start + delta, low, end - 1);
+            case END -> end = Mth.clamp(end + delta, start + 1, high);
             case BOTH -> {
-                float shift = Mth.clamp(delta, -90 - start, 90 - end);
+                float shift = Mth.clamp(delta, low - start, high - end);
                 start += shift;
                 end += shift;
             }

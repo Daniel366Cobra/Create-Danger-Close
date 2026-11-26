@@ -294,6 +294,7 @@
   "createdangerclose.fire_mission_console.title": "Fire Mission Console",
   "createdangerclose.gui.servo_limits.arc": "%s° allowed",
   "createdangerclose.gui.servo_limits.hint": "Drag the knobs · Ctrl: move both · Shift: 5° steps · Right-click: clear",
+  "createdangerclose.gui.servo_limits.mount_limit": "Mount limit",
   "createdangerclose.gui.servo_limits.no_limit": "No limit",
   "createdangerclose.gui.servo_limits.now": "Now: %s°",
   "createdangerclose.gui.servo_limits.title.elevation": "Elevation limits",

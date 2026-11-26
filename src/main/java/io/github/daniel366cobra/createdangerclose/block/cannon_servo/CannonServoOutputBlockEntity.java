@@ -108,6 +108,9 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         public int maxFlightTicks;
         // CBC yaw when assembled: the yaw dial's zero.
         public float facingYaw;
+        // The cannon's world-frame elevation limits (from the mount's cannon properties; ±90 default).
+        public float maxElevation = 90;
+        public float maxDepression = -90;
 
         public SlavedMount(BlockPos mountPos,
                            @Nullable CannonMountBlockEntity mount,
@@ -640,6 +643,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             tag.putLong("MountPos", sm.mountPos.asLong());
             tag.putInt("ServoAxis", sm.axis.ordinal());
             tag.putFloat("CurrentAngle", sm.currentAngle);
+            tag.putFloat("MaxElevation", sm.maxElevation);
+            tag.putFloat("MaxDepression", sm.maxDepression);
             tag.putBoolean("HasShell", sm.hasShell);
             if (sm.shellType != null) {
                 tag.putString("ShellType", sm.shellType.toString());
@@ -707,6 +712,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
             SlavedMount sm = new SlavedMount(mountPos, null, null, slaveServoAxis);
             sm.currentAngle = tag.getFloat("CurrentAngle");
+            sm.maxElevation = tag.contains("MaxElevation") ? tag.getFloat("MaxElevation") : 90;
+            sm.maxDepression = tag.contains("MaxDepression") ? tag.getFloat("MaxDepression") : -90;
             sm.hasShell = tag.getBoolean("HasShell");
             if (tag.contains("ShellType")) {
                 sm.shellType = ResourceLocation.tryParse(tag.getString("ShellType"));
@@ -752,15 +759,26 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
     // --- Limits (the protractor dial) ---
 
-    /** As set on the dial, or none. A pitch servo is within -90..90. */
+    /**
+     * As set on the dial, clipped to what the driven mount can actually do. A pitch dial with nothing
+     * set spans the mount's elevation limits (±90 without one or unassembled), not a generic half turn.
+     */
     public ServoLimits getLimits() {
         boolean pitch = isElevationDial();
-        if (limits == null)
-            return pitch ? ServoLimits.FULL_ELEVATION : ServoLimits.FULL_TURN;
         if (!pitch)
-            return limits;
-        float start = Mth.clamp(limits.start(), -90, 89);
-        return new ServoLimits(start, Mth.clamp(limits.end(), start + 1, 90) - start);
+            return limits == null ? ServoLimits.FULL_TURN : limits;
+        float start = Mth.clamp(limits != null ? limits.start() : pitchLimitLow(), pitchLimitLow(), pitchLimitHigh() - 1);
+        float end = Mth.clamp(limits != null ? limits.end() : pitchLimitHigh(), start + 1, pitchLimitHigh());
+        return new ServoLimits(start, end - start);
+    }
+
+    /** World-frame elevation limits of the driven mount; ±90 without one or before it assembles. Client: as synced. */
+    public float pitchLimitLow() {
+        return slavedMounts.isEmpty() ? -90 : slavedMounts.get(0).maxDepression;
+    }
+
+    public float pitchLimitHigh() {
+        return slavedMounts.isEmpty() ? 90 : slavedMounts.get(0).maxElevation;
     }
 
     public void setLimits(ServoLimits newLimits) {

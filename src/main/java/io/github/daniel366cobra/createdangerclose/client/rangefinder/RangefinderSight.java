@@ -23,8 +23,9 @@ public final class RangefinderSight {
     private static final float[] ZOOM_LEVELS = {0.5f, 0.2f, 0.1f};
 
     // Minecraft pitch is negative looking up. Short of the zenith, where the bearing and stabilizer degenerate.
+    // Symmetric, so one tube serves deck and belly guns alike; the guns out of its reach simply do not fire.
     public static final float MAX_ELEVATION_DEG = 60f;
-    public static final float MAX_DEPRESSION_DEG = 20f;
+    public static final float MAX_DEPRESSION_DEG = 60f;
     // The look may lead the tube and lenses by this much, so a slow tube can't be overtaken.
     public static final float OFF_BORE_DEG = 10f;
 

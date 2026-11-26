@@ -288,6 +288,7 @@
   "createdangerclose.fire_mission_console.title": "Пульт огневой задачи",
   "createdangerclose.gui.servo_limits.arc": "Разрешено %s°",
   "createdangerclose.gui.servo_limits.hint": "Тяните рукоятки · Ctrl: двигать оба · Shift: шаг 5° · ПКМ: сбросить",
+  "createdangerclose.gui.servo_limits.mount_limit": "Ограничения лафета",
   "createdangerclose.gui.servo_limits.no_limit": "Без ограничений",
   "createdangerclose.gui.servo_limits.now": "Сейчас: %s°",
   "createdangerclose.gui.servo_limits.title.elevation": "Пределы возвышения",
