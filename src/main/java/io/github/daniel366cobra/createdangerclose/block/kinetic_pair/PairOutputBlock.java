@@ -77,7 +77,10 @@ public abstract class PairOutputBlock<BE extends PairOutputBlockEntity> extends 
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
-        if (stillValid(level, pos, state))
+        // isMoving: taken along by a moving structure (piston, sublevel assembly). The neighbor may be
+        // removed later in the same move, so "still valid" is meaningless here; breaking it would drop
+        // an item for a block the move keeps, duping it.
+        if (!isMoving && stillValid(level, pos, state))
             level.destroyBlock(getInput(pos, state), true);
         super.onRemove(state, level, pos, newState, isMoving);
     }

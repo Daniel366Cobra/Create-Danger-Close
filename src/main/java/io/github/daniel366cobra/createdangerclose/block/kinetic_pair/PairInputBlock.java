@@ -69,7 +69,9 @@ public abstract class PairInputBlock<BE extends PairInputBlockEntity> extends Di
         if (!newState.is(this)) {
             Direction facing = state.getValue(FACING);
             BlockPos outputPos = pos.relative(facing);
-            if (level.getBlockState(outputPos).equals(outputHalf(facing)))
+            // See PairOutputBlock#onRemove: while a move is carrying this half away the neighbor may
+            // simply not be moved yet; breaking it here could delete the move's own copy of it.
+            if (!isMoving && level.getBlockState(outputPos).equals(outputHalf(facing)))
                 level.destroyBlock(outputPos, false);
         }
         super.onRemove(state, level, pos, newState, isMoving);

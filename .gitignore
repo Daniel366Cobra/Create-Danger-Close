@@ -39,3 +39,6 @@ run/
 repo/
 !**/src/**/repo/
 /templates-and-examples/
+
+### Agent notes (local cross-session memory) ###
+AGENTS.md
