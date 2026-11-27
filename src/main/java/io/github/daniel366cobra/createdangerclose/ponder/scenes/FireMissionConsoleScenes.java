@@ -11,10 +11,12 @@ import net.createmod.ponder.api.scene.SceneBuildingUtil;
 import net.createmod.ponder.api.scene.Selection;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
 import rbasamoyai.createbigcannons.effects.particles.plumes.BigCannonPlumeParticleData;
 import rbasamoyai.createbigcannons.ponder.CBCAnimateBlockEntityInstruction;
+import org.jetbrains.annotations.Nullable;
 
 public final class FireMissionConsoleScenes {
 
@@ -27,6 +29,10 @@ public final class FireMissionConsoleScenes {
     private static final float RETRAIN_DEG = -30;
     private static final int RETRAIN_TICKS = 80;
     private static final int FUZE_DEMO_NOTCHES = 4, FUZE_NOTCH_TICKS = 2;
+    private static final ResourceLocation[] SHELL_DEMO = {
+            ResourceLocation.fromNamespaceAndPath("createbigcannons", "he_shell"),
+            ResourceLocation.fromNamespaceAndPath("createbigcannons", "ap_shell")};
+    private static final int SHELL_DEMO_NOTCHES = SHELL_DEMO.length;
 
     /**
      * Structure {@code fire_mission_console.nbt}: 6×6 floor, battle network along z = 5. Interfaces
@@ -61,6 +67,7 @@ public final class FireMissionConsoleScenes {
 
         // The console faces north: left to right (east to west) fuze knob, trajectory lever, fire button (model pixels).
         Vec3 fuzeKnob = onConsole(console, 12.5, 17, 6.5);
+        Vec3 shellKnob = onConsole(console, 12.5, 17, 10.5);
         Vec3 trajectorySwitch = onConsole(console, 8.5, 18, 7.5);
         Vec3 fireButton = onConsole(console, 3.5, 17, 7.5);
 
@@ -219,7 +226,7 @@ public final class FireMissionConsoleScenes {
                 .pointAt(fuzeKnob)
                 .placeNearTarget()
                 .attachKeyFrame()
-                .text("Scroll over the knob on the left to correct timed fuzes: earlier for an airburst, later to burst inside after piercing");
+                .text("Scroll over the front knob on the left to correct timed fuzes: earlier for an airburst, later to burst inside after piercing");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
         scene.overlay().showControls(fuzeKnob, Pointing.DOWN, 30).rightClick();
@@ -229,6 +236,35 @@ public final class FireMissionConsoleScenes {
                 .pointAt(fuzeKnob)
                 .placeNearTarget()
                 .text("Right-click the knob to zero it");
+        scene.idle(PonderTiming.AFTER_TEXT);
+
+        // The shell type, for guns not under a map table mission.
+        scene.overlay().showControls(shellKnob, Pointing.DOWN, 40).scroll();
+        scene.idle(10);
+        for (int notch = 1; notch <= SHELL_DEMO_NOTCHES; notch++) {
+            showShellOrder(scene, console, SHELL_DEMO[notch - 1], notch);
+            scene.idle(8);
+        }
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(shellKnob)
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("Scroll over the rear knob to order a shell type for the Munitions Chutes to stage, as when a rangefinder lays the guns");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(shellKnob)
+                .placeNearTarget()
+                .text("A round already loaded still fires first; the order applies from the next one. Past the last type is ANY, whatever the chutes find");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showControls(shellKnob, Pointing.DOWN, 30).rightClick();
+        scene.idle(10);
+        showShellOrder(scene, console, null, SHELL_DEMO_NOTCHES + 1);
+        scene.overlay().showText(PonderTiming.TEXT)
+                .pointAt(shellKnob)
+                .placeNearTarget()
+                .text("Right-click the knob to set it back to ANY");
         scene.idle(PonderTiming.AFTER_TEXT);
 
         scene.overlay().showText(PonderTiming.LONG_TEXT)
@@ -255,6 +291,11 @@ public final class FireMissionConsoleScenes {
 
     private static void showGunsReady(CreateSceneBuilder scene, BlockPos console, int ready) {
         scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showGunsReady(ready, 1));
+    }
+
+    private static void showShellOrder(CreateSceneBuilder scene, BlockPos console, @Nullable ResourceLocation shell,
+                                       int notch) {
+        scene.world().modifyBlockEntity(console, FireMissionConsoleBlockEntity.class, be -> be.showShellOrder(shell, notch));
     }
 
     private static void showFuzeOffset(CreateSceneBuilder scene, BlockPos console, int ticks) {

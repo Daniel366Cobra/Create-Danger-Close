@@ -767,6 +767,13 @@ public class MapTableBlockEntity extends SmartBlockEntity
         this.target = target;
     }
 
+    /** Marks replace the single target, as placing them would. */
+    public void setPonderMarks(List<SensorReading.Mark> marks) {
+        this.marks = List.copyOf(marks);
+        if (!marks.isEmpty())
+            target = null;
+    }
+
     public void setPonderSafeZones(List<SafeZone> zones) {
         safeZones = List.copyOf(zones);
     }

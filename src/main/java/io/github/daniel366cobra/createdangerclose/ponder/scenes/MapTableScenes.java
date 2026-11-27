@@ -6,6 +6,7 @@ import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockE
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableMarker;
 import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableRenderer;
 import io.github.daniel366cobra.createdangerclose.foundation.plot.BattlePlot;
+import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
 import net.createmod.catnip.math.Pointing;
 import net.createmod.ponder.api.PonderPalette;
 import net.createmod.ponder.api.scene.SceneBuilder;
@@ -20,6 +21,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.saveddata.maps.MapDecorationTypes;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class MapTableScenes {
@@ -40,6 +42,13 @@ public final class MapTableScenes {
     private static final double SPOTTER_U = 0.22, SPOTTER_V = 0.30;
     // A safe zone in the woods south-west of the target.
     private static final double ZONE_U0 = 0.18, ZONE_V0 = 0.52, ZONE_U1 = 0.28, ZONE_V1 = 0.64;
+    // A planned mission inland: 2 HE, 1 AP, 2 AP per gun.
+    private static final double[][] MARKS = {{0.33, 0.45}, {0.27, 0.40}, {0.38, 0.37}};
+    private static final int[] MARK_ROUNDS = {2, 1, 2};
+    private static final ResourceLocation[] MARK_SHELLS = {
+            ResourceLocation.fromNamespaceAndPath("createbigcannons", "he_shell"),
+            ResourceLocation.fromNamespaceAndPath("createbigcannons", "ap_shell"),
+            ResourceLocation.fromNamespaceAndPath("createbigcannons", "ap_shell")};
     // Blocks.
     private static final double GUN_RANGE = 230, GUN_MIN_RANGE = 30;
     // Readable in the small Ponder view.
@@ -225,18 +234,59 @@ public final class MapTableScenes {
                 .text("While connected, a shot that would land near one waits for a second press to confirm, as danger close does");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
+        // Scheduling a mission: marks in turn, each with its rounds and shell type.
+        Vec3 firstMark = onChart(controller, MARKS[0][0], MARKS[0][1]);
+        for (int i = 0; i < MARKS.length; i++) {
+            List<SensorReading.Mark> marks = new ArrayList<>();
+            for (int j = 0; j <= i; j++)
+                marks.add(new SensorReading.Mark(j, new Vec3(westX + MARKS[j][0] * SHEET_BLOCKS, 64,
+                        northZ + MARKS[j][1] * SHEET_BLOCKS), MARK_ROUNDS[j], MARK_SHELLS[j]));
+            scene.overlay().showControls(onChart(controller, MARKS[i][0], MARKS[i][1]), Pointing.DOWN, 15).rightClick();
+            scene.idle(5);
+            scene.world().modifyBlockEntity(controller, MapTableBlockEntity.class, be -> be.setPonderMarks(marks));
+            scene.idle(10);
+        }
         scene.overlay().showText(PonderTiming.LONG_TEXT)
-                .pointAt(zoneMiddle)
+                .pointAt(firstMark)
                 .placeNearTarget()
                 .attachKeyFrame()
                 .text("In the GUI's Multi target mode, right-click marks up to 4 targets; scroll over a mark to set its rounds per gun");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
 
+        scene.overlay().showControls(firstMark, Pointing.DOWN, 40).scroll().whileSneaking();
+        scene.idle(10);
         scene.overlay().showText(PonderTiming.LONG_TEXT)
-                .pointAt(zoneMiddle)
+                .pointAt(firstMark)
+                .placeNearTarget()
+                .text("Shift-scroll over a mark to pick its shell type, from what the guns' Munitions Chutes can stage. Past the last type: whatever is loaded");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.BLUE)
+                .pointAt(firstMark)
+                .placeNearTarget()
+                .attachKeyFrame()
+                .text("Until fire is ordered, the mission is only planned: the guns lay on the first mark, but nothing is loaded, as a shell cannot be taken back out");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .colored(PonderPalette.RED)
+                .pointAt(firstMark)
                 .placeNearTarget()
                 .text("A Fire Mission Console's button starts the mission: the guns engage each mark in turn, firing as they are ready");
         scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.LONG_TEXT)
+                .pointAt(firstMark)
+                .placeNearTarget()
+                .text("A loaded round of another type is fired off first, without counting towards the mission");
+        scene.idle(PonderTiming.AFTER_LONG_TEXT);
+
+        scene.overlay().showText(PonderTiming.TEXT)
+                .pointAt(onChart(controller, TARGET_U, TARGET_V))
+                .placeNearTarget()
+                .text("A single target is a mission of one mark, set the same way");
+        scene.idle(PonderTiming.AFTER_TEXT);
     }
 
     /** The width × width square from the controller joins into one table; the rest stand alone. */

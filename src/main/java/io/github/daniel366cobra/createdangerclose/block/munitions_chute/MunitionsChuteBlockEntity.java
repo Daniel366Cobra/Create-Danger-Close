@@ -4,7 +4,7 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.logistics.crate.CreativeCrateBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import io.github.daniel366cobra.createdangerclose.CreateDangerClose;
+import com.simibubi.create.foundation.blockEntity.behaviour.filtering.FilteringBehaviour;
 import io.github.daniel366cobra.createdangerclose.block.cannon_servo.CannonReading;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import io.github.daniel366cobra.createdangerclose.foundation.sensor.SensorReading;
@@ -46,8 +46,8 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import static com.simibubi.create.content.kinetics.base.HorizontalAxisKineticBlock.HORIZONTAL_AXIS;
+
 
 /**
  * Stages one round, a shell and a filled cartridge, from the storage on top and on its shaftless sides.
@@ -119,10 +119,9 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     // Synced for the goggles (the live fields are server-only).
     @Nullable private ResourceLocation shownRequested;
     private int shownAvailableSize;
-
-    // TEMPORARY diagnostic (investigating "No shell in storage" on a servo-tapped chute): remove after verification.
-    private static final boolean DEBUG_SCAN = true;
-    private int debugLastScanSize = -1;
+    // Server: what clients were last sent for those, so a change goes out when it happens.
+    @Nullable private ResourceLocation syncedRequested;
+    private int syncedAvailableSize = -1;
 
     public MunitionsChuteBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -166,10 +165,6 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     /** The servo output that found this chute on its cannon-side train; re-confirmed each poll. */
     public void setController(@Nullable BlockPos pos, long gameTime) {
         boolean changed = !java.util.Objects.equals(pos, controllerPos);
-        // TEMPORARY diagnostic: remove with DEBUG_SCAN after verification.
-        if (DEBUG_SCAN && changed)
-            CreateDangerClose.LOGGER.info("[CDC chute debug] chute at {} controller {} -> {} (t={})",
-                    worldPosition, controllerPos, pos, gameTime);
         controllerPos = pos;
         controllerTick = gameTime;
         if (changed)
@@ -261,7 +256,9 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
 
         // The link's freshness is judged on the server (the tick stamp alone desyncs for the client).
         boolean fresh = freshController();
-        if (fresh != controlled) {
+        ResourceLocation shownOrder = requestLive() ? requestedShell : null;
+        if (fresh != controlled || available.size() != syncedAvailableSize
+                || !java.util.Objects.equals(shownOrder, syncedRequested)) {
             controlled = fresh;
             sendData();
         }
@@ -288,10 +285,6 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
             next = stage();
         }
         if (next != state || belt != beltBelow) {
-            // TEMPORARY diagnostic: remove with DEBUG_SCAN after verification.
-            if (DEBUG_SCAN && next != state
-                    && (next == State.NO_SHELL || next == State.NO_STORAGE || next == State.NOT_PROVIDED))
-                debugScan(next);
             state = next;
             beltBelow = belt;
             sendData();
@@ -513,42 +506,11 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         for (Map.Entry<ResourceLocation, Float> entry : shells.entrySet())
             entry.setValue(strongest);
         available = Map.copyOf(shells);
-        // TEMPORARY diagnostic: remove with DEBUG_SCAN after verification.
-        if (DEBUG_SCAN && available.size() != debugLastScanSize) {
-            debugLastScanSize = available.size();
-            CreateDangerClose.LOGGER.info("[CDC chute debug] chute at {} scan: {} shell types (max charge power {})",
-                    worldPosition, available.size(), maxPower);
-        }
-    }
-
-    /** TEMPORARY diagnostic: what the chute sees on each storage face. Remove after verification. */
-    private void debugScan(State next) {
-        StringBuilder faces = new StringBuilder();
-        Direction.Axis open = getBlockState().getValue(HORIZONTAL_AXIS) == Direction.Axis.X ? Direction.Axis.Z : Direction.Axis.X;
-        for (Direction face : new Direction[]{Direction.UP,
-                Direction.fromAxisAndDirection(open, Direction.AxisDirection.POSITIVE),
-                Direction.fromAxisAndDirection(open, Direction.AxisDirection.NEGATIVE)}) {
-            BlockPos pos = worldPosition.relative(face);
-            boolean belt = BlockEntityBehaviour.get(level, pos, DirectBeltInputBehaviour.TYPE) != null;
-            IItemHandler handler = level instanceof ServerLevel server
-                    ? server.getCapability(Capabilities.ItemHandler.BLOCK, pos, face.getOpposite()) : null;
-            List<String> items = new ArrayList<>();
-            if (handler != null)
-                for (int slot = 0; slot < handler.getSlots(); slot++) {
-                    ItemStack stack = handler.getStackInSlot(slot);
-                    if (!stack.isEmpty())
-                        items.add(BuiltInRegistries.ITEM.getKey(stack.getItem()) + "x" + stack.getCount()
-                                + (isShell(stack) ? "[shell]" : isFilledCartridge(stack) ? "[cartridge]" : ""));
-                }
-            faces.append(String.format(" %s=%s%s:%s;", face, level != null ? level.getBlockState(pos).getBlock() : "?", belt ? "(belt,skipped)" : "",
-                    handler == null ? "no-handler" : items.isEmpty() ? "empty" : items));
-        }
-        CreateDangerClose.LOGGER.info("[CDC chute debug] chute at {} entered {} on cannon side of {}:{}", worldPosition, next,
-                controllerPos, faces);
     }
 
     /** Every big cannon shell type: a creative crate stands in for a stocked magazine. */
-    private static Map<ResourceLocation, Float> creativeShells() {        Map<ResourceLocation, Float> shells = new HashMap<>();
+    private static Map<ResourceLocation, Float> creativeShells() {
+        Map<ResourceLocation, Float> shells = new HashMap<>();
         for (ResourceLocation key : BuiltInRegistries.BLOCK.keySet()) {
             Block block = BuiltInRegistries.BLOCK.get(key);
             if (block instanceof ProjectileBlock<?> && block instanceof BigCannonMunitionBlock)
@@ -590,7 +552,10 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         return found;
     }
 
-    /** A creative crate on a storage face provides every shell, fuzed and charged on demand. */
+    /**
+     * An unfiltered creative crate on a storage face provides every shell, fuzed and charged on demand.
+     * A filtered one is plain bottomless storage of its one item, read like any other.
+     */
     private boolean creativeCrate() {
         if (level == null)
             return false;
@@ -598,8 +563,11 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         for (Direction face : new Direction[]{Direction.UP,
                 Direction.fromAxisAndDirection(open, Direction.AxisDirection.POSITIVE),
                 Direction.fromAxisAndDirection(open, Direction.AxisDirection.NEGATIVE)}) {
-            if (level.getBlockEntity(worldPosition.relative(face)) instanceof CreativeCrateBlockEntity)
-                return true;
+            if (level.getBlockEntity(worldPosition.relative(face)) instanceof CreativeCrateBlockEntity crate) {
+                FilteringBehaviour filter = BlockEntityBehaviour.get(crate, FilteringBehaviour.TYPE);
+                if (filter == null || filter.getFilter().isEmpty())
+                    return true;
+            }
         }
         return false;
     }
@@ -685,6 +653,10 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         ResourceLocation req = requestLive() ? requestedShell : null;
         if (req != null)
             compound.putString("Requested", req.toString());
+        if (clientPacket) {
+            syncedAvailableSize = available.size();
+            syncedRequested = req;
+        }
         if (controllerPos != null) {
             compound.putLong("Controller", controllerPos.asLong());
             compound.putLong("ControllerTick", controllerTick);

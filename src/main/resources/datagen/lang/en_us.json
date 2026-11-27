@@ -35,7 +35,7 @@
       "state": {
         "not_rotating": "Not rotating",
         "no_storage": "No storage",
-        "no_shell": "No shell in storage",
+        "no_shell": "No rounds can be provided",
         "no_charge": "No charge in storage",
         "indexing": "Indexing...",
         "ready": "Ready",
@@ -90,7 +90,8 @@
       "computer_unloaded": "The Ballistic Computer is too far away",
       "mode": {
         "direct": "Trajectory: Direct fire",
-        "plunging": "Trajectory: Plunging fire"
+        "plunging": "Trajectory: Plunging fire",
+        "locked": "Trajectory locked: fire mission under way"
       },
       "mission": {
         "under_way": "Fire mission under way",
@@ -103,7 +104,8 @@
         "skipped": "%s: mark %s, rounds unfired: %s (%s)",
         "no_shot": "shot timed out",
         "no_ammunition": "shell type not provided by its loaders",
-        "wrong_shell": "wrong shell in the breech",
+        "unsafe_clear": "a wrong round could not be fired off safely",
+        "cleared": "Wrong rounds fired off: %s",
         "unnamed": "Gun"
       },
       "no_guns": "No guns on the network",
@@ -193,7 +195,8 @@
         "no_altitude": "Own altitude unknown: needs an Altitude Sensor",
         "redundant_drives": "Too many drives aim this gun",
         "round_expires": "Out of reach: the round expires before impact",
-        "awaiting_order": "Awaiting order"
+        "awaiting_order": "Awaiting order",
+        "clearing_round": "Clearing a wrong round"
       }
     },
       "cannon_servo": {

@@ -93,6 +93,7 @@ Positions of servos and mounts on a ship are the ship's own block coordinates, a
 | `no_target` | No target designated |
 | `no_shell` | No shell loaded |
 | `awaiting_order` | Empty, laid on the round its loaders will stage; a planned fire mission waits for the fire button |
+| `clearing_round` | Holds a round of another type than the mission orders: laid for the ordered round, it fires the wrong one off uncounted |
 | `not_assembled` | Mount not assembled, as while a big cannon reloads |
 | `too_far` | Too far, or too high to reach |
 | `too_close` | Inside the minimum range: needs more depression, or in plunging fire more elevation, than the mount has |

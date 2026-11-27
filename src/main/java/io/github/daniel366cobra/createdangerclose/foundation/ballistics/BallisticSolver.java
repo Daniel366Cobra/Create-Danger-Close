@@ -58,7 +58,9 @@ public final class BallisticSolver {
             REDUNDANT_DRIVES,
             ROUND_EXPIRES,
             // Empty, laid on the round its chutes will stage: a planned mission waits for the fire button.
-            AWAITING_ORDER
+            AWAITING_ORDER,
+            // A mission's gun holding a round of another type, laid on the ordered one to fire it off.
+            CLEARING_ROUND
         }
 
         public static Result invalid(Reason reason) {
@@ -428,6 +430,35 @@ public final class BallisticSolver {
 
         double hRange = Math.sqrt(px * px + pz * pz);
         return new IntegrationResult(hRange, py, MAX_TICKS);
+    }
+
+    /**
+     * Where a shell launched with this velocity comes down through a height, relative to the muzzle;
+     * where it is after the longest flight if it never does (CBC's kinematic step, as in the solve).
+     */
+    public static Vector3d landing(Vector3dc launchVelocity, double gravity, double drag, boolean isQuadratic,
+                                   double floorRelativeY) {
+        Vector3d pos = new Vector3d();
+        Vector3d vel = new Vector3d(launchVelocity);
+        Vector3d accel = new Vector3d();
+        Vector3d prevPos = new Vector3d();
+        for (int tick = 1; tick <= MAX_TICKS; tick++) {
+            double speed = vel.length();
+            double dragForce = drag * DENSITY * speed;
+            if (isQuadratic) dragForce *= speed;
+            dragForce = Math.min(dragForce, speed);
+            accel.set(0, gravity, 0);
+            if (speed > 1e-6)
+                accel.fma(-dragForce / speed, vel);
+            prevPos.set(pos);
+            pos.add(vel).fma(0.5, accel);
+            vel.add(accel);
+            if (vel.y < 0 && pos.y <= floorRelativeY) {
+                double t = prevPos.y == pos.y ? 1 : (floorRelativeY - prevPos.y) / (pos.y - prevPos.y);
+                return prevPos.lerp(pos, Math.clamp(t, 0, 1), new Vector3d());
+            }
+        }
+        return pos;
     }
 
     /** Shell position relative to the muzzle when it reaches the target's range. */

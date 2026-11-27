@@ -10,6 +10,7 @@ import io.github.daniel366cobra.createdangerclose.ponder.scenes.CannonServoScene
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.FireMissionConsoleScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.KineticNetworkCouplerScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.MapTableScenes;
+import io.github.daniel366cobra.createdangerclose.ponder.scenes.MunitionsChuteScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.NavigationConsoleScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.NetworkInterfaceScenes;
 import io.github.daniel366cobra.createdangerclose.ponder.scenes.RangefinderScenes;
@@ -52,6 +53,8 @@ public final class CDCPonderScenes {
                 .addStoryBoard("kinetic_network_coupler", KineticNetworkCouplerScenes::kineticNetworkCoupler, CDCPonderTags.FIRE_CONTROL);
         HELPER.forComponents(CDCBlocks.MAP_TABLE)
                 .addStoryBoard("map_table", MapTableScenes::mapTable, CDCPonderTags.FIRE_CONTROL);
+        HELPER.forComponents(CDCBlocks.MUNITIONS_CHUTE)
+                .addStoryBoard("munitions_chute", MunitionsChuteScenes::munitionsChute, CDCPonderTags.FIRE_CONTROL);
 
         // After each block's own scene: battle damage, repairs and upkeep.
         HELPER.forComponents(CDCBlocks.BALLISTIC_COMPUTER, CDCBlocks.DIFFERENTIATOR, CDCBlocks.INTEGRATOR,

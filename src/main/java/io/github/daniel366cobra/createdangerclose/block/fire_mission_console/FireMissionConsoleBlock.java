@@ -145,9 +145,14 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
                     salvo.fired(), salvo.held()), true);
     }
 
-    /** For the whole computer. */
+    /** For the whole computer. Locked under way: one arc for the whole mission (per-mark arcs are planned). */
     protected void throwLever(Level level, BlockPos pos, Player player, FireMissionConsoleBlockEntity console,
                               BallisticComputerBlockEntity computer) {
+        if (computer.isMissionActive()) {
+            level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.3f, 0.3f);
+            status(player, "mode.locked");
+            return;
+        }
         boolean plunging = !computer.isPlungingFire();
         computer.setPlungingFire(plunging);
         level.playSound(null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.4f, plunging ? 0.6f : 0.5f);

@@ -400,6 +400,14 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         fuzeOffsetTicks = Mth.clamp(ticks, -maxFuzeOffsetTicks(), maxFuzeOffsetTicks());
     }
 
+    /** Ponder only: the shell knob turned to that notch, showing that order (null: any). */
+    public void showShellOrder(@Nullable ResourceLocation shell, int notch) {
+        shellOrder = shell;
+        shellKnobNotch = notch;
+        if (shell == null)
+            anyShellNotch = notch;
+    }
+
     @Override
     public boolean triggerEvent(int id, int param) {
         if (id != BUTTON_PRESS_EVENT)
