@@ -109,7 +109,8 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     @Nullable private BlockPos controllerPos;
     private long controllerTick;
     // Last told it reaches only a cannon another chute supplies (one chute per cannon): it holds.
-    private long surplusTick = Long.MIN_VALUE;
+    // Half the minimum: the freshness check subtracts it from the game time.
+    private long surplusTick = Long.MIN_VALUE / 2;
     // Server-evaluated freshness of the controller link, synced for the goggles.
     private boolean controlled;
     // Synced for the goggles (the live fields are server-only).
@@ -348,9 +349,9 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
             indexTicks = 0;
             return State.NO_SHELL;
         }
-        RoundSource cartridge = findCartridge(storage, 0);
-        if (cartridge == null && creativeCrate())
-            cartridge = new RoundSource(null, -1, BigCartridgeBlockItem.getWithPower(maxCartridgePower()));
+        // A charge that can fire it (a creative crate's stands in, as in findCartridge).
+        ResourceLocation shellType = BuiltInRegistries.ITEM.getKey(shell.peek().getItem());
+        RoundSource cartridge = findCartridge(storage, (int) Math.ceil(minChargePower(shellType)));
         if (cartridge == null) {
             indexTicks = 0;
             return State.NO_CHARGE;
@@ -440,6 +441,10 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     private record RoundSource(@Nullable IItemHandler handler, int slot, @Nullable ItemStack synthetic) {
         ItemStack extract() {
             return synthetic != null ? synthetic.copy() : handler.extractItem(slot, 1, false);
+        }
+
+        ItemStack peek() {
+            return synthetic != null ? synthetic : handler.getStackInSlot(slot);
         }
     }
 

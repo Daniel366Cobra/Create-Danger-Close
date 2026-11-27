@@ -140,6 +140,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     private int requestedRounds = -1;
     // Which mission order this is, so a new mission re-arms the count.
     private int requestedSerial;
+    // When the computer last sent it, relayed as is: its chutes judge staleness by the computer, not us.
+    private long requestedTick = Long.MIN_VALUE / 2;
     // What those chutes can stage for this gun: shell type to strongest filled cartridge power.
     private Map<ResourceLocation, Float> chuteSupply = Map.of();
     // Any chute on the cannon side this poll, stocked or not.
@@ -548,7 +550,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             if (member instanceof MunitionsChuteBlockEntity chute) {
                 chuteFed = true;
                 chute.setController(worldPosition, now);
-                chute.setRequestedShell(requestedShell, requestedRounds, requestedSerial, now);
+                chute.setRequestedShell(requestedShell, requestedRounds, requestedSerial, requestedTick);
                 chute.availableShells().forEach((type, power) -> chuteSupply.merge(type, power, Float::max));
                 continue;
             }
@@ -627,6 +629,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         requestedShell = shell;
         requestedRounds = rounds;
         requestedSerial = missionSerial;
+        requestedTick = level != null ? level.getGameTime() : Long.MIN_VALUE / 2;
         if (changed)
             setChanged();
     }

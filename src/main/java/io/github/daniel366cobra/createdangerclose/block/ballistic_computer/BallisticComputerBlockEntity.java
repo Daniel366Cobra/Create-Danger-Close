@@ -599,6 +599,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 markDone &= shot >= mark.rounds();
                 continue;
             }
+            // An empty gun has no solution, so it never reaches the shell gate: note a dry supply here.
+            noteSupplyHold(mountPos);
             BallisticSolver.Result result = lastPitchResults.get(entry.getKey());
             BallisticSolver.Result.Reason reason = result != null && !result.valid() ? result.reason() : null;
             boolean unreachable = cannotReach(reason);
@@ -813,8 +815,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (barrel == null)
             return false;
         if (barrel.hasShell())
-            return isOnTarget(mountPos) && (requestedShell == null
-                    || requestedShell.equals(barrel.shellType()) && suppliedFor(barrel));
+            return isOnTarget(mountPos) && (requestedShell == null || requestedShell.equals(barrel.shellType()));
         if (missionActive || missionMarks.isEmpty())
             return false;
         if (requestedShell != null)
@@ -1757,9 +1758,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         ResourceLocation type = requestedShell;
         if (type == null || mount.autocannon())
             return true;
-        // A breech already holding a different shell cannot fire this aim either.
-        if (mount.hasShell() && mount.shellType() != null && !type.equals(mount.shellType()))
-            return false;
+        // The round in the breech: the right one fires (the last of its stock too, no longer listed),
+        // a different one cannot fire this aim.
+        if (mount.hasShell() && mount.shellType() != null)
+            return type.equals(mount.shellType());
         Map<ResourceLocation, Float> supply = supplyOfGun.get(mount.mountPos());
         Float charge = supply != null ? supply.get(type) : null;
         if (charge == null)
@@ -1790,25 +1792,31 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     }
 
     /**
-     * The firing interlock for a typed aim: the breech must hold the shell the mission calls for, and
-     * the gun's chutes must be able to provide it. Sets {@link #shellHoldReason} for the mission report.
+     * The firing interlock for a typed aim: the breech must hold the shell the mission calls for. What
+     * the chutes list does not matter here, so the last round of a stock still fires. Sets
+     * {@link #shellHoldReason} for the mission report.
      */
     private boolean shellGate(BlockPos mountPos) {
         ResourceLocation type = requestedShell;
         if (type == null)
             return true;
         ServoStatus.MountSnapshot barrel = barrels.get(mountPos);
-        if (barrel == null || barrel.autocannon())
+        if (barrel == null || barrel.autocannon() || type.equals(barrel.shellType()))
             return true;
-        if (!suppliedFor(barrel)) {
-            shellHoldReason.put(mountPos, "createdangerclose.fire_mission_console.mission.no_ammunition");
-            return false;
-        }
-        if (!type.equals(barrel.shellType())) {
+        if (barrel.hasShell())
             shellHoldReason.put(mountPos, "createdangerclose.fire_mission_console.mission.wrong_shell");
-            return false;
-        }
-        return true;
+        else
+            noteSupplyHold(mountPos);
+        return false;
+    }
+
+    /** An empty gun whose chutes cannot stage the shell the aim calls for: why it holds, for the report. */
+    private void noteSupplyHold(BlockPos mountPos) {
+        if (requestedShell == null)
+            return;
+        ServoStatus.MountSnapshot barrel = barrels.get(mountPos);
+        if (barrel != null && !barrel.autocannon() && !barrel.hasShell() && !suppliedFor(barrel))
+            shellHoldReason.put(mountPos, "createdangerclose.fire_mission_console.mission.no_ammunition");
     }
 
     /**
