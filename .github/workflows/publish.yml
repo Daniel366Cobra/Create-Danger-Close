@@ -1,7 +1,7 @@
 name: Publish
 
 # Runs when a GitHub Release is published: builds the jar, attaches it to the release, uploads it to
-# CurseForge and posts it to Discord. A pre-release is a test build: #dev-builds only, jar attached.
+# CurseForge and Modrinth and posts it to Discord. A pre-release is a test build: #dev-builds only, jar attached.
 on:
   release:
     types: [published]
@@ -14,6 +14,7 @@ env:
   DEV_BUILDS_ROLE: "1563650678398787764"
   CURSEFORGE_ID: "1762082"
   CURSEFORGE_URL: https://www.curseforge.com/minecraft/mc-mods/create-danger-close
+  MODRINTH_URL: https://modrinth.com/mod/create-danger-close
 
 jobs:
   publish:
@@ -92,6 +93,45 @@ jobs:
           curl --fail-with-body -sS -H "X-Api-Token: $CURSEFORGE_TOKEN" --form-string "metadata=$metadata" \
               -F "file=@$JAR" "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_ID/upload-file"
 
+      # Test builds stay off Modrinth too. Modrinth's project IDs, hardcoded as CurseForge's game version IDs are.
+      - name: Upload to Modrinth
+        if: ${{ !github.event.release.prerelease }}
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_UPLOAD_TOKEN }}
+          BODY: ${{ github.event.release.body }}
+          NAME: ${{ steps.mod.outputs.name }}
+          VERSION: ${{ steps.mod.outputs.version }}
+          JAR: ${{ steps.mod.outputs.jar }}
+        run: |
+          if [ -z "$MODRINTH_TOKEN" ]; then
+            echo "::error::No MODRINTH_UPLOAD_TOKEN secret"
+            exit 1
+          fi
+          # create-danger-close, then: Create, Create Big Cannons, Create Aeronautics (required),
+          # CC: Tweaked and CBC: Going Ballistic (optional).
+          jq -n --arg changelog "${BODY:-No changelog.}" --arg name "$NAME $VERSION" --arg version "$VERSION" '{
+            name: $name,
+            version_number: $version,
+            changelog: $changelog,
+            dependencies: [
+              {project_id: "LNytGWDc", dependency_type: "required"},
+              {project_id: "GWp4jCJj", dependency_type: "required"},
+              {project_id: "oWaK0Q19", dependency_type: "required"},
+              {project_id: "gu7yAYhd", dependency_type: "optional"},
+              {project_id: "xxaCKdq3", dependency_type: "optional"}
+            ],
+            game_versions: ["1.21.1"],
+            version_type: "release",
+            loaders: ["neoforge"],
+            featured: true,
+            project_id: "dnmfet3P",
+            file_parts: ["file"],
+            primary_file: "file"
+          }' > modrinth.json
+          curl --fail-with-body -sS -A "create-danger-close-publish-workflow" -H "Authorization: $MODRINTH_TOKEN" \
+              -F "data=<modrinth.json;type=application/json" -F "file=@$JAR;type=application/java-archive" \
+              https://api.modrinth.com/v2/version
+
       - name: Post to Discord
         env:
           PRERELEASE: ${{ github.event.release.prerelease }}
@@ -107,7 +147,7 @@ jobs:
             webhook=$DEV_WEBHOOK role=$DEV_BUILDS_ROLE download=""
             heading="Test build **$NAME $VERSION**: feel free to test. Bugs → GitHub issues (mention the build), discussion → #general-english."
           else
-            webhook=$RELEASE_WEBHOOK role=$UPDATES_ROLE download="[CurseForge]($CURSEFORGE_URL) · [GitHub]($URL)"
+            webhook=$RELEASE_WEBHOOK role=$UPDATES_ROLE download="[CurseForge]($CURSEFORGE_URL) · [Modrinth]($MODRINTH_URL) · [GitHub]($URL)"
             heading="**$NAME $VERSION** is out!"
           fi
           if [ -z "$webhook" ]; then

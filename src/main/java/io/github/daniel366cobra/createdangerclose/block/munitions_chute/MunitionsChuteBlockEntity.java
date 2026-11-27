@@ -149,9 +149,12 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     /** The shell the current fire mission calls for; null for whatever comes first. */
     public void setRequestedShell(@Nullable ResourceLocation shell, int rounds, int missionSerial, boolean mission,
                                   long gameTime) {
-        requestMission = mission;
         boolean newOrder = missionSerial != requestSerial;
         boolean changed = shell == null ? requestedShell != null : !shell.equals(requestedShell);
+        // A state of waiting for stock is kept between rescans: a different order must not read it stale.
+        if (newOrder || changed || mission != requestMission || rounds != requestedRounds)
+            rescanCooldown = 0;
+        requestMission = mission;
         if (newOrder || changed)
             stagedForRequest = 0;
         requestedShell = shell;
@@ -341,6 +344,11 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
             indexTicks = 0;
             return State.NO_STORAGE;
         }
+        // Whatever it can stage: the first type by name that has a charge to fire it, which is the round the
+        // Ballistic Computer forecasts (it cannot know the order of the storage's slots).
+        ResourceLocation first = firstStageable(storage);
+        if (first != null)
+            return stageRequested(first);
         RoundSource shell = findShell(storage, null);
         // A creative crate stands in for a stocked magazine on the "whatever comes first" path too.
         if (shell == null && creativeCrate()) {
@@ -360,6 +368,24 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
             return State.NO_CHARGE;
         }
         return stageRound(shell, cartridge);
+    }
+
+    /** The first shell type by name in storage (a creative crate's included) that has a charge able to fire it. */
+    @Nullable
+    private ResourceLocation firstStageable(List<IItemHandler> storage) {
+        java.util.TreeSet<ResourceLocation> types = new java.util.TreeSet<>();
+        for (IItemHandler handler : storage)
+            for (int slot = 0; slot < handler.getSlots(); slot++) {
+                ItemStack stack = handler.getStackInSlot(slot);
+                if (isShell(stack))
+                    types.add(BuiltInRegistries.ITEM.getKey(stack.getItem()));
+            }
+        if (creativeCrate())
+            types.addAll(creativeShells().keySet());
+        for (ResourceLocation type : types)
+            if (findCartridge(storage, minChargePower(type)) != null)
+                return type;
+        return null;
     }
 
     /** Requested: only that shell, and nothing at all without a charge that can fire it. */

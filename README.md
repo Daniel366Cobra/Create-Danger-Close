@@ -5,6 +5,7 @@
 <div align="center">
 
 [![CurseForge downloads](https://img.shields.io/curseforge/dt/1762082?logo=curseforge&label=CurseForge&color=F16436)](https://www.curseforge.com/minecraft/mc-mods/create-danger-close)
+[![Modrinth downloads](https://img.shields.io/modrinth/dt/create-danger-close?logo=modrinth&label=Modrinth&color=1BD96A)](https://modrinth.com/mod/create-danger-close)
 [![Discord](https://img.shields.io/discord/1563604911948701776?logo=discord&label=Discord&color=5865F2)](https://discord.gg/Gf8sZDaYqT)
 </div>
 
@@ -17,9 +18,10 @@ Create Danger Close (CDC) implements the following gameplay mechanics:
 * Rangefinding: manned Rangefinder contraptions allow taking distance, bearing and rate measurements for accurate line-of-sight gunnery. On a ship, Simulated Sensors help stabilize the sight.
 * Gun laying: Cannon Servos lay Big Cannons and Autocannons, keeping pace with moving targets. Turrets built on Swivel bearings are laid too, including chained bearings and several guns on one turret.
 * Per-axis arc limits: Cannon mounts and Swivel bearings can be constrained to fire sectors, avoiding hitting your own structures.
-* Gunnery stations: the Fire Mission Console sets the trajectory and fuze correction, and fires Big Cannons. The Autocannon Control Console lays and fires Autocannons, manually or automatically.
+* Gunnery stations: the Fire Mission Console sets the trajectory, fuze correction and shell type, and fires Big Cannons. The Autocannon Control Console lays and fires Autocannons, manually or automatically.
+* Munitions Chutes: stage a shell and a filled cartridge from storage for a cannon loader. Linked to a cannon through its servo or battle network, a chute stages only what the fire mission orders: the shell type, the number of rounds, no more. A wrong round left in the breech is fired off without counting towards the mission.
 * Navigation Console: shows the ship's own attitude, speed and altitude.
-* Multiblock Map tables: filled Maps can be placed on top, allowing target selection for BVR fire missions and designation of safe zones.
+* Multiblock Map tables: filled Maps can be placed on top, allowing target selection for BVR fire missions and designation of safe zones. Plan multi-target missions of up to 4 marks, each with its own number of rounds and shell type.
 * Situational awareness and reconnaissance: players with a copy of a map displayed on a Map table will be shown as green arrows. Holding the map in the active hand will send terrain updates to the table for fire corrections. Fire that would land near allies is held until confirmed.
 * Kinetic Network Coupler: runs a separate kinetic network off another one's rotation, so several factory lines or battle networks can share one power source. It gears down when power is short, then decouples its own side.
 * Damage and maintenance: explosions and shell hits jostle or break components, requiring repairs. Lenses gather dust over time, washed off by rain or a water bucket. Mechanisms use up their lubrication as they run, and may seize.
@@ -50,6 +52,8 @@ This addon is best used for PvP multiplayer combat: just like IRL, effective gun
 ## Dependencies
 
 [Create](https://www.curseforge.com/minecraft/mc-mods/create), [Create Big Cannons](https://www.curseforge.com/minecraft/mc-mods/create-big-cannons) and [Create Aeronautics](https://www.curseforge.com/minecraft/mc-mods/create-aeronautics) are all required.
+
+Optional: [CC: Tweaked](https://www.curseforge.com/minecraft/mc-mods/cc-tweaked) exposes the Ballistic Computer as a read-only peripheral. With [CBC: Going Ballistic](https://modrinth.com/mod/create-big-cannons-going-ballistic), the Ballistic Computer solves with its realistic ballistics instead of CBC's.
 
 ## License
 

@@ -619,10 +619,12 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 continue;
             // A round of another type in the breech (rounds cannot be unloaded) is fired off from the lay
             // for the ordered round, wherever it falls, unless that is near our own side. It does not
-            // count against the order. Without a forecast it was laid for itself: fired at the mark.
+            // count against the order. Without a forecast it was laid for itself: fired at the mark, unless
+            // the chutes cannot stage the ordered type at all: it is kept then, for a mark that wants it.
             // Clearing is not progress: a feed that keeps loading the wrong type still stalls out.
             boolean clearing = clearingRounds.contains(mountPos);
             boolean wrongRound = wrongRound(mountPos);
+            boolean unprovided = wrongRound && !clearing && stagedRound(barrels.get(mountPos), true) == null;
             if (clearing) {
                 // A wrong shell still waiting for its cartridge is mid-reload, not stuck: it waits.
                 if (charged(barrels.get(mountPos)) && isOnTarget(mountPos) && !unsafeClears.contains(mountPos)
@@ -631,7 +633,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                     markDone = false;
                     continue;
                 }
-            } else if (isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos)) {
+            } else if (!unprovided && isOnTarget(mountPos) && CannonFiring.fire(serverLevel, mountPos)) {
                 fired.add(mountPos);
                 if (wrongRound) {
                     missionCleared++;
@@ -1967,7 +1969,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (requestedShell == null)
             return;
         ServoStatus.MountSnapshot barrel = barrels.get(mountPos);
-        if (barrel != null && !barrel.autocannon() && !barrel.hasShell() && !suppliedFor(barrel))
+        if (barrel != null && !barrel.autocannon() && (!barrel.hasShell() || wrongLoad(barrel)) && !suppliedFor(barrel))
             shellHoldReason.put(mountPos, "createdangerclose.fire_mission_console.mission.no_ammunition");
     }
 
@@ -2388,8 +2390,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     /**
      * Reach for the map table with the current shell and charge, down to the target's height (or the
      * ground). Same top pitch as the solver, so it matches "out of range". Ignores own-ship motion.
-     * Reloading, the ring stays a while and the aim line and sector stay at that length; a gun never
-     * yet loaded has no known reach, so radius 0.
+     * Reloading, the ring stays a while and the aim line and sector stay at that length; an empty gun
+     * is measured with the round its chutes would stage, and without any (never loaded, no loader)
+     * has no known reach, so radius 0.
      */
     @Nullable
     private BattlePlot.GunRange gunRange(ServoStatus.MountSnapshot mount, double maxElevation, double maxDepression,
@@ -2397,7 +2400,15 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (level == null)
             return null;
         long now = level.getGameTime();
-        double[] live = liveReach(mount, maxElevation, maxDepression);
+        // An empty gun, or one holding a round a table mission will fire off, has the reach of the round
+        // its chutes will stage: the loaders' forecast, as for the laying.
+        ServoStatus.MountSnapshot reach = mount;
+        if (!mount.hasShell() || inTableMission() && wrongLoad(mount)) {
+            ServoStatus.MountSnapshot staged = stagedRound(mount, mount.hasShell());
+            if (staged != null)
+                reach = staged;
+        }
+        double[] live = liveReach(reach, maxElevation, maxDepression);
         if (live != null)
             lastReach.put(mount.mountPos(), new HeldReach(live[0], live[1], now));
         HeldReach held = lastReach.get(mount.mountPos());
