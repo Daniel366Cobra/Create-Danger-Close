@@ -261,7 +261,8 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         // Placed on a pixel: sigma of a pixel over √12.
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         double sigma = sheet != null ? sheet.blocksPerPixel() / Math.sqrt(12) : 0;
-        return new SensorReading.MapTarget(controller.getAimPoint(), controller.getTargetTick(), sigma, controller.getMissionMarks());
+        return new SensorReading.MapTarget(controller.getAimPoint(), controller.getTargetTick(), sigma,
+                controller.getMissionMarks(), controller.getTargetShell());
     }
 
     private SensorReading buildGimbalReading(GimbalSensorBlockEntity gimbal) {
@@ -495,6 +496,15 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
                                 ? "createdangerclose.network_interface.fixed_gun"
                                 : "createdangerclose.network_interface.fixed_gun_empty"))
                         .style(g.loaded() ? ChatFormatting.GREEN : ChatFormatting.GOLD)
+                        .forGoggles(tooltip);
+                yield true;
+            }
+            case SensorReading.Munitions m -> {
+                CDCLang.builder()
+                        .add(Component.literal("  • "))
+                        .add(Component.translatable("createdangerclose.network_interface.munitions",
+                                m.availableShells().size()))
+                        .style(m.availableShells().isEmpty() ? ChatFormatting.DARK_GRAY : ChatFormatting.GREEN)
                         .forGoggles(tooltip);
                 yield true;
             }

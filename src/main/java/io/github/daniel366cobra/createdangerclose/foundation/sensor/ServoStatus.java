@@ -8,12 +8,17 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * @param mounts the one cannon mount driven, for a mount axis
  * @param swivel for {@link ServoAxis#SWIVEL}; else null
  * @param limits as set on the dial
+ * @param supply what the munitions chutes on the cannon side can stage: shell type to the strongest
+ *               filled cartridge power pairable with it; empty for a hand-loaded gun
+ * @param chuteFed whether any munitions chute rides the cannon side, stocked or not: such a gun is
+ *                 already supplied, so no battle-network chute claims it
  */
 public record ServoStatus(
         BlockPos servoPos,
@@ -21,8 +26,15 @@ public record ServoStatus(
         boolean powered,
         List<MountSnapshot> mounts,
         @Nullable SwivelSnapshot swivel,
-        ServoLimits limits
+        ServoLimits limits,
+        Map<ResourceLocation, Float> supply,
+        boolean chuteFed
 ) {
+    public ServoStatus(BlockPos servoPos, ServoAxis axis, boolean powered, List<MountSnapshot> mounts,
+                       @Nullable SwivelSnapshot swivel, ServoLimits limits) {
+        this(servoPos, axis, powered, mounts, swivel, limits, Map.of(), false);
+    }
+
     public record MountSnapshot(
             BlockPos mountPos,
             float facingYaw,
@@ -43,6 +55,8 @@ public record ServoStatus(
             float addedChargePower,
             float minimumChargePower,
             float totalChargePower,
+            // Effective muzzle speed, blocks/tick (Going Ballistic's, when that mod computes it; 0: use the charge power).
+            float muzzleVelocity,
             // The cannon's rotation center (level coordinates; null if unassembled) and the shell's spawn distance along the barrel.
             @Nullable Vec3 pivot,
             double muzzleDistance,

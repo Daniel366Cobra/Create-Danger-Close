@@ -70,8 +70,13 @@ public abstract class PairOutputBlockEntity extends GeneratingKineticBlockEntity
         outputCapacity = capacity;
         // Create subtracts this on reload: stale, it would leave phantom capacity.
         lastCapacityProvided = capacity;
-        if (hasNetwork())
-            getOrCreateNetwork().updateCapacityFor(this, capacity);
+        // Stress recomputed too: updateCapacityFor syncs the members, which clears the dirty flag a
+        // removed block left for a stress recount; changed with the same train, the removal would stick.
+        if (hasNetwork()) {
+            KineticNetwork network = getOrCreateNetwork();
+            network.sources.put(this, capacity);
+            network.updateNetwork();
+        }
     }
 
     @Override

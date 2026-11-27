@@ -1,5 +1,6 @@
 package io.github.daniel366cobra.createdangerclose.foundation.sensor;
 
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public interface ComputerServo {
@@ -19,4 +20,7 @@ public interface ComputerServo {
 
     /** Its guns show another name, set closer to them (null: its own, or no guns). */
     default void receiveShownName(@Nullable String shownAs) {}
+
+    /** The shell type the computer's current aim calls for from this servo's gun; null for whatever is loaded. */
+    default void offerShellRequest(@Nullable ResourceLocation shell, int rounds, int missionSerial) {}
 }

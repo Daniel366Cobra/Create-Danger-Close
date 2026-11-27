@@ -25,6 +25,8 @@ public final class MapTablePlot {
 
     // Colors per player (client config).
     private static final int LINE_ALPHA = 0xE0;
+    // A gun that cannot be loaded with the shell the aim calls for.
+    private static final int UNSUPPLIED_COLOR = LINE_ALPHA << 24 | 0x808080;
     // Safe zones' infill: about 35%.
     private static final int FILL_ALPHA = 0x59;
 
@@ -82,7 +84,7 @@ public final class MapTablePlot {
                             pixel * DASH, pixel * DASH_GAP);
             }
             if (gun.hasAim()) {
-                pen.color = gunAimColor;
+                pen.color = gun.supplied() ? gunAimColor : UNSUPPLIED_COLOR;
                 pen.line(x, y, x + gun.aimX() * length, y + gun.aimZ() * length,
                         pixel * AIM_DASH, pixel * AIM_GAP);
             }

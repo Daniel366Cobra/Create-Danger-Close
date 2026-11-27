@@ -150,12 +150,12 @@ public final class CannonReading {
             t -> CBCMunitionPropertiesHandlers.MORTAR_STONE.getPropertiesOf(t).bigCannonProperties());
 
     /** gravity() == 0 means no entry (every shipped shell's is negative); with none, the zeroed default. */
-    static BallisticPropertiesComponent resolveBallistics(EntityType<?> projectileType) {
+    public static BallisticPropertiesComponent resolveBallistics(EntityType<?> projectileType) {
         return firstEntry(BALLISTICS, projectileType, b -> b.gravity() != 0);
     }
 
     /** minimumChargePower() == 0 means no entry (every shipped shell's is at least 1). */
-    static BigCannonProjectilePropertiesComponent resolveBigCannonProperties(EntityType<?> projectileType) {
+    public static BigCannonProjectilePropertiesComponent resolveBigCannonProperties(EntityType<?> projectileType) {
         return firstEntry(BIG_CANNON_PROPERTIES, projectileType, p -> p.minimumChargePower() != 0);
     }
 
@@ -430,7 +430,7 @@ public final class CannonReading {
                 sm.hasShell, sm.shellType,
                 sm.fuzeStack, sm.fuzeTimer, sm.isTimedFuze,
                 sm.gravity, sm.drag, sm.isQuadraticDrag,
-                sm.addedChargePower, sm.minimumChargePower, sm.totalChargePower,
+                sm.addedChargePower, sm.minimumChargePower, sm.totalChargePower, sm.muzzleVelocity,
                 sm.pivot, sm.muzzleDistance, sm.barrel, sm.autocannon, sm.maxFlightTicks);
     }
 

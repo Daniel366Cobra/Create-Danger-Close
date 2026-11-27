@@ -293,11 +293,18 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
             double[] at = markOnScreen(controller, mark);
             if (at == null)
                 continue;
-            String text = (ordered ? (i + 1) + ": " : "") + "×" + mark.rounds();
+            String text = (ordered ? (i + 1) + ": " : "") + "×" + mark.rounds()
+                    + (mark.shell() != null ? " " + markShellName(mark.shell()) : "");
             int x = (int) Math.round(at[0]) - font.width(text) / 2, y = (int) Math.round(at[1]) + MARK_LABEL_DROP;
             graphics.fill(x - 1, y - 1, x + font.width(text), y + font.lineHeight - 1, GUN_LABEL_BACKDROP);
             graphics.drawString(font, text, x, y, mark == hovered ? MARK_HOVERED_COLOR : GUN_LABEL_COLOR, false);
         }
+    }
+
+    private static String markShellName(net.minecraft.resources.ResourceLocation type) {
+        return net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(type)
+                ? net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(type).getName().getString()
+                : type.toString();
     }
 
     /** GUI pixels; null without a sheet. */
@@ -530,10 +537,13 @@ public class MapTableScreen extends AbstractContainerScreen<MapTableMenu> {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY == 0 || !isOverSheet(mouseX, mouseY))
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        // Over a mark: its rounds rather than the zoom. Shift is kept for its shell.
+        // Over a mark: its rounds rather than the zoom; Shift cycles the shell the loaders stage for it.
         SensorReading.Mark mark = hoveredMark(mouseX, mouseY);
         if (mark != null) {
-            if (!hasShiftDown())
+            if (hasShiftDown())
+                sendMark(menu.getController(), scrollY > 0 ? MapTableMarkPayload.SHELL_NEXT : MapTableMarkPayload.SHELL_PREV,
+                        0, 0, mark.id());
+            else
                 sendMark(menu.getController(), scrollY > 0 ? MapTableMarkPayload.MORE_ROUNDS : MapTableMarkPayload.FEWER_ROUNDS,
                         0, 0, mark.id());
             return true;

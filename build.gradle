@@ -169,6 +169,12 @@ dependencies {
     implementation ("maven.modrinth:create-big-cannons:${create_big_cannons_min_version}") { transitive = false }
     implementation ("maven.modrinth:rpl:${ritchies_projectile_library_version}") { transitive = false }
 
+    // CBC: Going Ballistic, optional: detected at runtime, its physics estimates drive our solver when present.
+    // Modrinth maven resolves this project by ID (xxaCKdq3 = "cbc-going-ballistic").
+    compileOnly("maven.modrinth:xxaCKdq3:${going_ballistic_version}") { transitive = false }
+    // Dev runs carry it to exercise the compat; comment out to test plain-CBC behavior.
+    localRuntime("maven.modrinth:xxaCKdq3:${going_ballistic_version}") { transitive = false }
+
     // Dev client only: renderer mods players often run, to reproduce their rendering bugs.
     devClientMods("maven.modrinth:sodium:${sodium_version}")
     devClientMods("maven.modrinth:iris:${iris_version}")

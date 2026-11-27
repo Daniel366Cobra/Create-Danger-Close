@@ -30,6 +30,8 @@
       "charge": "Charge: %s",
       "cartridge": "%s (%s)",
       "none": "None",
+      "requested": "Requested: %s",
+      "available": "Can stage %s shell types",
       "state": {
         "not_rotating": "Not rotating",
         "no_storage": "No storage",
@@ -37,7 +39,10 @@
         "no_charge": "No charge in storage",
         "indexing": "Indexing...",
         "ready": "Ready",
-        "output_blocked": "Output blocked"
+        "output_blocked": "Output blocked",
+        "not_provided": "Requested round cannot be provided",
+        "holding": "Mission served, holding",
+        "surplus": "Cannon already supplied by another chute"
       }
     },
 
@@ -58,7 +63,8 @@
       "nav_console": "Navigation console",
       "fire_console": "Weapon control console",
       "fixed_gun": "Fixed cannon mount: loaded",
-      "fixed_gun_empty": "Fixed cannon mount: empty"
+      "fixed_gun_empty": "Fixed cannon mount: empty",
+      "munitions": "Munitions chute: %s shell types"
     },
     "autocannon_control_console": {
       "title": "Autocannon Control Console",
@@ -94,6 +100,8 @@
         "confirm_safe_zone": "Safe zone: press fire to confirm this mark",
         "skipped": "%s: mark %s, rounds unfired: %s (%s)",
         "no_shot": "shot timed out",
+        "no_ammunition": "shell type not provided by its loaders",
+        "wrong_shell": "wrong shell in the breech",
         "unnamed": "Gun"
       },
       "no_guns": "No guns on the network",
@@ -217,6 +225,7 @@
         "no_target": "No target marked",
         "target": "Target:",
         "safe_zones": "Safe zones: %s",
+        "supply": "Loaders can stage %s shell types:",
         "safe_zone_limit": "This table already holds %s safe zones",
         "mode": {
           "target": "Target",

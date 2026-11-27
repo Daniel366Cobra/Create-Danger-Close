@@ -96,6 +96,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
     // getShownMarks and getMissionMarks; old saves' "Target" would then need migrating.
     // Rounds per gun on the single target; more than one makes a one-mark mission.
     protected int targetRounds = 1;
+    // The shell the loaders should stage for the single target; null for whatever is loaded.
+    @Nullable protected ResourceLocation targetShell;
     // Instead of a target: a multi-target mission, in click order. Dated with it.
     public static final int MAX_MARKS = 4, MAX_MARK_ROUNDS = 8;
     protected List<SensorReading.Mark> marks = List.of();
@@ -298,6 +300,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         target = point;
         marks = List.of();
         targetRounds = 1;
+        targetShell = null;
         targetChanged();
     }
 
@@ -322,6 +325,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         target = null;
         marks = List.of();
         targetRounds = 1;
+        targetShell = null;
         // Dated too, so an older target on a block that joins later stays cleared.
         targetChanged();
     }
@@ -367,7 +371,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     /** The single target as a mark, or the marks: what the screen labels and scrolling work on. */
     public List<SensorReading.Mark> getShownMarks() {
-        return marks.isEmpty() && target != null ? List.of(new SensorReading.Mark(0, target, targetRounds)) : marks;
+        return marks.isEmpty() && target != null
+                ? List.of(new SensorReading.Mark(0, target, targetRounds, targetShell)) : marks;
     }
 
     /** What the fire button runs as a mission: the marks, or a single target of several rounds. One round is a plain salvo. */
@@ -390,12 +395,60 @@ public class MapTableBlockEntity extends SmartBlockEntity
             SensorReading.Mark mark = changed.get(i);
             int rounds = Mth.clamp(mark.rounds() + delta, 1, MAX_MARK_ROUNDS);
             if (mark.id() == id && rounds != mark.rounds()) {
-                changed.set(i, new SensorReading.Mark(id, mark.pos(), rounds));
+                changed.set(i, new SensorReading.Mark(id, mark.pos(), rounds, mark.shell()));
                 marks = List.copyOf(changed);
                 targetChanged();
                 return;
             }
         }
+    }
+
+    @Nullable
+    public ResourceLocation getTargetShell() {
+        return targetShell;
+    }
+
+    /**
+     * Shift-scrolling a mark: which shell the loaders should stage for it, cycling through everything
+     * the network's munitions chutes can provide (as last reported with the plot); past the last type
+     * comes "whatever is loaded".
+     */
+    public void adjustMarkShell(int id, int direction) {
+        List<ResourceLocation> shells = plot.shells();
+        if (shells.isEmpty() || level == null)
+            return;
+        if (marks.isEmpty() && target != null) {
+            ResourceLocation next = nextShell(shells, targetShell, direction);
+            if (!java.util.Objects.equals(next, targetShell)) {
+                targetShell = next;
+                targetChanged();
+            }
+            return;
+        }
+        List<SensorReading.Mark> changed = new ArrayList<>(marks);
+        for (int i = 0; i < changed.size(); i++) {
+            SensorReading.Mark mark = changed.get(i);
+            if (mark.id() == id) {
+                changed.set(i, new SensorReading.Mark(id, mark.pos(), mark.rounds(),
+                        nextShell(shells, mark.shell(), direction)));
+                marks = List.copyOf(changed);
+                targetChanged();
+                return;
+            }
+        }
+    }
+
+    /** The type after {@code current} in {@code shells}; past the last comes null ("whatever is loaded"). */
+    @Nullable
+    private static ResourceLocation nextShell(List<ResourceLocation> shells, @Nullable ResourceLocation current,
+                                              int direction) {
+        int size = shells.size();
+        int step = direction > 0 ? 1 : -1;
+        int index = current == null ? (step > 0 ? -1 : size) : shells.indexOf(current);
+        if (index < 0)
+            index = step > 0 ? -1 : size;
+        int next = Math.floorMod(index + step, size + 1);
+        return next == size ? null : shells.get(next);
     }
 
     // --- Safe zones (controller only) ---
@@ -484,7 +537,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     /** What a table keeps across joins and splits, each part dated by its last change. */
-    private record TableMemo(@Nullable Vec3 target, int targetRounds, List<SensorReading.Mark> marks, long targetTick,
+    private record TableMemo(@Nullable Vec3 target, int targetRounds, @Nullable ResourceLocation targetShell,
+                             List<SensorReading.Mark> marks, long targetTick,
                              List<SafeZone> safeZones, long safeZonesTick) {}
 
     private void adopt(TableMemo memo) {
@@ -492,6 +546,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
         if (memo.targetTick() > targetTick) {
             target = memo.target();
             targetRounds = memo.targetRounds();
+            targetShell = memo.targetShell();
             marks = memo.marks();
             targetTick = memo.targetTick();
             changed = true;
@@ -508,7 +563,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
     }
 
     private TableMemo memo() {
-        return new TableMemo(target, targetRounds, marks, targetTick, safeZones, safeZonesTick);
+        return new TableMemo(target, targetRounds, targetShell, marks, targetTick, safeZones, safeZonesTick);
     }
 
     // --- Battle network link (controller only) ---
@@ -1001,7 +1056,25 @@ public class MapTableBlockEntity extends SmartBlockEntity
                     .add(Component.translatable("createdangerclose.map_table.safe_zones", table.safeZones.size()))
                     .style(ChatFormatting.GREEN)
                     .forGoggles(tooltip);
+        if (table.linked && !table.plot.shells().isEmpty()) {
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.map_table.supply", table.plot.shells().size()))
+                    .style(ChatFormatting.GRAY)
+                    .forGoggles(tooltip);
+            for (ResourceLocation shell : table.plot.shells())
+                CDCLang.builder()
+                        .add(Component.literal("  • "))
+                        .add(shellName(shell))
+                        .style(ChatFormatting.DARK_GRAY)
+                        .forGoggles(tooltip);
+        }
         return true;
+    }
+
+    private static Component shellName(ResourceLocation type) {
+        return net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(type)
+                ? net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(type).getName()
+                : Component.literal(type.toString());
     }
 
     // --- Menu ---
@@ -1035,6 +1108,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
         target = compound.contains("Target") ? readVec3(compound.getCompound("Target")) : null;
         targetTick = compound.getLong("TargetTick");
         targetRounds = Mth.clamp(compound.getInt("TargetRounds"), 1, MAX_MARK_ROUNDS);
+        targetShell = compound.contains("TargetShell")
+                ? ResourceLocation.tryParse(compound.getString("TargetShell")) : null;
         marks = SensorReading.Mark.readList(compound.getList("Marks", Tag.TAG_COMPOUND));
         List<SafeZone> zones = new ArrayList<>();
         for (Tag tag : compound.getList("SafeZones", Tag.TAG_INT_ARRAY)) {
@@ -1093,6 +1168,8 @@ public class MapTableBlockEntity extends SmartBlockEntity
         // Even without a target: when it was cleared.
         compound.putLong("TargetTick", targetTick);
         compound.putInt("TargetRounds", targetRounds);
+        if (targetShell != null)
+            compound.putString("TargetShell", targetShell.toString());
         if (!marks.isEmpty()) {
             ListTag markTags = new ListTag();
             for (SensorReading.Mark mark : marks)

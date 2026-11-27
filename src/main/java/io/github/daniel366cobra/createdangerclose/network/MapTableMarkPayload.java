@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 /** Client to server: a multi-target mark added at sheet fractions (u, v), or the mark {@code id} removed or changed. */
 public record MapTableMarkPayload(BlockPos table, int action, float u, float v, int id) implements CustomPacketPayload {
 
-    public static final int ADD = 0, REMOVE = 1, MORE_ROUNDS = 2, FEWER_ROUNDS = 3;
+    public static final int ADD = 0, REMOVE = 1, MORE_ROUNDS = 2, FEWER_ROUNDS = 3, SHELL_NEXT = 4, SHELL_PREV = 5;
 
     public static final Type<MapTableMarkPayload> TYPE =
             new Type<>(CreateDangerClose.asResource("map_table_mark"));
@@ -48,6 +48,8 @@ public record MapTableMarkPayload(BlockPos table, int action, float u, float v, 
                 case REMOVE -> controller.removeMark(payload.id());
                 case MORE_ROUNDS -> controller.adjustMarkRounds(payload.id(), 1);
                 case FEWER_ROUNDS -> controller.adjustMarkRounds(payload.id(), -1);
+                case SHELL_NEXT -> controller.adjustMarkShell(payload.id(), 1);
+                case SHELL_PREV -> controller.adjustMarkShell(payload.id(), -1);
                 default -> { }
             }
         });

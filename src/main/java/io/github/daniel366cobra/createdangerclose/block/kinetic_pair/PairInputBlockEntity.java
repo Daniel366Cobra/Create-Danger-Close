@@ -36,8 +36,12 @@ public abstract class PairInputBlockEntity extends KineticBlockEntity {
         drawImpact = impact;
         // Create subtracts this on reload: stale, it would leave phantom stress.
         lastStressApplied = impact;
-        if (hasNetwork())
-            getOrCreateNetwork().updateStressFor(this, impact);
+        // Capacity recomputed too, for the reason in PairOutputBlockEntity#offerCapacity.
+        if (hasNetwork()) {
+            KineticNetwork network = getOrCreateNetwork();
+            network.members.put(this, impact);
+            network.updateNetwork();
+        }
     }
 
     // Joined its saved network (Create's initialize, or ours in removeSource).

@@ -2,7 +2,9 @@ package io.github.daniel366cobra.createdangerclose.foundation.plot;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -14,10 +16,16 @@ import java.util.function.ToDoubleFunction;
  *
  * @param guns   how far each armed mount can reach, and where it points
  * @param merged the one fix several rangefinders on one target make together (a Correlator's); null if none
+ * @param shells every shell type the network's munitions chutes can stage, for the table's shell cycling
  */
-public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nullable MergedFix merged) {
+public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nullable MergedFix merged,
+                         List<ResourceLocation> shells) {
 
-    public static final BattlePlot EMPTY = new BattlePlot(List.of(), List.of(), null);
+    public BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nullable MergedFix merged) {
+        this(fixes, guns, merged, List.of());
+    }
+
+    public static final BattlePlot EMPTY = new BattlePlot(List.of(), List.of(), null, List.of());
 
     /**
      * Carried forward to the poll on its tracked velocity.
@@ -41,9 +49,14 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nulla
      * @param arcLength  degrees; 360 all round
      * @param name       its servo's name ("Turret A"), empty if unnamed
      * @param ring       draw the reach; off once a reloading gun's last reach has gone stale
+     * @param supplied   its loaders can stage the shell the current aim calls for; false draws the aim line gray
      */
     public record GunRange(double x, double z, double radius, double aimX, double aimZ, double minRadius,
-                           double arcFrom, double arcLength, String name, boolean ring) {
+                           double arcFrom, double arcLength, String name, boolean ring, boolean supplied) {
+        public GunRange(double x, double z, double radius, double aimX, double aimZ, double minRadius,
+                        double arcFrom, double arcLength, String name, boolean ring) {
+            this(x, z, radius, aimX, aimZ, minRadius, arcFrom, arcLength, name, ring, true);
+        }
         public boolean hasAim() {
             return aimX != 0 || aimZ != 0;
         }
@@ -54,7 +67,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nulla
     }
 
     public boolean isEmpty() {
-        return fixes.isEmpty() && guns.isEmpty();
+        return fixes.isEmpty() && guns.isEmpty() && shells.isEmpty();
     }
 
     // Same gun or fix across two plots if it moved less than this, blocks (ships move between polls).
@@ -86,7 +99,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nulla
             double arcFrom = from.arcFrom + Math.IEEEremainder(gun.arcFrom - from.arcFrom, 360) * t;
             blendedGuns.add(new GunRange(lerp(from.x, gun.x, t), lerp(from.z, gun.z, t),
                     lerp(from.radius, gun.radius, t), aimX, aimZ, lerp(from.minRadius, gun.minRadius, t),
-                    arcFrom, lerp(from.arcLength, gun.arcLength, t), gun.name, gun.ring));
+                    arcFrom, lerp(from.arcLength, gun.arcLength, t), gun.name, gun.ring, gun.supplied));
         }
         List<RangefinderFix> blendedFixes = new ArrayList<>(to.fixes.size());
         List<RangefinderFix> unpairedFixes = new ArrayList<>(fixes);
@@ -105,7 +118,7 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nulla
         MergedFix blendedMerged = merged == null || to.merged == null ? to.merged
                 : new MergedFix(lerp(merged.x, to.merged.x, t), lerp(merged.z, to.merged.z, t),
                         lerp(merged.sigma, to.merged.sigma, t));
-        return new BattlePlot(blendedFixes, blendedGuns, blendedMerged);
+        return new BattlePlot(blendedFixes, blendedGuns, blendedMerged, to.shells);
     }
 
     @Nullable
@@ -165,9 +178,17 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nulla
                 t.putBoolean("NoRing", true);
             if (!gun.name().isEmpty())
                 t.putString("Name", gun.name());
+            if (!gun.supplied())
+                t.putBoolean("Unsupplied", true);
             gunList.add(t);
         }
         tag.put("Guns", gunList);
+        if (!shells.isEmpty()) {
+            ListTag shellList = new ListTag();
+            for (ResourceLocation shell : shells)
+                shellList.add(StringTag.valueOf(shell.toString()));
+            tag.put("Shells", shellList);
+        }
         return tag;
     }
 
@@ -184,13 +205,20 @@ public record BattlePlot(List<RangefinderFix> fixes, List<GunRange> guns, @Nulla
             guns.add(new GunRange(t.getDouble("X"), t.getDouble("Z"), t.getDouble("Radius"),
                     t.getDouble("AimX"), t.getDouble("AimZ"), t.getDouble("MinRadius"),
                     t.getDouble("ArcFrom"), t.contains("ArcLength") ? t.getDouble("ArcLength") : 360,
-                    t.getString("Name"), !t.getBoolean("NoRing")));
+                    t.getString("Name"), !t.getBoolean("NoRing"), !t.getBoolean("Unsupplied")));
+        }
+        List<ResourceLocation> shells = new ArrayList<>();
+        for (Tag entry : tag.getList("Shells", Tag.TAG_STRING)) {
+            ResourceLocation shell = ResourceLocation.tryParse(entry.getAsString());
+            if (shell != null)
+                shells.add(shell);
         }
         MergedFix merged = null;
         if (tag.contains("MergedFix")) {
             CompoundTag t = tag.getCompound("MergedFix");
             merged = new MergedFix(t.getDouble("X"), t.getDouble("Z"), t.getDouble("Sigma"));
         }
-        return fixes.isEmpty() && guns.isEmpty() ? EMPTY : new BattlePlot(fixes, guns, merged);
+        return fixes.isEmpty() && guns.isEmpty() && shells.isEmpty()
+                ? EMPTY : new BattlePlot(fixes, guns, merged, List.copyOf(shells));
     }
 }

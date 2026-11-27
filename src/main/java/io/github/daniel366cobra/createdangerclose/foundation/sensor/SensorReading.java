@@ -5,12 +5,15 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public sealed interface SensorReading {
     Kind kind();
@@ -18,7 +21,7 @@ public sealed interface SensorReading {
 
     enum Kind {
         // Saved by ordinal: add new kinds at the end.
-        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE, MAP_TARGET, COMPUTER, NAV_CONSOLE, FIRE_CONSOLE, FIXED_GUN
+        GIMBAL, NAV_HEADING, NAV_TARGET, VELOCITY, ALTITUDE, RANGEFINDER, NONE, MAP_TARGET, COMPUTER, NAV_CONSOLE, FIRE_CONSOLE, FIXED_GUN, MUNITIONS
     }
 
     interface Provider {
@@ -181,8 +184,14 @@ public sealed interface SensorReading {
      * @param designatedTick so the newest of several tables wins
      * @param sigma          placement precision, blocks (half a map pixel)
      * @param marks          a multi-target mission, in click order; worldPos is then the first
+     * @param targetShell    the shell type for the single target, null for whatever is loaded
      */
-    record MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma, List<Mark> marks) implements SensorReading {
+    record MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma, List<Mark> marks,
+                     @Nullable ResourceLocation targetShell) implements SensorReading {
+        public MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma, List<Mark> marks) {
+            this(worldPos, designatedTick, sigma, marks, null);
+        }
+
         @Override public Kind kind() { return Kind.MAP_TARGET; }
 
         @Override
@@ -201,6 +210,8 @@ public sealed interface SensorReading {
                     list.add(mark.write());
                 tag.put("marks", list);
             }
+            if (targetShell != null)
+                tag.putString("shell", targetShell.toString());
             return tag;
         }
 
@@ -208,7 +219,42 @@ public sealed interface SensorReading {
             Vec3 pos = tag.contains("px")
                     ? new Vec3(tag.getDouble("px"), tag.getDouble("py"), tag.getDouble("pz"))
                     : null;
-            return new MapTarget(pos, tag.getLong("tick"), tag.getDouble("sigma"), Mark.readList(tag.getList("marks", Tag.TAG_COMPOUND)));
+            ResourceLocation shell = tag.contains("shell") ? ResourceLocation.tryParse(tag.getString("shell")) : null;
+            return new MapTarget(pos, tag.getLong("tick"), tag.getDouble("sigma"),
+                    Mark.readList(tag.getList("marks", Tag.TAG_COMPOUND)), shell);
+        }
+    }
+
+    /**
+     * What a munitions chute can stage for its gun: shell type to the strongest filled cartridge power
+     * it can pair with it (always at least the shell's minimum charge). Empty: hand-loaded or unlinked.
+     */
+    record Munitions(Map<ResourceLocation, Float> availableShells) implements SensorReading {
+        @Override public Kind kind() { return Kind.MUNITIONS; }
+
+        @Override
+        public CompoundTag serializeNBT(HolderLookup.Provider registries) {
+            CompoundTag tag = new CompoundTag();
+            ListTag list = new ListTag();
+            for (Map.Entry<ResourceLocation, Float> entry : availableShells.entrySet()) {
+                CompoundTag shell = new CompoundTag();
+                shell.putString("S", entry.getKey().toString());
+                shell.putFloat("P", entry.getValue());
+                list.add(shell);
+            }
+            tag.put("Shells", list);
+            return tag;
+        }
+
+        static Munitions fromNBT(CompoundTag tag) {
+            Map<ResourceLocation, Float> shells = new HashMap<>();
+            for (Tag entry : tag.getList("Shells", Tag.TAG_COMPOUND)) {
+                CompoundTag shell = (CompoundTag) entry;
+                ResourceLocation type = ResourceLocation.tryParse(shell.getString("S"));
+                if (type != null)
+                    shells.put(type, shell.getFloat("P"));
+            }
+            return new Munitions(Map.copyOf(shells));
         }
     }
 
@@ -217,8 +263,13 @@ public sealed interface SensorReading {
      *
      * @param id     rises in click order, so a mission can tell which remain after an edit
      * @param rounds per gun
+     * @param shell  the shell type the loaders should stage, null for whatever is loaded
      */
-    record Mark(int id, Vec3 pos, int rounds) {
+    record Mark(int id, Vec3 pos, int rounds, @Nullable ResourceLocation shell) {
+        public Mark(int id, Vec3 pos, int rounds) {
+            this(id, pos, rounds, null);
+        }
+
         public CompoundTag write() {
             CompoundTag tag = new CompoundTag();
             tag.putInt("id", id);
@@ -226,6 +277,8 @@ public sealed interface SensorReading {
             tag.putDouble("y", pos.y);
             tag.putDouble("z", pos.z);
             tag.putInt("rounds", rounds);
+            if (shell != null)
+                tag.putString("shell", shell.toString());
             return tag;
         }
 
@@ -233,8 +286,10 @@ public sealed interface SensorReading {
             List<Mark> marks = new ArrayList<>();
             for (int i = 0; i < list.size(); i++) {
                 CompoundTag tag = list.getCompound(i);
+                ResourceLocation shell = tag.contains("shell") ? ResourceLocation.tryParse(tag.getString("shell")) : null;
                 marks.add(new Mark(tag.getInt("id"),
-                        new Vec3(tag.getDouble("x"), tag.getDouble("y"), tag.getDouble("z")), tag.getInt("rounds")));
+                        new Vec3(tag.getDouble("x"), tag.getDouble("y"), tag.getDouble("z")), tag.getInt("rounds"),
+                        shell));
             }
             return List.copyOf(marks);
         }
@@ -314,6 +369,7 @@ public sealed interface SensorReading {
             case NAV_CONSOLE -> NavConsole.fromNBT(tag);
             case FIRE_CONSOLE -> new FireConsole();
             case FIXED_GUN   -> FixedGun.fromNBT(tag);
+            case MUNITIONS   -> Munitions.fromNBT(tag);
         };
     }
 }

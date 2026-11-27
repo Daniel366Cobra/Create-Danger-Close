@@ -11,6 +11,8 @@ import dev.simulated_team.simulated.content.blocks.swivel_bearing.SwivelBearingB
 import dev.simulated_team.simulated.content.blocks.swivel_bearing.link_block.SwivelBearingPlateBlock;
 import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.DriveTrain;
 import io.github.daniel366cobra.createdangerclose.block.kinetic_pair.PairOutputBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.munitions_chute.MunitionsChuteBlockEntity;
+import io.github.daniel366cobra.createdangerclose.compat.goingballistic.GoingBallistics;
 import io.github.daniel366cobra.createdangerclose.config.CDCConfig;
 import io.github.daniel366cobra.createdangerclose.damage.EquipmentHealth;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
@@ -43,7 +45,9 @@ import rbasamoyai.createbigcannons.cannon_control.cannon_mount.CannonMountInterf
 import rbasamoyai.createbigcannons.cannon_control.contraption.PitchOrientedContraptionEntity;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.simibubi.create.content.kinetics.base.DirectionalKineticBlock.FACING;
 import static io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoAxis.PITCH;
@@ -63,6 +67,9 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
     // --- Drive ---
     // CBC: Create's 0.3°/tick per RPM, scaled by 0.125 in CannonMountBlockEntity.
     private static final float MOUNT_DEG_PER_TICK_PER_RPM = 0.0375f;
+    // Going Ballistic: its physics estimates for the current load, recomputed when the load changes.
+    @Nullable private GoingBallistics.Params ballistics;
+    private int ballisticsHash;
     // CBC's raw angle direction for positive rotation; pitch is also multiplied by elevationSign.
     private static final float PITCH_AXIS_SIGN = 1f;
     private static final float YAW_AXIS_SIGN = -1f;
@@ -101,6 +108,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         // The cannon's rotation center (level coordinates) and the shell's spawn distance along the barrel.
         public @Nullable Vec3 pivot;
         public double muzzleDistance;
+        // Effective muzzle speed, blocks/tick (Going Ballistic's interior ballistics; 0: charge power, as without it).
+        public float muzzleVelocity;
         // Unit vector in the cannon's own frame; null if unassembled.
         public @Nullable Vec3 barrel;
         // Autocannon rounds expire after this many ticks (0: no limit).
@@ -125,6 +134,16 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
 
     private final List<SlavedMount> slavedMounts = new ArrayList<>();
     @Nullable private SwivelBearingBlockEntity swivel;
+    // The shell type the computer's current aim calls for, pushed to the cannon side's chutes.
+    @Nullable private ResourceLocation requestedShell;
+    // How many more shells the mission may fire (-1: not mission-bound, stage on).
+    private int requestedRounds = -1;
+    // Which mission order this is, so a new mission re-arms the count.
+    private int requestedSerial;
+    // What those chutes can stage for this gun: shell type to strongest filled cartridge power.
+    private Map<ResourceLocation, Float> chuteSupply = Map.of();
+    // Any chute on the cannon side this poll, stocked or not.
+    private boolean chuteFed;
     // For the goggles (synced).
     private float shownSwivelAngle, shownSwivelTarget;
     // For the goggles' invalid-setup message (synced).
@@ -518,10 +537,21 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         boolean mixedAxes = false;
         governedAxis = false;
         int swivels = 0;
+        // The munitions chutes tapped off the cannon side, and the rounds they can stage for this gun.
+        Map<ResourceLocation, Float> chuteSupply = new HashMap<>();
+        boolean chuteFed = false;
+        long now = level != null ? level.getGameTime() : 0;
 
         for (DriveTrain.Link link : train) {
             KineticBlockEntity member = link.be();
             if (member == this) continue;
+            if (member instanceof MunitionsChuteBlockEntity chute) {
+                chuteFed = true;
+                chute.setController(worldPosition, now);
+                chute.setRequestedShell(requestedShell, requestedRounds, requestedSerial, now);
+                chute.availableShells().forEach((type, power) -> chuteSupply.merge(type, power, Float::max));
+                continue;
+            }
             // Past a speed controller it turns at the controller's speed, not ours: no axis to lay.
             if (link.governed()) {
                 if (member instanceof SwivelBearingBlockEntity.SwivelBearingCogwheelBlockEntity
@@ -566,6 +596,8 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
         }
 
         slavedMounts.clear();
+        this.chuteSupply = chuteSupply;
+        this.chuteFed = chuteFed;
         swivelSeen = swivel != null;
         swivelTilts = swivel != null && swivel.getBlockState().getValue(SwivelBearingBlock.FACING).getAxis() != Direction.Axis.Y;
         if (governedAxis) {
@@ -589,14 +621,37 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
             transmissionRatio = mountRatio;
     }
 
+    /** The shell the computer's current aim calls for; null for whatever the chutes stage first. */
+    public void setRequestedShell(@Nullable ResourceLocation shell, int rounds, int missionSerial) {
+        boolean changed = shell == null ? requestedShell != null : !shell.equals(requestedShell);
+        requestedShell = shell;
+        requestedRounds = rounds;
+        requestedSerial = missionSerial;
+        if (changed)
+            setChanged();
+    }
+
     private void readMountState(SlavedMount sm) {
         PitchOrientedContraptionEntity entity = sm.mount.getContraption();
         if (entity == null) {
             sm.currentAngle = 0;
             sm.autocannon = CannonReading.isAutocannonAt(sm.mount);
+            ballistics = null;
+            ballisticsHash = 0;
             return;
         }
         CannonReading.readCannon(sm, entity, level.registryAccess());
+        // CBC: Going Ballistic, if present: its estimates replace the CBC ballistics. The params are
+        // cached per load (its estimates scan the barrel and parse the shell) and re-applied to every
+        // fresh read, which carries CBC's values.
+        if (GoingBallistics.active()) {
+            int hash = GoingBallistics.loadHash(sm);
+            if (ballistics == null || hash != ballisticsHash) {
+                ballisticsHash = hash;
+                ballistics = GoingBallistics.compute(sm, entity);
+            }
+            ballistics.applyTo(sm);
+        }
     }
 
     // --- SensorReading.Provider ---
@@ -750,7 +805,7 @@ public class CannonServoOutputBlockEntity extends PairOutputBlockEntity
                     hull != null ? hull.getUniqueId() : null, swivel.getBlockState().getValue(SwivelBearingBlock.FACING), swivelSense,
                     swivel.getTargetAngleDegrees(), swivelActualAngle());
         }
-        return new ServoStatus(worldPosition, detectedAxis, isPowered, mounts, swivelSnapshot, getLimits());
+        return new ServoStatus(worldPosition, detectedAxis, isPowered, mounts, swivelSnapshot, getLimits(), chuteSupply, chuteFed);
     }
 
     private static final float SNAP_THRESHOLD_DEG = 0.2f;

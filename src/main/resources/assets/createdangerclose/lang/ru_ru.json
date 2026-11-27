@@ -581,5 +581,14 @@
   "createdangerclose.munitions_chute.state.no_charge": "В хранилище нет зарядов",
   "createdangerclose.munitions_chute.state.indexing": "Подача...",
   "createdangerclose.munitions_chute.state.ready": "Готов",
-  "createdangerclose.munitions_chute.state.output_blocked": "Выход занят"
+  "createdangerclose.munitions_chute.state.output_blocked": "Выход занят",
+  "createdangerclose.munitions_chute.state.not_provided": "Запрошенный выстрел подать нельзя",
+  "createdangerclose.munitions_chute.state.holding": "Задача обеспечена, ожидание",
+  "createdangerclose.munitions_chute.state.surplus": "Орудие уже снабжает другой жёлоб",
+  "createdangerclose.munitions_chute.requested": "Запрошено: %s",
+  "createdangerclose.munitions_chute.available": "Можно подать снаряды %s типов",
+  "createdangerclose.fire_mission_console.mission.no_ammunition": "невозможно подать снаряд этого типа",
+  "createdangerclose.fire_mission_console.mission.wrong_shell": "в казённике не тот снаряд",
+  "createdangerclose.map_table.supply": "Можно подать снаряды %s типов:",
+  "createdangerclose.network_interface.munitions": "Жёлоб боеприпасов: типов снарядов: %s"
 }

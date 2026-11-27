@@ -7,6 +7,7 @@ import io.github.daniel366cobra.createdangerclose.foundation.sensor.ServoStatus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.StringUtil;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -67,6 +68,13 @@ public class CannonServoInputBlockEntity extends PairInputBlockEntity implements
         CannonServoOutputBlockEntity output = getAdjacentOutput();
         if (output != null)
             output.setSwivelSense(sense);
+    }
+
+    @Override
+    public void offerShellRequest(@Nullable ResourceLocation shell, int rounds, int missionSerial) {
+        CannonServoOutputBlockEntity output = getAdjacentOutput();
+        if (output != null)
+            output.setRequestedShell(shell, rounds, missionSerial);
     }
 
     // --- Name ---
