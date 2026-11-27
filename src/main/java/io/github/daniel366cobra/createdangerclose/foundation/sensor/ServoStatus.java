@@ -16,7 +16,7 @@ import java.util.UUID;
  * @param swivel for {@link ServoAxis#SWIVEL}; else null
  * @param limits as set on the dial
  * @param supply what the munitions chutes on the cannon side can stage: shell type to the strongest
- *               filled cartridge power pairable with it; empty for a hand-loaded gun
+ *               filled cartridge's charge power pairable with it; empty for a hand-loaded gun
  * @param chuteFed whether any munitions chute rides the cannon side, stocked or not: such a gun is
  *                 already supplied, so no battle-network chute claims it
  */

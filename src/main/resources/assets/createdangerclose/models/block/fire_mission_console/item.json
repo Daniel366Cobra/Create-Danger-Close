@@ -66,9 +66,9 @@
 		},
 		{
 			"name": "fuze_delay_knob",
-			"from": [11.5, 16, 6.5],
-			"to": [13.5, 17, 8.5],
-			"rotation": {"angle": -45, "axis": "y", "origin": [12.5, 16, 7.5]},
+			"from": [11.5, 16, 5.5],
+			"to": [13.5, 17, 7.5],
+			"rotation": {"angle": -45, "axis": "y", "origin": [12.5, 16, 6.5]},
 			"faces": {
 				"north": {"uv": [13, 9, 15, 10], "texture": "#5"},
 				"east": {"uv": [15, 10, 16, 12], "rotation": 90, "texture": "#5"},
@@ -78,7 +78,20 @@
 			}
 		},
 		{
-			"name": "fuze_delay_gauge",
+			"name": "shell_type_knob",
+			"from": [11.5, 16, 9.5],
+			"to": [13.5, 17, 11.5],
+			"rotation": {"angle": -45, "axis": "y", "origin": [12.5, 16, 10.5]},
+			"faces": {
+				"north": {"uv": [13, 9, 15, 10], "texture": "#5"},
+				"east": {"uv": [15, 10, 16, 12], "rotation": 90, "texture": "#5"},
+				"south": {"uv": [13, 12, 15, 13], "texture": "#5"},
+				"west": {"uv": [12, 10, 13, 12], "rotation": 90, "texture": "#5"},
+				"up": {"uv": [13, 10, 15, 12], "texture": "#5"}
+			}
+		},
+		{
+			"name": "shell_data_gauge",
 			"from": [11, 16, 2],
 			"to": [14, 15.5, 4],
 			"rotation": {"angle": 0, "axis": "y", "origin": [12.5, 15.5, 3]},
@@ -202,11 +215,11 @@
 			"children": [2, 3]
 		},
 		{
-			"name": "fuze_delay_control",
+			"name": "shell_data_control",
 			"origin": [11, 11, 4.25],
 			"scope": 0,
 			"color": 0,
-			"children": [4, 5]
+			"children": [4, 5, 6]
 		},
 		{
 			"name": "trajectory_control",
@@ -219,9 +232,9 @@
 					"origin": [8.5, 11.75, 9.5],
 					"scope": 0,
 					"color": 0,
-					"children": [6, 7]
+					"children": [7, 8]
 				},
-				8
+				9
 			]
 		},
 		{
@@ -229,7 +242,7 @@
 			"origin": [6, 11, 4.25],
 			"scope": 0,
 			"color": 0,
-			"children": [9, 10]
+			"children": [10, 11]
 		}
 	]
 }

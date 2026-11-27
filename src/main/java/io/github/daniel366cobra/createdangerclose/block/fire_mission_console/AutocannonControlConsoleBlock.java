@@ -27,6 +27,11 @@ public class AutocannonControlConsoleBlock extends FireMissionConsoleBlock {
         super(properties);
     }
 
+    @Override
+    protected boolean hasShellKnob() {
+        return false;
+    }
+
     /** Held, not clicked: CONSUME on both sides so the hand does not swing. */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,

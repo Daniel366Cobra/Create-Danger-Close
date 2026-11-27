@@ -1,8 +1,8 @@
 {
 	"format_version": "1.9.0",
 	"credit": "Made with Blockbench",
-	"render_type": "minecraft:cutout",
 	"ambientocclusion": false,
+	"render_type": "minecraft:cutout",
 	"textures": {
 		"0": "createdangerclose:block/fire_mission_console/fire_mission_console_side",
 		"1": "createdangerclose:block/fire_mission_console/fire_mission_console_top",
@@ -66,7 +66,7 @@
 			}
 		},
 		{
-			"name": "fuze_delay_gauge",
+			"name": "shell_data_gauge",
 			"from": [11, 16, 2],
 			"to": [14, 15.5, 4],
 			"rotation": {"angle": 0, "axis": "y", "origin": [12.5, 15.5, 3]},
@@ -164,7 +164,7 @@
 			"children": [2, 3]
 		},
 		{
-			"name": "fuze_delay_control",
+			"name": "shell_data_control",
 			"origin": [11, 11, 4.25],
 			"scope": 0,
 			"color": 0,

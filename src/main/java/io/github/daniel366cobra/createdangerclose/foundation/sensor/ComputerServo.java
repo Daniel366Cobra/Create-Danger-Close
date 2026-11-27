@@ -21,6 +21,9 @@ public interface ComputerServo {
     /** Its guns show another name, set closer to them (null: its own, or no guns). */
     default void receiveShownName(@Nullable String shownAs) {}
 
-    /** The shell type the computer's current aim calls for from this servo's gun; null for whatever is loaded. */
-    default void offerShellRequest(@Nullable ResourceLocation shell, int rounds, int missionSerial) {}
+    /**
+     * The shell type the computer's current aim calls for from this servo's gun; null for whatever is
+     * loaded. {@code mission}: a fire mission is under way (a budget of 0 then means it is served).
+     */
+    default void offerShellRequest(@Nullable ResourceLocation shell, int rounds, int missionSerial, boolean mission) {}
 }

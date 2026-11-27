@@ -92,9 +92,9 @@ public class MapTableBlockEntity extends SmartBlockEntity
     // The controller's counts. Set or cleared at targetTick; wherever blocks join or split, the newest wins.
     @Nullable protected Vec3 target;
     protected long targetTick;
-    // TODO: the single target (target, targetRounds) could become one mark in a general fire mission, dropping
-    // getShownMarks and getMissionMarks; old saves' "Target" would then need migrating.
-    // Rounds per gun on the single target; more than one makes a one-mark mission.
+    // TODO: the single target (target, targetRounds) could be stored as one mark, dropping getShownMarks;
+    // old saves' "Target" would then need migrating.
+    // Rounds per gun on the single target. Fired as a one-mark mission, so loading waits for the fire button.
     protected int targetRounds = 1;
     // The shell the loaders should stage for the single target; null for whatever is loaded.
     @Nullable protected ResourceLocation targetShell;
@@ -369,15 +369,13 @@ public class MapTableBlockEntity extends SmartBlockEntity
         }
     }
 
-    /** The single target as a mark, or the marks: what the screen labels and scrolling work on. */
+    /**
+     * The single target as a mark, or the marks: what the screen labels and scrolling work on, and what
+     * the fire button runs as a mission.
+     */
     public List<SensorReading.Mark> getShownMarks() {
         return marks.isEmpty() && target != null
                 ? List.of(new SensorReading.Mark(0, target, targetRounds, targetShell)) : marks;
-    }
-
-    /** What the fire button runs as a mission: the marks, or a single target of several rounds. One round is a plain salvo. */
-    public List<SensorReading.Mark> getMissionMarks() {
-        return marks.isEmpty() && targetRounds <= 1 ? List.of() : getShownMarks();
     }
 
     /** Rounds per gun, within 1 to {@link #MAX_MARK_ROUNDS}. */
@@ -440,7 +438,7 @@ public class MapTableBlockEntity extends SmartBlockEntity
 
     /** The type after {@code current} in {@code shells}; past the last comes null ("whatever is loaded"). */
     @Nullable
-    private static ResourceLocation nextShell(List<ResourceLocation> shells, @Nullable ResourceLocation current,
+    public static ResourceLocation nextShell(List<ResourceLocation> shells, @Nullable ResourceLocation current,
                                               int direction) {
         int size = shells.size();
         int step = direction > 0 ? 1 : -1;

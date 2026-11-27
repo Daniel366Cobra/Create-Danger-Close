@@ -71,10 +71,10 @@ public class CannonServoInputBlockEntity extends PairInputBlockEntity implements
     }
 
     @Override
-    public void offerShellRequest(@Nullable ResourceLocation shell, int rounds, int missionSerial) {
+    public void offerShellRequest(@Nullable ResourceLocation shell, int rounds, int missionSerial, boolean mission) {
         CannonServoOutputBlockEntity output = getAdjacentOutput();
         if (output != null)
-            output.setRequestedShell(shell, rounds, missionSerial);
+            output.setRequestedShell(shell, rounds, missionSerial, mission);
     }
 
     // --- Name ---

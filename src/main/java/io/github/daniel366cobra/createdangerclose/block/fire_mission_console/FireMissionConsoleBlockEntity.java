@@ -4,6 +4,7 @@ import com.simibubi.create.api.equipment.goggles.IHaveGoggleInformation;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import io.github.daniel366cobra.createdangerclose.block.ballistic_computer.BallisticComputerBlockEntity;
+import io.github.daniel366cobra.createdangerclose.block.map_table.MapTableBlockEntity;
 import io.github.daniel366cobra.createdangerclose.block.network_interface.NetworkInterfaceBlockEntity;
 import io.github.daniel366cobra.createdangerclose.foundation.CDCLang;
 import net.createmod.catnip.animation.LerpedFloat;
@@ -13,6 +14,8 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
@@ -53,6 +56,15 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     // The most recently set console wins.
     private int fuzeOffsetTicks;
     private long fuzeOffsetSetTick = Long.MIN_VALUE;
+    // The shell knob's order for fire outside a table mission; null for whatever is loaded. The most
+    // recently set console wins. The knob's notch is only how far it has turned, for the dial.
+    @Nullable private ResourceLocation shellOrder;
+    private long shellOrderSetTick = Long.MIN_VALUE;
+    private int shellKnobNotch;
+    // Where the knob last showed "whatever is loaded", so a reset turns the short way back there.
+    private int anyShellNotch;
+    /** Notches in a full turn of the shell knob (30 degrees each). */
+    public static final int SHELL_KNOB_NOTCHES = 12;
     // Server: the computer's count of mission holds this console has sounded.
     private int missionAlertsHeard;
 
@@ -65,6 +77,7 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
 
     private final LerpedFloat lever = LerpedFloat.linear().startWithValue(0);
     private final LerpedFloat knob = LerpedFloat.linear().startWithValue(0);
+    private final LerpedFloat shellKnob = LerpedFloat.linear().startWithValue(0);
     private final LerpedFloat button = LerpedFloat.linear().startWithValue(0);
     // Client.
     private int buttonHeldTicks;
@@ -88,6 +101,8 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         computerPos = found;
         if (computer != null)
             computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick, ordersAutocannons());
+        if (computer != null && hasShellKnob())
+            computer.offerShellOrder(shellOrder, shellOrderSetTick);
         // The guns have trained on a mark that needs confirming. A press hears its own bell, in readComputer.
         if (computer != null && !ordersAutocannons() && computer.getMissionHoldAlerts() > missionAlertsHeard)
             level.playSound(null, worldPosition, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 1f, 0.5f);
@@ -194,6 +209,78 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
             computer.offerFuzeOffset(fuzeOffsetTicks, fuzeOffsetSetTick, ordersAutocannons());
     }
 
+    // --- Shell order ---
+
+    /** Big cannons only: autocannon rounds are not staged by chutes. */
+    public boolean hasShellKnob() {
+        return !ordersAutocannons();
+    }
+
+    @Nullable
+    public ResourceLocation getShellOrder() {
+        return shellOrder;
+    }
+
+    /**
+     * Server: one notch through the shell types the network's chutes can stage; past the last comes
+     * "whatever is loaded". Nothing to choose from: the knob does not turn.
+     */
+    public void cycleShellOrder(int direction) {
+        BallisticComputerBlockEntity computer = getComputer();
+        List<ResourceLocation> shells = computer != null ? computer.getPlot().shells() : List.of();
+        if (shells.isEmpty() || direction == 0)
+            return;
+        shellKnobNotch += direction > 0 ? 1 : -1;
+        ResourceLocation next = MapTableBlockEntity.nextShell(shells, shellOrder, direction);
+        if (next == null)
+            anyShellNotch = shellKnobNotch;
+        setShellOrder(next);
+    }
+
+    /** Server: back to whatever is loaded, the short way round to where the knob showed it. */
+    void resetShellOrder() {
+        int back = Math.floorMod(anyShellNotch - shellKnobNotch, SHELL_KNOB_NOTCHES);
+        if (back > SHELL_KNOB_NOTCHES / 2)
+            back -= SHELL_KNOB_NOTCHES;
+        shellKnobNotch += back;
+        anyShellNotch = shellKnobNotch;
+        setShellOrder(null);
+    }
+
+    private void setShellOrder(@Nullable ResourceLocation shell) {
+        if (level == null)
+            return;
+        shellOrder = shell;
+        shellOrderSetTick = level.getGameTime();
+        setChanged();
+        sendData();
+        BallisticComputerBlockEntity computer = getComputer();
+        if (computer != null)
+            computer.offerShellOrder(shellOrder, shellOrderSetTick);
+    }
+
+    /** The order on the gauge: a short name ("HE"), the first letters of an unlisted shell's id. */
+    public String shellText() {
+        if (shellOrder == null)
+            return Component.translatable("createdangerclose.fire_mission_console.readout.any_shell").getString();
+        String path = shellOrder.getPath();
+        String fallback = path.substring(0, Math.min(4, path.length())).toUpperCase(Locale.ROOT);
+        return Component.translatableWithFallback("createdangerclose.shell_abbrev." + shellOrder.getNamespace()
+                + "." + path, fallback).getString();
+    }
+
+    protected Component shellTooltipText() {
+        if (shellOrder == null)
+            return Component.translatable("createdangerclose.fire_mission_console.any_shell");
+        return BuiltInRegistries.BLOCK.containsKey(shellOrder)
+                ? BuiltInRegistries.BLOCK.get(shellOrder).getName() : Component.literal(shellOrder.toString());
+    }
+
+    /** Notches turned, either way (client). */
+    public float getShellKnobTurn(float partialTicks) {
+        return shellKnob.getValue(partialTicks);
+    }
+
     /** Ticks either way. */
     public int maxFuzeOffsetTicks() {
         return MAX_FUZE_OFFSET_TICKS;
@@ -251,6 +338,8 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
         lever.tickChaser();
         knob.chase(fuzeOffsetTicks, KNOB_EASING, LerpedFloat.Chaser.EXP);
         knob.tickChaser();
+        shellKnob.chase(shellKnobNotch, KNOB_EASING, LerpedFloat.Chaser.EXP);
+        shellKnob.tickChaser();
         if (buttonHeldTicks > 0) {
             buttonHeldTicks--;
             button.chase(1, BUTTON_PULL_EASING, LerpedFloat.Chaser.EXP);
@@ -326,8 +415,12 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(compound, registries, clientPacket);
         fuzeOffsetTicks = Mth.clamp(compound.getInt("FuzeOffset"), -maxFuzeOffsetTicks(), maxFuzeOffsetTicks());
+        shellOrder = compound.contains("ShellOrder") ? ResourceLocation.tryParse(compound.getString("ShellOrder")) : null;
+        shellKnobNotch = compound.getInt("ShellKnob");
+        anyShellNotch = compound.getInt("ShellKnobAny");
         if (!clientPacket) {
             fuzeOffsetSetTick = compound.contains("FuzeOffsetSet") ? compound.getLong("FuzeOffsetSet") : Long.MIN_VALUE;
+            shellOrderSetTick = compound.contains("ShellOrderSet") ? compound.getLong("ShellOrderSet") : Long.MIN_VALUE;
             return;
         }
         linked = compound.getBoolean("Linked");
@@ -341,8 +434,13 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
     protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         super.write(compound, registries, clientPacket);
         compound.putInt("FuzeOffset", fuzeOffsetTicks);
+        if (shellOrder != null)
+            compound.putString("ShellOrder", shellOrder.toString());
+        compound.putInt("ShellKnob", shellKnobNotch);
+        compound.putInt("ShellKnobAny", anyShellNotch);
         if (!clientPacket) {
             compound.putLong("FuzeOffsetSet", fuzeOffsetSetTick);
+            compound.putLong("ShellOrderSet", shellOrderSetTick);
             return;
         }
         // Only clients need these: the link and readouts lapse on their own.
@@ -366,6 +464,12 @@ public class FireMissionConsoleBlockEntity extends SmartBlockEntity implements I
                         fuzeTooltipText()))
                 .style(ChatFormatting.GRAY)
                 .forGoggles(tooltip);
+        if (hasShellKnob())
+            CDCLang.builder()
+                    .add(Component.translatable("createdangerclose.fire_mission_console.shell_order",
+                            shellTooltipText()))
+                    .style(ChatFormatting.GRAY)
+                    .forGoggles(tooltip);
 
         if (!linked) {
             line(tooltip, "not_connected", ChatFormatting.RED);

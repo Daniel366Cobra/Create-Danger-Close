@@ -28,7 +28,10 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-/** Deck controls left to right, seen from the front: fuze knob, trajectory lever, fire button. */
+/**
+ * Deck controls left to right, seen from the front: the shell knob behind the fuze knob, the
+ * trajectory lever, the fire button.
+ */
 public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE<FireMissionConsoleBlockEntity> {
 
     public static final MapCodec<FireMissionConsoleBlock> CODEC = simpleCodec(FireMissionConsoleBlock::new);
@@ -38,24 +41,35 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
             Block.box(0, 0, 0, 16, 16, 16),
             Block.box(0, 16, 12, 16, 20, 16)), Direction.NORTH);
 
-    /** Left to right from in front. */
-    public enum Control { FUZE_KNOB, TRAJECTORY_LEVER, FIRE_BUTTON }
+    /** Left to right from in front; the shell knob is behind the fuze knob. */
+    public enum Control { FUZE_KNOB, SHELL_KNOB, TRAJECTORY_LEVER, FIRE_BUTTON }
+
+    // Between the left knobs (fuze at 6.5, shell at 10.5), model pixels back from the front.
+    private static final double SHELL_KNOB_FROM_PX = 8.5;
 
     public FireMissionConsoleBlock(Properties properties) {
         super(properties);
     }
 
-    /** Under a point on the deck's top: thirds across from in front. Null elsewhere. */
+    /** Under a point on the deck's top: thirds across from in front, the left one split front and back. Null elsewhere. */
     @Nullable
     public static Control controlAt(BlockState state, BlockPos pos, BlockHitResult hit) {
-        if (hit.getDirection() != Direction.UP || !(state.getBlock() instanceof FireMissionConsoleBlock))
+        if (hit.getDirection() != Direction.UP || !(state.getBlock() instanceof FireMissionConsoleBlock console))
             return null;
-        Direction playersRight = state.getValue(FACING).getCounterClockWise();
+        Direction front = state.getValue(FACING);
+        Direction playersRight = front.getCounterClockWise();
         Vec3 fromCenter = hit.getLocation().subtract(Vec3.atCenterOf(pos));
         double across = fromCenter.x * playersRight.getStepX() + fromCenter.z * playersRight.getStepZ() + 0.5;
-        if (across < 1 / 3.0)
-            return Control.FUZE_KNOB;
+        if (across < 1 / 3.0) {
+            double back = 0.5 - (fromCenter.x * front.getStepX() + fromCenter.z * front.getStepZ());
+            return console.hasShellKnob() && back * 16 >= SHELL_KNOB_FROM_PX ? Control.SHELL_KNOB : Control.FUZE_KNOB;
+        }
         return across < 2 / 3.0 ? Control.TRAJECTORY_LEVER : Control.FIRE_BUTTON;
+    }
+
+    /** The Autocannon Control Console has none. */
+    protected boolean hasShellKnob() {
+        return true;
     }
 
     @Override
@@ -72,6 +86,11 @@ public class FireMissionConsoleBlock extends HorizontalFacedBlock implements IBE
 
         if (control == Control.FUZE_KNOB) {
             console.setFuzeOffset(0);
+            level.playSound(null, pos, SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.BLOCKS, 0.3f, 1.2f);
+            return InteractionResult.SUCCESS;
+        }
+        if (control == Control.SHELL_KNOB) {
+            console.resetShellOrder();
             level.playSound(null, pos, SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.BLOCKS, 0.3f, 1.2f);
             return InteractionResult.SUCCESS;
         }

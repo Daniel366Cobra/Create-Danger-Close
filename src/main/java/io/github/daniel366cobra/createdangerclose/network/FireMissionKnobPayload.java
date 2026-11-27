@@ -10,8 +10,8 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.util.Mth;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-/** Client to server: the fuze knob turned by this many ticks. */
-public record FireMissionKnobPayload(BlockPos console, int deltaTicks) implements CustomPacketPayload {
+/** Client to server: the fuze knob turned by this many ticks, or the shell knob by one notch (the sign). */
+public record FireMissionKnobPayload(BlockPos console, int deltaTicks, boolean shellKnob) implements CustomPacketPayload {
 
     // Largest turn one scroll may make, ticks (a coarse notch).
     private static final int MAX_STEP_TICKS = 5;
@@ -22,6 +22,7 @@ public record FireMissionKnobPayload(BlockPos console, int deltaTicks) implement
     public static final StreamCodec<ByteBuf, FireMissionKnobPayload> STREAM_CODEC = StreamCodec.composite(
             BlockPos.STREAM_CODEC, FireMissionKnobPayload::console,
             ByteBufCodecs.VAR_INT, FireMissionKnobPayload::deltaTicks,
+            ByteBufCodecs.BOOL, FireMissionKnobPayload::shellKnob,
             FireMissionKnobPayload::new);
 
     @Override
@@ -34,7 +35,12 @@ public record FireMissionKnobPayload(BlockPos console, int deltaTicks) implement
             // Within reach, as for clicking it (Sable measures this across ships).
             if (!context.player().canInteractWithBlock(payload.console(), 1.0))
                 return;
-            if (context.player().level().getBlockEntity(payload.console()) instanceof FireMissionConsoleBlockEntity console)
+            if (!(context.player().level().getBlockEntity(payload.console()) instanceof FireMissionConsoleBlockEntity console))
+                return;
+            if (payload.shellKnob()) {
+                if (console.hasShellKnob())
+                    console.cycleShellOrder(Integer.signum(payload.deltaTicks()));
+            } else
                 console.adjustFuzeOffset(Mth.clamp(payload.deltaTicks(), -MAX_STEP_TICKS, MAX_STEP_TICKS));
         });
     }

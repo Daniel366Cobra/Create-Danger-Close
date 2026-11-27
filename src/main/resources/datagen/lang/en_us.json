@@ -41,8 +41,10 @@
         "ready": "Ready",
         "output_blocked": "Output blocked",
         "not_provided": "Requested round cannot be provided",
-        "holding": "Mission served, holding",
-        "surplus": "Cannon already supplied by another chute"
+        "holding": "Mission rounds staged, holding",
+        "surplus": "Cannon already supplied by another chute",
+        "no_mission": "No mission, holding",
+        "unwanted": "Unwanted round, holding"
       }
     },
 
@@ -110,10 +112,28 @@
       "danger_close": "DANGER CLOSE: Press again within %ss to confirm",
       "safe_zone": "SAFE ZONE: Press again within %ss to confirm",
       "fuze_offset": "Fuze correction: %s",
+      "shell_order": "Shell order: %s",
+      "any_shell": "Whatever is loaded",
       "readout": {
         "direct": "DIR",
         "plunging": "PLG",
-        "ticks": "t"
+        "ticks": "t",
+        "any_shell": "ANY"
+      }
+    },
+    "shell_abbrev": {
+      "createbigcannons": {
+        "solid_shot": "SHOT",
+        "ap_shot": "AP",
+        "ap_shell": "APHE",
+        "he_shell": "HE",
+        "shrapnel_shell": "SHRP",
+        "bag_of_grapeshot": "GRPE",
+        "fluid_shell": "FLD",
+        "smoke_shell": "SMK",
+        "mortar_stone": "STON",
+        "drop_mortar_shell": "MORT",
+        "traffic_cone": "CONE"
       }
     },
     "navigation_console": {
@@ -172,7 +192,8 @@
         "too_close": "Out of range: too close",
         "no_altitude": "Own altitude unknown: needs an Altitude Sensor",
         "redundant_drives": "Too many drives aim this gun",
-        "round_expires": "Out of reach: the round expires before impact"
+        "round_expires": "Out of reach: the round expires before impact",
+        "awaiting_order": "Awaiting order"
       }
     },
       "cannon_servo": {
@@ -380,12 +401,14 @@
         "summary": "The gunnery officer's station: shows the _fire mission_ and gives the _orders_.",
         "condition1": "When a powered Battle Network Interface faces it:",
         "behaviour1": "Shows the guns' _firing solutions_ and trajectory parameters through Goggles.",
-        "condition2": "When the left knob is scrolled over:",
+        "condition2": "When the near left knob is scrolled over:",
         "behaviour2": "Sets a _timed fuze correction_ from -40 to +40 ticks. On _delayed impact_ and _delayed inertia_ fuzes sets the delay after impact. Scroll to turn with a 5-tick step, _Shift_-scroll for 1-tick. _Right-click_ to zero.",
-        "condition3": "When the middle lever is right-clicked:",
-        "behaviour3": "Switches between _direct_ and _plunging_ fire.",
-        "condition4": "When the right button is right-clicked:",
-        "behaviour4": "_Fires_ every gun that has a solution and is _on target_. The others hold fire. With _marks_ on a Map Table, _starts_ a mission on them."
+        "condition3": "When the far left knob is scrolled over:",
+        "behaviour3": "Orders the _shell type_ the loaders stage outside a Map Table mission, as for a rangefinder. A round already loaded fires first. _Right-click_ for _whatever is loaded_.",
+        "condition4": "When the middle lever is right-clicked:",
+        "behaviour4": "Switches between _direct_ and _plunging_ fire.",
+        "condition5": "When the right button is right-clicked:",
+        "behaviour5": "_Fires_ every gun that has a solution and is _on target_. The others hold fire. With a _target_ or _marks_ on a Map Table, _starts_ a mission on them."
       },
       "autocannon_control_console.tooltip": {
         "summary": "The anti-aircraft gunner's station: gives the _autocannons_ their orders.",

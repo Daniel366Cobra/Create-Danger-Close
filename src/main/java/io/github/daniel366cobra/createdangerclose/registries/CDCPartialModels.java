@@ -35,6 +35,7 @@ public class CDCPartialModels {
 
     // Fire Mission Console.
     public static final PartialModel CONSOLE_FUZE_KNOB = block("fire_mission_console/fuze_delay_knob");
+    public static final PartialModel CONSOLE_SHELL_KNOB = block("fire_mission_console/shell_type_knob");
     public static final PartialModel CONSOLE_TRAJECTORY_LEVER = block("fire_mission_console/trajectory_switch_lever");
     public static final PartialModel CONSOLE_FIRE_BUTTON = block("fire_mission_console/fire_button");
     public static final PartialModel AA_CONSOLE_FUZE_KNOB = block("autocannon_control_console/fuze_delay_knob");

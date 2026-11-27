@@ -56,7 +56,9 @@ public final class BallisticSolver {
             NO_ALTITUDE,
             // Two drives about the same axis, or more than two.
             REDUNDANT_DRIVES,
-            ROUND_EXPIRES
+            ROUND_EXPIRES,
+            // Empty, laid on the round its chutes will stage: a planned mission waits for the fire button.
+            AWAITING_ORDER
         }
 
         public static Result invalid(Reason reason) {

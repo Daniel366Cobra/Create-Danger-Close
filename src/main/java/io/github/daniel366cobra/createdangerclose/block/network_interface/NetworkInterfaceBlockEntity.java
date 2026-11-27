@@ -262,7 +262,7 @@ public class NetworkInterfaceBlockEntity extends KineticBlockEntity
         MapTableBlockEntity.Sheet sheet = controller.getSheet();
         double sigma = sheet != null ? sheet.blocksPerPixel() / Math.sqrt(12) : 0;
         return new SensorReading.MapTarget(controller.getAimPoint(), controller.getTargetTick(), sigma,
-                controller.getMissionMarks(), controller.getTargetShell());
+                controller.getShownMarks(), controller.getTargetShell(), controller.getMarks().isEmpty());
     }
 
     private SensorReading buildGimbalReading(GimbalSensorBlockEntity gimbal) {

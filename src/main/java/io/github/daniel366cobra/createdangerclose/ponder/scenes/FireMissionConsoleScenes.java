@@ -60,7 +60,7 @@ public final class FireMissionConsoleScenes {
         ServoDrive pitchDrive = ServoDrive.pitch(util.select().fromTo(4, 1, 1, 4, 1, 2), null, mountSelection);
 
         // The console faces north: left to right (east to west) fuze knob, trajectory lever, fire button (model pixels).
-        Vec3 fuzeKnob = onConsole(console, 12.5, 17, 7.5);
+        Vec3 fuzeKnob = onConsole(console, 12.5, 17, 6.5);
         Vec3 trajectorySwitch = onConsole(console, 8.5, 18, 7.5);
         Vec3 fireButton = onConsole(console, 3.5, 17, 7.5);
 

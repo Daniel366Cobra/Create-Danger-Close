@@ -38,6 +38,7 @@ import rbasamoyai.createbigcannons.index.CBCItems;
 import rbasamoyai.createbigcannons.munitions.big_cannon.BigCannonMunitionBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.ProjectileBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.config.BigCannonProjectilePropertiesComponent;
+import rbasamoyai.createbigcannons.munitions.big_cannon.propellant.BigCartridgeBlock;
 import rbasamoyai.createbigcannons.munitions.big_cannon.propellant.BigCartridgeBlockItem;
 
 import java.util.ArrayList;
@@ -69,7 +70,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     private static final long REQUEST_TIMEOUT_TICKS = 100;
 
     // Saved by ordinal: add new states at the end.
-    public enum State { NOT_ROTATING, NO_STORAGE, NO_SHELL, NO_CHARGE, INDEXING, READY, OUTPUT_BLOCKED, NOT_PROVIDED, HOLDING, SURPLUS }
+    public enum State { NOT_ROTATING, NO_STORAGE, NO_SHELL, NO_CHARGE, INDEXING, READY, OUTPUT_BLOCKED, NOT_PROVIDED, HOLDING, SURPLUS, NO_MISSION, UNWANTED }
 
     private final ItemStackHandler slots = new ItemStackHandler(2) {
         @Override
@@ -93,7 +94,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     private boolean beltBelow;
     private int indexTicks;
     private int rescanCooldown;
-    // What the last scan found: shell type to the strongest filled cartridge power pairable with it.
+    // What the last scan found: shell type to the strongest filled cartridge's charge power pairable with it.
     private Map<ResourceLocation, Float> available = Map.of();
     // The shell the fire control computer asked for; stale requests are ignored.
     @Nullable private ResourceLocation requestedShell;
@@ -103,6 +104,8 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
     private int requestedRounds = -1;
     // The mission order this request belongs to: a new one re-arms the staged count.
     private int requestSerial = -1;
+    // A fire mission is under way: a hold then means it is served, else there is no mission.
+    private boolean requestMission;
     // Shells staged (and not returned) for the current order and type, held against the allowance.
     private int stagedForRequest;
     // The servo output whose cannon side train this chute rides; stale entries are dropped.
@@ -139,13 +142,15 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
 
     // --- Supply (what the fire control computer reads) ---
 
-    /** What this chute can stage: shell type to the strongest filled cartridge power pairable with it. */
+    /** What this chute can stage: shell type to the strongest filled cartridge's charge power pairable with it. */
     public Map<ResourceLocation, Float> availableShells() {
         return available;
     }
 
     /** The shell the current fire mission calls for; null for whatever comes first. */
-    public void setRequestedShell(@Nullable ResourceLocation shell, int rounds, int missionSerial, long gameTime) {
+    public void setRequestedShell(@Nullable ResourceLocation shell, int rounds, int missionSerial, boolean mission,
+                                  long gameTime) {
+        requestMission = mission;
         boolean newOrder = missionSerial != requestSerial;
         boolean changed = shell == null ? requestedShell != null : !shell.equals(requestedShell);
         if (newOrder || changed)
@@ -271,7 +276,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         if (!isEmpty() && !stagedWanted()) {
             // Storage refused it: keep the unwanted round off the loader.
             indexTicks = 0;
-            next = surplus() ? State.SURPLUS : State.HOLDING;
+            next = surplus() ? State.SURPLUS : State.UNWANTED;
         } else if (!isEmpty()) {
             indexTicks = 0;
             // The cartridge waiting on the shell to be taken is not blocked.
@@ -291,6 +296,11 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
             beltBelow = belt;
             sendData();
         }
+    }
+
+    /** Held by the order: the mission's rounds of this type are staged, or no mission (none, or one only planned) allows any. */
+    private State holdState() {
+        return requestMission ? State.HOLDING : State.NO_MISSION;
     }
 
     private boolean isEmpty() {
@@ -327,7 +337,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         // The mission has all it may fire: hold rather than keep feeding the loader.
         if (live && requestedRounds >= 0 && stagedForRequest >= requestedRounds) {
             indexTicks = 0;
-            return State.HOLDING;
+            return holdState();
         }
         ResourceLocation requested = live ? requestedShell : null;
         if (requested != null)
@@ -351,7 +361,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         }
         // A charge that can fire it (a creative crate's stands in, as in findCartridge).
         ResourceLocation shellType = BuiltInRegistries.ITEM.getKey(shell.peek().getItem());
-        RoundSource cartridge = findCartridge(storage, (int) Math.ceil(minChargePower(shellType)));
+        RoundSource cartridge = findCartridge(storage, minChargePower(shellType));
         if (cartridge == null) {
             indexTicks = 0;
             return State.NO_CHARGE;
@@ -367,7 +377,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
             return State.NOT_PROVIDED;
         }
         float minCharge = minChargePower(requested);
-        RoundSource cartridge = findCartridge(storage(), (int) Math.ceil(minCharge));
+        RoundSource cartridge = findCartridge(storage(), minCharge);
         if (cartridge == null) {
             indexTicks = 0;
             return State.NOT_PROVIDED;
@@ -413,17 +423,17 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         return null;
     }
 
-    /** The strongest filled cartridge with at least {@code minPower}; null without one. */
+    /** The strongest filled cartridge with at least {@code minPower} charge power; null without one. */
     @Nullable
-    private RoundSource findCartridge(List<IItemHandler> storage, int minPower) {
+    private RoundSource findCartridge(List<IItemHandler> storage, float minPower) {
         RoundSource best = null;
-        int bestPower = -1;
+        float bestPower = -1;
         for (IItemHandler handler : storage) {
             for (int slot = 0; slot < handler.getSlots(); slot++) {
                 ItemStack stack = handler.getStackInSlot(slot);
                 if (!isFilledCartridge(stack))
                     continue;
-                int power = BigCartridgeBlockItem.getPower(stack);
+                float power = chargePower(stack);
                 if (power < minPower || power <= bestPower)
                     continue;
                 if (!handler.extractItem(slot, 1, true).isEmpty()) {
@@ -432,9 +442,23 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
                 }
             }
         }
-        if (best == null && creativeCrate() && minPower <= maxCartridgePower())
+        if (best == null && creativeCrate() && minPower <= maxChargePower())
             return new RoundSource(null, -1, BigCartridgeBlockItem.getWithPower(maxCartridgePower()));
         return best;
+    }
+
+    /**
+     * A cartridge's charge power as CBC fires it: power levels times the propellant's datapack
+     * strength, less for a damp one. The unit of a shell's minimum charge and of muzzle speed.
+     */
+    public static float chargePower(ItemStack stack) {
+        return stack.getItem() instanceof BigCartridgeBlockItem item && item.getBlock() instanceof BigCartridgeBlock block
+                ? block.getChargePower(stack) : 0;
+    }
+
+    /** A full cartridge's charge power, as a creative crate stages it. */
+    public static float maxChargePower() {
+        return chargePower(BigCartridgeBlockItem.getWithPower(maxCartridgePower()));
     }
 
     /** From storage, else synthesized by a creative crate on a storage face. */
@@ -479,7 +503,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
                     ResourceLocation type = BuiltInRegistries.ITEM.getKey(stack.getItem());
                     shells.putIfAbsent(type, minChargePower(type));
                 } else if (isFilledCartridge(stack)) {
-                    maxPower = Math.max(maxPower, BigCartridgeBlockItem.getPower(stack));
+                    maxPower = Math.max(maxPower, chargePower(stack));
                 }
             }
         }
@@ -492,7 +516,7 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
         // TEMPORARY diagnostic: remove with DEBUG_SCAN after verification.
         if (DEBUG_SCAN && available.size() != debugLastScanSize) {
             debugLastScanSize = available.size();
-            CreateDangerClose.LOGGER.info("[CDC chute debug] chute at {} scan: {} shell types (max cartridge power {})",
+            CreateDangerClose.LOGGER.info("[CDC chute debug] chute at {} scan: {} shell types (max charge power {})",
                     worldPosition, available.size(), maxPower);
         }
     }
@@ -629,8 +653,8 @@ public class MunitionsChuteBlockEntity extends KineticBlockEntity implements Sen
             case NOT_ROTATING -> ChatFormatting.DARK_GRAY;
             case NO_SHELL, NO_CHARGE, NOT_PROVIDED -> ChatFormatting.GOLD;
             case NO_STORAGE, OUTPUT_BLOCKED -> ChatFormatting.RED;
-            case HOLDING -> ChatFormatting.BLUE;
-            case SURPLUS -> ChatFormatting.GOLD;
+            case HOLDING, NO_MISSION -> ChatFormatting.BLUE;
+            case SURPLUS, UNWANTED -> ChatFormatting.GOLD;
         };
         line(tooltip, Component.translatable("createdangerclose.munitions_chute.state." + state.name().toLowerCase()), style);
 

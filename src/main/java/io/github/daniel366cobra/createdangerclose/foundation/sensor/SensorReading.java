@@ -185,11 +185,12 @@ public sealed interface SensorReading {
      * @param sigma          placement precision, blocks (half a map pixel)
      * @param marks          a multi-target mission, in click order; worldPos is then the first
      * @param targetShell    the shell type for the single target, null for whatever is loaded
+     * @param single         marks is the single target as a one-mark mission, not marks set on the table
      */
     record MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma, List<Mark> marks,
-                     @Nullable ResourceLocation targetShell) implements SensorReading {
+                     @Nullable ResourceLocation targetShell, boolean single) implements SensorReading {
         public MapTarget(@Nullable Vec3 worldPos, long designatedTick, double sigma, List<Mark> marks) {
-            this(worldPos, designatedTick, sigma, marks, null);
+            this(worldPos, designatedTick, sigma, marks, null, false);
         }
 
         @Override public Kind kind() { return Kind.MAP_TARGET; }
@@ -212,6 +213,8 @@ public sealed interface SensorReading {
             }
             if (targetShell != null)
                 tag.putString("shell", targetShell.toString());
+            if (single)
+                tag.putBoolean("single", true);
             return tag;
         }
 
@@ -221,12 +224,12 @@ public sealed interface SensorReading {
                     : null;
             ResourceLocation shell = tag.contains("shell") ? ResourceLocation.tryParse(tag.getString("shell")) : null;
             return new MapTarget(pos, tag.getLong("tick"), tag.getDouble("sigma"),
-                    Mark.readList(tag.getList("marks", Tag.TAG_COMPOUND)), shell);
+                    Mark.readList(tag.getList("marks", Tag.TAG_COMPOUND)), shell, tag.getBoolean("single"));
         }
     }
 
     /**
-     * What a munitions chute can stage for its gun: shell type to the strongest filled cartridge power
+     * What a munitions chute can stage for its gun: shell type to the strongest filled cartridge's charge power
      * it can pair with it (always at least the shell's minimum charge). Empty: hand-loaded or unlinked.
      */
     record Munitions(Map<ResourceLocation, Float> availableShells) implements SensorReading {

@@ -49,6 +49,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -63,6 +64,7 @@ import org.joml.Vector3d;
 import org.joml.Vector3dc;
 import rbasamoyai.createbigcannons.config.CBCConfigs;
 import rbasamoyai.createbigcannons.munitions.big_cannon.ProjectileBlock;
+import rbasamoyai.createbigcannons.munitions.big_cannon.config.BigCannonProjectilePropertiesComponent;
 import rbasamoyai.createbigcannons.munitions.config.components.BallisticPropertiesComponent;
 
 import java.util.ArrayDeque;
@@ -239,6 +241,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private static final long MISSION_POLL_GAP_TICKS = 40;
     private static final int MAX_MISSION_NOTES = 6;
     private List<SensorReading.Mark> missionMarks = List.of();
+    // The marks are the table's single target, which yields to a directing rangefinder until ordered.
+    private boolean missionSingle;
     private boolean missionActive;
     private int missionMarkId;
     // This mark: rounds each gun has fired, and guns that gave up on it.
@@ -250,6 +254,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private int missionSerial;
     // Rounds each gun fired since the requested shell type last changed, as the chutes count staging.
     private final Map<BlockPos, Integer> missionRunFired = new HashMap<>();
+    // The type that run counts for. Kept apart from requestedShell, which every poll resets.
+    @Nullable private ResourceLocation missionRunShell;
     private long missionProgressTick, missionLastPollTick;
     private boolean missionAwaitingConfirmation;
     private int missionConfirmedMark = -1, missionAlertedMark = -1, missionHoldAlerts;
@@ -265,9 +271,11 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
     // Shared by a mount's pitch and yaw servos.
     private final Map<BlockPos, FireSolution> aimCache = new HashMap<>();
+    // Empty guns laid on the round their chutes will stage: they lay, but are never on target.
+    private final Set<BlockPos> predictedAims = new HashSet<>();
 
     // --- Munitions supply (chutes on either side of the servos) ---
-    // Per gun (mount pos): what its chutes can stage, shell type to the strongest filled cartridge power.
+    // Per gun (mount pos): what its chutes can stage, shell type to the strongest filled cartridge's charge power.
     private final Map<BlockPos, Map<ResourceLocation, Float>> supplyOfGun = new HashMap<>();
     // Chutes on the battle network this poll, and their availability as read.
     private final List<MunitionsChuteBlockEntity> battleChutes = new ArrayList<>();
@@ -282,6 +290,10 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private static final int MAX_CHUTE_TRACE = 256;
     // The shell type the current aim calls for; null for whatever is loaded.
     @Nullable private ResourceLocation requestedShell;
+    // A Fire Mission Console's shell knob, for fire outside a table mission (a rangefinder's): the
+    // most recently set wins, as for the fuze correction. Re-offered each poll, so not saved.
+    @Nullable private ResourceLocation consoleShell;
+    private long consoleShellSetTick = Long.MIN_VALUE;
     // Why a gun is held off its typed aim (a lang key), for the mission report.
     private final Map<BlockPos, String> shellHoldReason = new HashMap<>();
 
@@ -422,7 +434,8 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     public SalvoResult fireSalvo(@Nullable Player orderedBy) {
         if (!(level instanceof ServerLevel serverLevel) || !isPowered || bankConflict)
             return new SalvoResult(0, 0);
-        if (!missionMarks.isEmpty())
+        // Under way, the press only confirms a danger-close mark: the mission fires the guns.
+        if (missionActive || missionPlanned())
             return orderMission(orderedBy);
         // Danger close: the first press only warns; a second within the window fires.
         CServer.DangerClose dangerConfig = CDCConfig.server().dangerClose;
@@ -528,6 +541,14 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         // Its mark was removed: on to the next.
         if (currentMark() == null && !moveToMarkAfter(missionMarkId))
             endMission(MissionOutcome.COMPLETE);
+    }
+
+    /**
+     * Marks on the table and no mission under way: the loaders hold for the fire button. A single
+     * target yields to a directing rangefinder, whose aim fires as a plain salvo, loading on demand.
+     */
+    private boolean missionPlanned() {
+        return !missionActive && !missionMarks.isEmpty() && !(missionSingle && directingRangefinder != null);
     }
 
     @Nullable
@@ -658,7 +679,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (!missionActive && missionOutcome == MissionOutcome.NONE && missionMarks.isEmpty())
             return;
         CompoundTag tag = new CompoundTag();
-        if (!missionActive && !missionMarks.isEmpty()) {
+        if (missionPlanned()) {
             int rounds = 0;
             for (SensorReading.Mark mark : missionMarks)
                 rounds += mark.rounds() * bigCannonCount();
@@ -815,8 +836,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (barrel == null)
             return false;
         if (barrel.hasShell())
-            return isOnTarget(mountPos) && (requestedShell == null || requestedShell.equals(barrel.shellType()));
-        if (missionActive || missionMarks.isEmpty())
+            return isOnTarget(mountPos) && (requestedShell == null || !typedInterlock()
+                    || requestedShell.equals(barrel.shellType()));
+        if (!missionPlanned())
             return false;
         if (requestedShell != null)
             return suppliedFor(barrel);
@@ -912,7 +934,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
     private boolean isOnTarget(BlockPos mountPos) {
         FireSolution solution = aimCache.get(mountPos);
         ServoStatus.MountSnapshot barrel = barrels.get(mountPos);
-        if (solution == null || !solution.valid() || barrel == null)
+        if (solution == null || !solution.valid() || barrel == null || predictedAims.contains(mountPos))
             return false;
         Vector3d pointing = barrel.barrel() != null
                 ? new Vector3d(barrel.barrel().x, barrel.barrel().y, barrel.barrel().z)
@@ -925,6 +947,22 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             return true;
         Double range = passengerRange.get(mountPos);
         return range != null && off * range <= config.salvoSpread.getF();
+    }
+
+    /** Takes a console's shell order if it was set more recently than the one in use. */
+    public void offerShellOrder(@Nullable ResourceLocation shell, long setTick) {
+        if (setTick < consoleShellSetTick)
+            return;
+        consoleShellSetTick = setTick;
+        consoleShell = shell;
+    }
+
+    /**
+     * A table mission, planned or under way: the breech must hold its shell type. Outside one, as for
+     * a rangefinder's salvo, a loaded round fires whatever it is, and an order applies from the next.
+     */
+    private boolean typedInterlock() {
+        return missionActive || missionPlanned();
     }
 
     /** Takes a console's fuze correction if it was set more recently than the one in use. */
@@ -1246,6 +1284,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             }
         }
 
+        missionSingle = mapTarget != null && mapTarget.single();
         syncMission(mapTarget != null ? mapTarget.marks() : List.of());
         SensorReading.Mark mark = currentMark();
 
@@ -1263,16 +1302,17 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         // A mission under way outranks them in turn, until it ends or is cleared.
         if (mark != null)
             directingRangefinder = null;
-        // The shell the current aim calls for: a typed mark first, then a planned mission's first mark
-        // (where the guns lay meanwhile), then a typed single target.
-        ResourceLocation shell = mark != null ? mark.shell()
-                : !missionMarks.isEmpty() ? missionMarks.get(0).shell()
-                : mapTarget != null ? mapTarget.targetShell() : null;
-        // A new type starts a new run of staging at the chutes, and so of counting here.
-        if (!java.util.Objects.equals(shell, requestedShell))
-            missionRunFired.clear();
-        requestedShell = shell;
         Set<BlockPos> merged = mark != null ? Set.of() : useRangefinderTargets(rangefinderReadings);
+        // The shell the current aim calls for: a typed mark first, then a planned mission's first mark
+        // (where the guns lay meanwhile; the single target counts as one). A rangefinder's aim is untyped.
+        ResourceLocation shell = mark != null ? mark.shell()
+                : missionPlanned() ? missionMarks.get(0).shell() : consoleShell;
+        // A new type starts a new run of staging at the chutes, and so of counting here.
+        if (!java.util.Objects.equals(shell, missionRunShell)) {
+            missionRunFired.clear();
+            missionRunShell = shell;
+        }
+        requestedShell = shell;
         List<BattlePlot.RangefinderFix> fixes = new ArrayList<>();
         for (Map.Entry<BlockPos, SensorReading.Rangefinder> entry : rangefinderReadings.entrySet()) {
             Vector3d position = extrapolate(entry.getValue());
@@ -1450,6 +1490,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         mountNames.clear();
         aimCache.clear();
         supplyOfGun.clear();
+        predictedAims.clear();
         shellHoldReason.clear();
         directsShipGuns = false;
         jointByPlate.clear();
@@ -1488,6 +1529,26 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 }
                 default -> servo.receiveFiringSolution(null);
             }
+        }
+
+        // What each gun's chutes can stage (the pitch and yaw servos' cannon sides, and battle-network
+        // chutes as last linked): an empty gun lays on that round.
+        Set<BlockPos> servoFed = new HashSet<>();
+        Map<BlockPos, BlockPos> mountOfGunReport = new HashMap<>();
+        for (Gun gun : guns) {
+            mountOfGunReport.put(gun.reportPos(), gun.pos());
+            mergeSupply(gun.pos(), gun.status().supply());
+            ServoStatus yawStatus = yawStatusOf.get(gun.pos());
+            if (yawStatus != null)
+                mergeSupply(gun.pos(), yawStatus.supply());
+            if (gun.status().chuteFed() || yawStatus != null && yawStatus.chuteFed())
+                servoFed.add(gun.reportPos());
+        }
+        for (Map.Entry<BlockPos, BlockPos> link : chuteGunLink.entrySet()) {
+            SensorReading.Munitions reading = chuteReadings.get(link.getKey());
+            BlockPos mountPos = mountOfGunReport.get(link.getValue());
+            if (reading != null && mountPos != null)
+                mergeSupply(mountPos, reading.availableShells());
         }
 
         // Each gun: what aims it, and whether that can work. Then its solution.
@@ -1535,23 +1596,15 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
 
         aimBearings(guns, chains, redundant);
 
-        // Munitions: what each gun's chutes can stage (the pitch and yaw servos' cannon sides, plus
-        // battle-network chutes linked to the gun), and the shell the current aim calls for pushed
-        // back to all of them, with how many more shells the mission may fire.
-        Set<BlockPos> servoFed = new HashSet<>();
+        // Munitions: the shell the current aim calls for pushed back to every chute of the gun, with
+        // how many more shells the mission may fire.
         for (Gun gun : guns) {
-            mergeSupply(gun.pos(), gun.status().supply());
-            ServoStatus yawStatus = yawStatusOf.get(gun.pos());
-            if (yawStatus != null)
-                mergeSupply(gun.pos(), yawStatus.supply());
-            if (gun.status().chuteFed() || yawStatus != null && yawStatus.chuteFed())
-                servoFed.add(gun.reportPos());
             if (!gun.mount().autocannon()) {
                 int rounds = requestBudget(gun.pos());
-                gun.servo().offerShellRequest(requestedShell, rounds, missionSerial);
+                gun.servo().offerShellRequest(requestedShell, rounds, missionSerial, missionActive);
                 ComputerServo yawServo = yawServoOf.get(gun.pos());
                 if (yawServo != null)
-                    yawServo.offerShellRequest(requestedShell, rounds, missionSerial);
+                    yawServo.offerShellRequest(requestedShell, rounds, missionSerial, missionActive);
             }
         }
         linkBattleChutes(guns, servoFed);
@@ -1562,7 +1615,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             if (linkedMount != null) {
                 // The gun's report block (a fixed gun's network interface, else its servo) is its controller.
                 chute.setController(linkedReport, now);
-                chute.setRequestedShell(requestedShell, requestBudget(linkedMount), missionSerial, now);
+                chute.setRequestedShell(requestedShell, requestBudget(linkedMount), missionSerial, missionActive, now);
                 continue;
             }
             // Reaches only guns another chute supplies: one chute per cannon, so this one holds.
@@ -1635,8 +1688,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
      * and the following marks of the same type. The chutes count what they staged against it, so it
      * stays constant as the gun fires and only drops when the gun gives up on a mark. A planned
      * mission (a finished one still on the table included) allows 0: a shell loaded on a mutable plan
-     * cannot be pulled back out of a cannon, so loading waits for the fire button. Outside a
-     * mission, -1 with a target (a salvo on a typed aim stages on demand), else 0.
+     * cannot be pulled back out of a cannon, so loading waits for the fire button. The table's single
+     * target is such a mission too. Otherwise -1 with a target (a rangefinder's salvo stages on
+     * demand), else 0.
      */
     private int requestBudget(BlockPos mountPos) {
         if (missionActive) {
@@ -1657,7 +1711,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             }
             return missionRunFired.getOrDefault(mountPos, 0) + remaining;
         }
-        if (!missionMarks.isEmpty())
+        if (missionPlanned())
             return 0;
         return hasTarget ? -1 : 0;
     }
@@ -1712,14 +1766,6 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
                 if (!chuteGunLink.containsKey(claim.chute()))
                     chuteSurplus.putIfAbsent(claim.chute(), claim.report());
         }
-        for (Map.Entry<BlockPos, BlockPos> link : chuteGunLink.entrySet()) {
-            SensorReading.Munitions reading = chuteReadings.get(link.getKey());
-            BlockPos mountPos = mountOfReport.get(link.getValue());
-            if (reading == null || mountPos == null)
-                continue;
-            Map<ResourceLocation, Float> supply = supplyOfGun.computeIfAbsent(mountPos, k -> new HashMap<>());
-            reading.availableShells().forEach((type, power) -> supply.merge(type, power, Float::max));
-        }
     }
 
     /**
@@ -1759,9 +1805,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (type == null || mount.autocannon())
             return true;
         // The round in the breech: the right one fires (the last of its stock too, no longer listed),
-        // a different one cannot fire this aim.
+        // a different one cannot fire a table mission's aim. Outside one, it fires anyway.
         if (mount.hasShell() && mount.shellType() != null)
-            return type.equals(mount.shellType());
+            return !typedInterlock() || type.equals(mount.shellType());
         Map<ResourceLocation, Float> supply = supplyOfGun.get(mount.mountPos());
         Float charge = supply != null ? supply.get(type) : null;
         if (charge == null)
@@ -1770,6 +1816,38 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         if (charge == Float.MAX_VALUE)
             return true;
         return canReachWith(mount, type, charge);
+    }
+
+    /**
+     * An empty big cannon as it will be once its chutes stage a round: the requested shell type (or,
+     * untyped, the first type they list) with the strongest charge they pair with it, as the chutes
+     * pick. Null when they cannot stage the type. Going Ballistic's muzzle speed needs a loaded round,
+     * so the forecast uses the charge power; the gun re-lays once loaded.
+     */
+    @Nullable
+    private ServoStatus.MountSnapshot stagedRound(ServoStatus.MountSnapshot mount) {
+        if (mount.autocannon())
+            return null;
+        Map<ResourceLocation, Float> supply = supplyOfGun.get(mount.mountPos());
+        if (supply == null || supply.isEmpty())
+            return null;
+        ResourceLocation type = requestedShell != null ? requestedShell
+                : supply.keySet().stream().sorted().findFirst().orElse(null);
+        Float power = type != null ? supply.get(type) : null;
+        if (power == null || !(BuiltInRegistries.BLOCK.get(type) instanceof ProjectileBlock<?> projectile))
+            return null;
+        // A creative crate's wildcard: it stages a full cartridge.
+        float charge = power == Float.MAX_VALUE ? MunitionsChuteBlockEntity.maxChargePower() : power;
+        EntityType<?> entityType = projectile.getAssociatedEntityType();
+        BallisticPropertiesComponent ballistics = CannonReading.resolveBallistics(entityType);
+        BigCannonProjectilePropertiesComponent properties = CannonReading.resolveBigCannonProperties(entityType);
+        if (ballistics.gravity() == 0)
+            return null;
+        return new ServoStatus.MountSnapshot(mount.mountPos(), mount.facingYaw(), mount.currentAngle(),
+                mount.mountYaw(), mount.maxElevation(), mount.maxDepression(), true, type, ItemStack.EMPTY, 0,
+                false, ballistics.gravity(), ballistics.drag(), ballistics.isQuadraticDrag(),
+                properties.addedChargePower(), properties.minimumChargePower(), mount.totalChargePower() + charge,
+                0, mount.pivot(), mount.muzzleDistance(), mount.barrel(), false, mount.maxFlightTicks());
     }
 
     /** Whether a round of this type with that charge reaches the current target from the gun's pivot. */
@@ -1798,7 +1876,7 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
      */
     private boolean shellGate(BlockPos mountPos) {
         ResourceLocation type = requestedShell;
-        if (type == null)
+        if (type == null || !typedInterlock())
             return true;
         ServoStatus.MountSnapshot barrel = barrels.get(mountPos);
         if (barrel == null || barrel.autocannon() || type.equals(barrel.shellType()))
@@ -2468,9 +2546,21 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
         }
 
         if (!mount.hasShell()) {
-            lastPitchResults.put(servoPos,
-                    BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_SHELL));
-            return null;
+            // Laid on the round its chutes will stage, so it does not wait for loading to start turning.
+            ServoStatus.MountSnapshot staged = stagedRound(mount);
+            if (staged == null) {
+                lastPitchResults.put(servoPos,
+                        BallisticSolver.Result.invalid(BallisticSolver.Result.Reason.NO_SHELL));
+                return null;
+            }
+            FireSolution predicted = solveGun(servoPos, staged, pitchServo, yawServo);
+            // A failed forecast keeps its reason (out of range, say); a good one is still no shell.
+            if (predicted != null) {
+                predictedAims.add(mount.mountPos());
+                lastPitchResults.put(servoPos, BallisticSolver.Result.invalid(missionPlanned()
+                        ? BallisticSolver.Result.Reason.AWAITING_ORDER : BallisticSolver.Result.Reason.NO_SHELL));
+            }
+            return predicted;
         }
 
         double charge = mount.totalChargePower() + mount.addedChargePower();
@@ -3009,7 +3099,9 @@ public class BallisticComputerBlockEntity extends SmartBlockEntity
             CDCLang.builder()
                     .add(Component.literal("  "))
                     .add(Component.translatable("createdangerclose.ballistic_computer.outcome_count", label, reports.size()))
-                    .style(found ? ChatFormatting.GREEN : ChatFormatting.RED)
+                    .style(found ? ChatFormatting.GREEN
+                            : outcome.getKey() == BallisticSolver.Result.Reason.AWAITING_ORDER ? ChatFormatting.YELLOW
+                            : ChatFormatting.RED)
                     .forGoggles(tooltip);
             for (String line : gunNameLines(reports))
                 CDCLang.builder()
